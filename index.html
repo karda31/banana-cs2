@@ -1414,12 +1414,46 @@
             return [u1, u2].sort().join('__');
         }
 
+        // Hangi panel açık (canlı yenileme için)
+        // 'notifications' | 'friend_requests' | 'social' | 'friends' | 'chat_list' | 'chat' | null
+        window._liveView = null;
+
+        function refreshLiveUI(source) {
+            if (!getCurrentUser()) return;
+            const view = window._liveView;
+            if (!view) return;
+            const modal = document.getElementById('modal');
+            if (!modal || !modal.classList.contains('active')) {
+                window._liveView = null;
+                window._openChatWith = null;
+                return;
+            }
+            try {
+                if (view === 'notifications' && (source === 'notifs' || source === 'all')) {
+                    renderNotificationsLive();
+                } else if (view === 'friend_requests' && (source === 'friend_requests' || source === 'all')) {
+                    showFriendRequests(true);
+                } else if (view === 'social' && (source === 'friend_requests' || source === 'users' || source === 'all')) {
+                    openSocial(true);
+                } else if (view === 'friends' && (source === 'users' || source === 'all')) {
+                    showMyFriends(true);
+                } else if (view === 'chat_list' && (source === 'chats' || source === 'users' || source === 'all')) {
+                    showChatList(true);
+                } else if (view === 'chat' && window._openChatWith && (source === 'chats' || source === 'all')) {
+                    refreshOpenChatMessages(window._openChatWith);
+                }
+            } catch (e) {
+                console.warn('Live UI refresh:', e);
+            }
+        }
+
         // Real-time listeners (canlı güncelleme)
         function startRealtimeListeners() {
             if (!firebaseReady || !db) return;
 
             db.ref('users').on('value', snap => {
                 _usersCache = snap.val() || {};
+                refreshLiveUI('users');
             });
             db.ref('market').on('value', snap => {
                 const v = snap.val();
@@ -1432,6 +1466,7 @@
             db.ref('notifs').on('value', snap => {
                 _notifsCache = snap.val() || {};
                 updateNotifBadge();
+                refreshLiveUI('notifs');
             });
             db.ref('clans').on('value', snap => {
                 const v = snap.val();
@@ -1444,13 +1479,14 @@
             db.ref('friend_requests').on('value', snap => {
                 const v = snap.val();
                 _friendReqCache = Array.isArray(v) ? v : (v ? Object.values(v) : []);
+                refreshLiveUI('friend_requests');
             });
             db.ref('chats').on('value', snap => {
                 _chatsCache = snap.val() || {};
-                // Sohbet açıksa otomatik yenile
                 if (window._openChatWith) {
                     refreshOpenChatMessages(window._openChatWith);
                 }
+                refreshLiveUI('chats');
             });
             db.ref('reports').on('value', snap => {
                 const v = snap.val();
@@ -1460,7 +1496,7 @@
                 const v = snap.val();
                 _supportCache = Array.isArray(v) ? v : (v ? Object.values(v) : []);
             });
-            console.log("🔄 Real-time listeners aktif");
+            console.log("🔄 Real-time listeners aktif (bildirim + istek + sohbet canlı)");
         }
 
         // İlk yükleme
@@ -1535,18 +1571,7 @@
             }
         }
 
-        function openNotifications() {
-            const me = getCurrentUser();
-            if (!me) return;
-            const list = getUserNotifs(me);
-            // hepsini okundu işaretle
-            const all = loadAllNotifs();
-            if (all[me]) {
-                all[me].forEach(function(n) { n.read = true; });
-                saveAllNotifs(all);
-            }
-            updateNotifBadge();
-
+        function buildNotifsHtml(list) {
             let html = '';
             if (!list.length) {
                 html = '<p style="color:var(--text-muted);text-align:center;padding:20px 0;">Bildirim yok.</p>';
@@ -1562,10 +1587,36 @@
                     `;
                 });
             }
-
-            openModal('🔔 Bildirimler', html + `
+            return html + `
                 <button class="danger-btn" onclick="clearMyNotifs()" ${list.length ? '' : 'style="opacity:0.4;" disabled'}>Tümünü temizle</button>
-            `);
+            `;
+        }
+
+        function openNotifications() {
+            const me = getCurrentUser();
+            if (!me) return;
+            window._liveView = 'notifications';
+            window._openChatWith = null;
+            const list = getUserNotifs(me);
+            // hepsini okundu işaretle
+            const all = loadAllNotifs();
+            if (all[me]) {
+                all[me].forEach(function(n) { n.read = true; });
+                saveAllNotifs(all);
+            }
+            updateNotifBadge();
+            openModal('🔔 Bildirimler', buildNotifsHtml(list));
+        }
+
+        // Panel açıkken yeni bildirim gelirse sadece listeyi güncelle (tekrar okundu işaretleme)
+        function renderNotificationsLive() {
+            const me = getCurrentUser();
+            if (!me) return;
+            const list = getUserNotifs(me);
+            const body = document.getElementById('modal-body');
+            if (!body) return;
+            body.innerHTML = buildNotifsHtml(list);
+            updateNotifBadge();
         }
 
         function clearMyNotifs() {
@@ -2036,9 +2087,11 @@
         }
 
         // ========== SOSYAL SİSTEM (Profil, Arkadaş, Sohbet) ==========
-        function openSocial() {
+        function openSocial(live) {
             const me = getCurrentUser();
             if (!me) return;
+            window._liveView = 'social';
+            window._openChatWith = null;
             const users = loadUsers();
             const meUser = ensureUserFields(users[me] || {});
             const friends = meUser.friends || [];
@@ -2061,6 +2114,8 @@
 
         function showUserSearch() {
             const me = getCurrentUser();
+            window._liveView = null;
+            window._openChatWith = null;
             const users = loadUsers();
             let html = `
                 <div class="form-group">
@@ -2248,8 +2303,10 @@
             openSocial();
         }
 
-        function showMyFriends() {
+        function showMyFriends(live) {
             const me = getCurrentUser();
+            window._liveView = 'friends';
+            window._openChatWith = null;
             const users = loadUsers();
             const friends = ensureUserFields(users[me] || {}).friends || [];
             let html = '';
@@ -2268,8 +2325,10 @@
             openModal('👥 Arkadaşlarım', html + `<button class="back-btn" onclick="openSocial()">← Geri</button>`);
         }
 
-        function showFriendRequests() {
+        function showFriendRequests(live) {
             const me = getCurrentUser();
+            window._liveView = 'friend_requests';
+            window._openChatWith = null;
             const reqs = loadFriendRequests().filter(r => r.to === me && r.status === 'pending');
             let html = '';
             if (!reqs.length) {
@@ -2293,8 +2352,10 @@
             openModal('📨 Arkadaşlık İstekleri', html + `<button class="back-btn" onclick="openSocial()">← Geri</button>`);
         }
 
-        function showChatList() {
+        function showChatList(live) {
             const me = getCurrentUser();
+            window._liveView = 'chat_list';
+            window._openChatWith = null;
             const users = loadUsers();
             const friends = ensureUserFields(users[me] || {}).friends || [];
             const chats = loadChats();
@@ -2359,6 +2420,7 @@
         function openPrivateChat(other) {
             const me = getCurrentUser();
             window._openChatWith = other;
+            window._liveView = 'chat';
             const cid = getChatId(me, other);
             const chats = loadChats();
             if (!chats[cid]) chats[cid] = { messages: [] };
@@ -2491,6 +2553,7 @@
 
         function closeModal() {
             window._openChatWith = null;
+            window._liveView = null;
             document.getElementById('modal').classList.remove('active');
         }
 
