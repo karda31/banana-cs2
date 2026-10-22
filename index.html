@@ -107,6 +107,50 @@
             to { background-position: 200% center; }
         }
 
+        .rarity-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 8px;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.3px;
+            color: #0a0014;
+        }
+        .rarity-rainbow {
+            background: linear-gradient(90deg, #ff0040, #ff8c00, #ffee00, #00ff6a, #00c8ff, #7a5cff, #ff00c8);
+            background-size: 200% auto;
+            animation: rainbowShift 2.5s linear infinite;
+            color: #0a0014 !important;
+            box-shadow: 0 0 14px rgba(255,0,200,0.55);
+        }
+        .rarity-galaxy {
+            background: linear-gradient(135deg, #1a0033 0%, #4a0080 25%, #0066aa 50%, #c400ff 75%, #1a0033 100%);
+            background-size: 300% 300%;
+            animation: galaxyShift 4s ease infinite;
+            color: #e8d5ff !important;
+            border: 1px solid rgba(200,150,255,0.6);
+            box-shadow: 0 0 16px rgba(120,80,255,0.6), inset 0 0 12px rgba(255,255,255,0.15);
+        }
+        @keyframes galaxyShift {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+        .rarity-limited {
+            background: linear-gradient(90deg, #ffd700, #fff3a0, #ffd700);
+            background-size: 200% auto;
+            animation: rainbowShift 3s linear infinite;
+            color: #3a2000 !important;
+            border: 1px solid #ffd700;
+            box-shadow: 0 0 14px rgba(255,215,0,0.55);
+            letter-spacing: 1px;
+        }
+        .border-rainbow {
+            border-image: linear-gradient(90deg, #ff0040, #ff8c00, #ffee00, #00ff6a, #00c8ff, #7a5cff, #ff00c8) 1;
+            animation: rainbowShift 3s linear infinite;
+        }
+
+
         .blue-check {
             color: #1da1f2;
             font-size: 14px;
@@ -3363,30 +3407,84 @@
             `);
         }
 
-        // Enderlik (rarity) sistemi — CS2 tarzı renkler
+        // Enderlik (rarity) sistemi — 12 kademe
         const RARITY_META = {
-            common:    { label: 'Yaygın',     color: '#b0b0b0', glow: 'rgba(176,176,176,0.35)' },
-            uncommon:  { label: 'Sıradışı',   color: '#5cb85c', glow: 'rgba(92,184,92,0.4)' },
-            rare:      { label: 'Nadir',      color: '#4aa3ff', glow: 'rgba(74,163,255,0.45)' },
-            epic:      { label: 'Epik',       color: '#b44dff', glow: 'rgba(180,77,255,0.5)' },
-            legendary: { label: 'Efsanevi',   color: '#ff9f1a', glow: 'rgba(255,159,26,0.55)' },
-            mythic:    { label: 'Mitik',      color: '#ff3d71', glow: 'rgba(255,61,113,0.55)' }
+            siradan:        { label: 'Sıradan',           color: '#f0f0f0', glow: 'rgba(240,240,240,0.35)', tier: 1,  special: null },
+            ender:          { label: 'Ender',             color: '#4aa3ff', glow: 'rgba(74,163,255,0.45)',  tier: 2,  special: null },
+            super_ender:    { label: 'Süper Ender',       color: '#1e5aa8', glow: 'rgba(30,90,168,0.5)',    tier: 3,  special: null },
+            destansi:       { label: 'Destansı',          color: '#b44dff', glow: 'rgba(180,77,255,0.5)',   tier: 4,  special: null },
+            gizemli:        { label: 'Gizemli',           color: '#ff66c4', glow: 'rgba(255,102,196,0.5)',  tier: 5,  special: null },
+            super_gizemli:  { label: 'Süper Gizemli',     color: '#ff3d71', glow: 'rgba(255,61,113,0.55)',  tier: 6,  special: null },
+            efsanevi:       { label: 'Efsanevi',          color: '#ffd54f', glow: 'rgba(255,213,79,0.55)',  tier: 7,  special: null },
+            ultra_efsanevi: { label: 'Ultra Efsanevi',    color: '#00e676', glow: 'rgba(0,230,118,0.55)',   tier: 8,  special: null },
+            superstar:      { label: 'Superstar',         color: '#ff00c8', glow: 'rgba(255,0,200,0.6)',    tier: 9,  special: 'rainbow' },
+            popstar:        { label: 'Popstar',           color: '#c400ff', glow: 'rgba(120,80,255,0.65)',  tier: 10, special: 'galaxy' },
+            limited:        { label: 'LIMITED EDITION',   color: '#ffd700', glow: 'rgba(255,215,0,0.6)',    tier: 11, special: 'limited' },
+            kromatik:       { label: 'Kromatik',          color: '#ff9f1a', glow: 'rgba(255,159,26,0.55)',  tier: 12, special: null }
+        };
+        // Eski rarity anahtarlarını yeni sisteme çevir
+        const RARITY_ALIASES = {
+            common: 'siradan', uncommon: 'ender', rare: 'super_ender',
+            epic: 'destansi', legendary: 'efsanevi', mythic: 'super_gizemli',
+            'sıradan': 'siradan', 'süper ender': 'super_ender', 'super ender': 'super_ender',
+            'destansı': 'destansi', 'süper gizemli': 'super_gizemli', 'super gizemli': 'super_gizemli',
+            'ultra efsanevi': 'ultra_efsanevi', 'limited edition': 'limited', 'limit': 'limited',
+            'limit type': 'limited', white: 'siradan', blue: 'ender', purple: 'destansi',
+            pink: 'gizemli', red: 'super_gizemli', yellow: 'efsanevi', green: 'ultra_efsanevi',
+            orange: 'kromatik', rainbow: 'superstar', galaxy: 'popstar'
         };
         function normalizeRarity(r) {
-            const key = String(r || 'common').toLowerCase().trim();
-            return RARITY_META[key] ? key : 'common';
+            let key = String(r || 'siradan').toLowerCase().trim().replace(/\s+/g, '_');
+            if (RARITY_ALIASES[key]) key = RARITY_ALIASES[key];
+            // Türkçe karakterleri sadeleştir
+            key = key.replace(/ı/g,'i').replace(/ş/g,'s').replace(/ğ/g,'g').replace(/ü/g,'u').replace(/ö/g,'o').replace(/ç/g,'c');
+            if (RARITY_ALIASES[key]) key = RARITY_ALIASES[key];
+            return RARITY_META[key] ? key : 'siradan';
         }
         function rarityStyle(r) {
-            const m = RARITY_META[normalizeRarity(r)] || RARITY_META.common;
-            return { color: m.color, glow: m.glow, label: m.label };
+            const key = normalizeRarity(r);
+            const m = RARITY_META[key] || RARITY_META.siradan;
+            return { key: key, color: m.color, glow: m.glow, label: m.label, tier: m.tier, special: m.special };
         }
         function rarityBadgeHtml(r) {
             const s = rarityStyle(r);
-            return `<span style="display:inline-block;padding:2px 8px;border-radius:8px;font-size:11px;font-weight:700;letter-spacing:0.3px;color:#0a0014;background:${s.color};box-shadow:0 0 10px ${s.glow};">${s.label}</span>`;
+            if (s.special === 'rainbow') {
+                return `<span class="rarity-badge rarity-rainbow">${s.label}</span>`;
+            }
+            if (s.special === 'galaxy') {
+                return `<span class="rarity-badge rarity-galaxy">${s.label}</span>`;
+            }
+            if (s.special === 'limited') {
+                return `<span class="rarity-badge rarity-limited">✦ ${s.label} ✦</span>`;
+            }
+            return `<span class="rarity-badge" style="color:#0a0014;background:${s.color};box-shadow:0 0 10px ${s.glow};">${s.label}</span>`;
+        }
+        function raritySelectHtml(selectedId, selectId) {
+            selectedId = normalizeRarity(selectedId || 'siradan');
+            const order = ['siradan','ender','super_ender','destansi','gizemli','super_gizemli','efsanevi','ultra_efsanevi','superstar','popstar','limited','kromatik'];
+            let opts = '';
+            order.forEach(function(k) {
+                const m = RARITY_META[k];
+                opts += `<option value="${k}" ${k === selectedId ? 'selected' : ''}>${m.tier}. ${m.label}</option>`;
+            });
+            return `<select id="${selectId || 'item-rarity'}" style="width:100%;padding:10px;border-radius:10px;background:rgba(0,0,0,0.35);border:1px solid var(--border);color:var(--text);font-family:inherit;">${opts}</select>`;
+        }
+        function rarityBorderStyle(r) {
+            const s = rarityStyle(r);
+            if (s.special === 'rainbow') {
+                return `border:2px solid #ff00c8;box-shadow:0 0 16px rgba(255,0,200,0.5),0 0 8px rgba(0,200,255,0.35);`;
+            }
+            if (s.special === 'galaxy') {
+                return `border:2px solid #c400ff;box-shadow:0 0 16px rgba(120,80,255,0.55),0 0 8px rgba(0,100,200,0.35);`;
+            }
+            if (s.special === 'limited') {
+                return `border:2px solid #ffd700;box-shadow:0 0 16px rgba(255,215,0,0.55);`;
+            }
+            return `border:2px solid ${s.color};box-shadow:0 0 14px ${s.glow};`;
         }
 
         function normalizeItem(item) {
-            if (typeof item === 'string') return { name: item, image: '', rarity: 'common' };
+            if (typeof item === 'string') return { name: item, image: '', rarity: 'siradan' };
             return {
                 name: (item && item.name) ? item.name : 'İsimsiz',
                 image: (item && item.image) ? item.image : '',
@@ -3478,13 +3576,15 @@
                 inv.forEach(function(item, i) {
                     const it = normalizeItem(item);
                     const rs = rarityStyle(it.rarity);
+                    const bStyle = rarityBorderStyle(it.rarity);
+                    const nameColor = (rs.special === 'rainbow' || rs.special === 'galaxy') ? 'var(--text)' : rs.color;
                     const imgBlock = it.image
-                        ? `<img src="${escapeHtml(it.image)}" alt="${escapeHtml(it.name)}" onclick="openImagePreview('${escapeHtml(it.image).replace(/'/g, "\\'")}', '${escapeHtml(it.name).replace(/'/g, "\\'")}', 'inv')" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:14px;border:2px solid ${rs.color};box-shadow:0 0 14px ${rs.glow};cursor:pointer;background:#0a0014;" onerror="this.style.display='none'">`
-                        : `<div style="width:100%;aspect-ratio:1;border-radius:14px;background:rgba(255,0,204,0.1);border:2px solid ${rs.color};box-shadow:0 0 14px ${rs.glow};display:flex;align-items:center;justify-content:center;font-size:42px;">📦</div>`;
+                        ? `<img src="${escapeHtml(it.image)}" alt="${escapeHtml(it.name)}" onclick="openImagePreview('${escapeHtml(it.image).replace(/'/g, "\\'")}', '${escapeHtml(it.name).replace(/'/g, "\\'")}', 'inv')" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:14px;${bStyle}cursor:pointer;background:#0a0014;" onerror="this.style.display='none'">`
+                        : `<div style="width:100%;aspect-ratio:1;border-radius:14px;background:rgba(255,0,204,0.1);${bStyle}display:flex;align-items:center;justify-content:center;font-size:42px;">📦</div>`;
                     list += `
-                        <div style="background:rgba(0,0,0,0.28);border:1px solid ${rs.color};border-radius:16px;padding:10px;text-align:center;box-shadow:0 0 12px ${rs.glow};">
+                        <div style="background:rgba(0,0,0,0.28);${bStyle}border-radius:16px;padding:10px;text-align:center;">
                             ${imgBlock}
-                            <div style="margin-top:10px;font-weight:600;font-size:14px;line-height:1.3;word-break:break-word;color:${rs.color};">${escapeHtml(it.name)}</div>
+                            <div style="margin-top:10px;font-weight:600;font-size:14px;line-height:1.3;word-break:break-word;color:${nameColor};">${escapeHtml(it.name)}</div>
                             <div style="margin-top:6px;">${rarityBadgeHtml(it.rarity)}</div>
                             <div style="color:var(--text-muted);font-size:11px;margin-top:3px;">#${i + 1}</div>
                             <button onclick="shareCharacterEmoji(${i})" style="margin-top:8px;width:100%;padding:6px;background:rgba(255,0,204,0.15);border:1px solid var(--border);color:var(--accent-soft);border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;">✨ Karakter Emojisi Paylaş</button>
@@ -4436,12 +4536,18 @@
                 <div class="form-group">
                     <label>Enderlik (renk)</label>
                     <select id="case-item-rarity" style="width:100%;padding:10px;border-radius:10px;background:rgba(0,0,0,0.35);border:1px solid var(--border);color:var(--text);font-family:inherit;">
-                        <option value="common">Yaygın (gri)</option>
-                        <option value="uncommon">Sıradışı (yeşil)</option>
-                        <option value="rare">Nadir (mavi)</option>
-                        <option value="epic">Epik (mor)</option>
-                        <option value="legendary">Efsanevi (turuncu)</option>
-                        <option value="mythic">Mitik (kırmızı)</option>
+                        <option value="siradan">1. Sıradan (beyaz)</option>
+                        <option value="ender">2. Ender (mavi)</option>
+                        <option value="super_ender">3. Süper Ender (kapalı mavi)</option>
+                        <option value="destansi">4. Destansı (mor)</option>
+                        <option value="gizemli">5. Gizemli (pembe)</option>
+                        <option value="super_gizemli">6. Süper Gizemli (kırmızı)</option>
+                        <option value="efsanevi">7. Efsanevi (sarı)</option>
+                        <option value="ultra_efsanevi">8. Ultra Efsanevi (yeşil)</option>
+                        <option value="superstar">9. Superstar (rainbow)</option>
+                        <option value="popstar">10. Popstar (galaxy)</option>
+                        <option value="limited">11. LIMITED EDITION</option>
+                        <option value="kromatik">12. Kromatik (turuncu)</option>
                     </select>
                 </div>
                 <div class="form-group">
@@ -5237,12 +5343,15 @@
                 toast('Envanter dolu! (' + users[username].inventory.length + '/' + invCapacity(users[username]) + ')', 'error');
                 return;
             }
-            const rarityPrompt = prompt('Enderlik?\n\ncommon / uncommon / rare / epic / legendary / mythic\n\n(boş = common)');
+            const rarityPrompt = prompt('Enderlik numarası veya adı:\n\n1 siradan (beyaz)\n2 ender (mavi)\n3 super_ender (kapalı mavi)\n4 destansi (mor)\n5 gizemli (pembe)\n6 super_gizemli (kırmızı)\n7 efsanevi (sarı)\n8 ultra_efsanevi (yeşil)\n9 superstar (rainbow)\n10 popstar (galaxy)\n11 limited\n12 kromatik (turuncu)\n\n(boş = sıradan)');
             if (rarityPrompt === null) return;
+            let rarKey = (rarityPrompt || 'siradan').trim().toLowerCase();
+            const numMap = { '1':'siradan','2':'ender','3':'super_ender','4':'destansi','5':'gizemli','6':'super_gizemli','7':'efsanevi','8':'ultra_efsanevi','9':'superstar','10':'popstar','11':'limited','12':'kromatik' };
+            if (numMap[rarKey]) rarKey = numMap[rarKey];
             users[username].inventory.push({
                 name: text,
                 image: imageUrl,
-                rarity: normalizeRarity(rarityPrompt || 'common')
+                rarity: normalizeRarity(rarKey)
             });
             saveUsers(users);
             toast('✅ "' + text + '" ' + username + "'ın envanterine eklendi" + (imageUrl ? ' (foto ile)' : '') + '.');
@@ -5269,7 +5378,7 @@
                 toast('Eşya ismi en fazla 80 karakter olabilir.', 'error');
                 return;
             }
-            inv[index] = { name: name, image: item.image, rarity: item.rarity || 'common' };
+            inv[index] = { name: name, image: item.image, rarity: item.rarity || 'siradan' };
             users[username].inventory = inv;
             saveUsers(users);
             toast('Eşya ismi güncellendi.');
@@ -5284,10 +5393,51 @@
             const it = normalizeItem(inv[index]);
             const img = prompt('Yeni fotoğraf URL\'si\n\nMevcut: ' + (it.image || '(yok)') + '\n\nBoş bırakırsan foto silinir.');
             if (img === null) return;
-            inv[index] = { name: it.name, image: (img || '').trim(), rarity: it.rarity || 'common' };
+            inv[index] = { name: it.name, image: (img || '').trim(), rarity: it.rarity || 'siradan' };
             users[username].inventory = inv;
             saveUsers(users);
             toast('Foto güncellendi.');
+            modViewInventory(username);
+        }
+
+
+        function modSetItemRarity(username, index) {
+            if (!isModerator()) {
+                toast('Bu işlem sadece moderatörlere açık.', 'error');
+                return;
+            }
+            const users = loadUsers();
+            if (!users[username] || !Array.isArray(users[username].inventory) || !users[username].inventory[index]) return;
+            const inv = users[username].inventory;
+            const item = normalizeItem(inv[index]);
+            openModal('💎 Enderlik Değiştir — ' + escapeHtml(item.name), `
+                <div class="info-card" style="margin-bottom:12px;text-align:center;">
+                    <div style="font-weight:700;margin-bottom:8px;">${escapeHtml(item.name)}</div>
+                    <div>Mevcut: ${rarityBadgeHtml(item.rarity)}</div>
+                </div>
+                <div class="form-group">
+                    <label>Yeni enderlik</label>
+                    ${raritySelectHtml(item.rarity, 'mod-item-rarity')}
+                </div>
+                <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">
+                    1 Sıradan · 2 Ender · 3 Süper Ender · 4 Destansı · 5 Gizemli · 6 Süper Gizemli<br>
+                    7 Efsanevi · 8 Ultra Efsanevi · 9 Superstar · 10 Popstar · 11 LIMITED · 12 Kromatik
+                </p>
+                <button class="primary-btn" onclick="modConfirmSetItemRarity('${username}', ${index})">KAYDET</button>
+                <button class="back-btn" onclick="modViewInventory('${username}')">← Geri</button>
+            `);
+        }
+
+        function modConfirmSetItemRarity(username, index) {
+            if (!isModerator()) return;
+            const users = loadUsers();
+            if (!users[username] || !users[username].inventory || !users[username].inventory[index]) return;
+            const sel = document.getElementById('mod-item-rarity');
+            const rarity = normalizeRarity(sel ? sel.value : 'siradan');
+            const it = normalizeItem(users[username].inventory[index]);
+            users[username].inventory[index] = { name: it.name, image: it.image, rarity: rarity };
+            saveUsers(users);
+            toast('💎 Enderlik: ' + rarityStyle(rarity).label);
             modViewInventory(username);
         }
 
@@ -5304,16 +5454,21 @@
                 invHtml = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:14px;">';
                 inv.forEach(function(item, i) {
                     const it = normalizeItem(item);
+                    const rs = rarityStyle(it.rarity);
+                    const bStyle = rarityBorderStyle(it.rarity);
+                    const nameColor = (rs.special === 'rainbow' || rs.special === 'galaxy') ? 'var(--text)' : rs.color;
                     const imgBlock = it.image
-                        ? `<img src="${escapeHtml(it.image)}" alt="${escapeHtml(it.name)}" onclick="openImagePreview('${escapeHtml(it.image).replace(/'/g, "\\'")}', '${escapeHtml(it.name).replace(/'/g, "\\'")}', 'mod:${username}')" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:14px;border:1px solid var(--border);cursor:pointer;background:#0a0014;" onerror="this.style.display='none'">`
-                        : `<div style="width:100%;aspect-ratio:1;border-radius:14px;background:rgba(255,0,204,0.1);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:42px;">📦</div>`;
+                        ? `<img src="${escapeHtml(it.image)}" alt="${escapeHtml(it.name)}" onclick="openImagePreview('${escapeHtml(it.image).replace(/'/g, "\\'")}', '${escapeHtml(it.name).replace(/'/g, "\\'")}', 'mod:${username}')" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:14px;${bStyle}cursor:pointer;background:#0a0014;" onerror="this.style.display='none'">`
+                        : `<div style="width:100%;aspect-ratio:1;border-radius:14px;background:rgba(255,0,204,0.1);${bStyle}display:flex;align-items:center;justify-content:center;font-size:42px;">📦</div>`;
                     invHtml += `
-                        <div style="background:rgba(0,0,0,0.28);border:1px solid var(--border);border-radius:16px;padding:10px;text-align:center;">
+                        <div style="background:rgba(0,0,0,0.28);${bStyle}border-radius:16px;padding:10px;text-align:center;">
                             ${imgBlock}
-                            <div style="margin-top:10px;font-weight:600;font-size:14px;line-height:1.3;word-break:break-word;">${escapeHtml(it.name)}</div>
+                            <div style="margin-top:10px;font-weight:600;font-size:14px;line-height:1.3;word-break:break-word;color:${nameColor};">${escapeHtml(it.name)}</div>
+                            <div style="margin-top:6px;">${rarityBadgeHtml(it.rarity)}</div>
                             <div style="display:flex;gap:6px;justify-content:center;margin-top:10px;flex-wrap:wrap;">
                                 <button onclick="modRenameInventoryItem('${username}', ${i})" style="background:rgba(40,200,120,0.14);border:1px solid rgba(40,200,120,.35);color:var(--success);border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;">✏️ İsim</button>
                                 <button onclick="modEditItemImage('${username}', ${i})" style="background:rgba(255,0,204,0.15);border:1px solid var(--border);color:var(--accent-soft);border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;">📷 Foto</button>
+                                <button onclick="modSetItemRarity('${username}', ${i})" style="background:rgba(255,213,79,0.15);border:1px solid rgba(255,213,79,0.4);color:#ffd54f;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;">💎 Enderlik</button>
                                 <button onclick="modRemoveInventory('${username}', ${i})" style="background:rgba(255,61,113,0.2);border:1px solid rgba(255,61,113,0.4);color:#ff3d71;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;">Sil</button>
                             </div>
                         </div>
