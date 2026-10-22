@@ -1235,34 +1235,98 @@
             return _usersCache || {};
         }
 
-        async function loadUsersAsync() {
-            if (firebaseReady) {
-                const data = await fbGet('users');
-                if (data && typeof data === 'object' && Object.keys(data).length > 0) {
-                    _usersCache = data;
-                    // Firebase'den gelen taze veriyi localStorage'a yedekle
-                    try { localStorage.setItem('swordcity_users_v3', JSON.stringify(_usersCache)); } catch (e) {}
-                    return _usersCache;
-                }
-                // Firebase boşsa local yedekten oku (ilk kurulum / geçici kesinti)
-            }
+        function readLocalUsers() {
             try {
                 const raw = localStorage.getItem('swordcity_users_v3');
-                _usersCache = raw ? JSON.parse(raw) : {};
-            } catch (e) { _usersCache = {}; }
-            // Local'de veri varsa ve Firebase açıksa bir kez yükle (hesap kaybı olmasın)
+                return raw ? JSON.parse(raw) : {};
+            } catch (e) { return {}; }
+        }
+
+        // Firebase + local birleştir — ASLA hesabı silme
+        function mergeUsers(remote, local) {
+            const out = {};
+            remote = remote && typeof remote === 'object' ? remote : {};
+            local = local && typeof local === 'object' ? local : {};
+            // Önce local (yedek)
+            Object.keys(local).forEach(function(k) {
+                if (local[k] && typeof local[k] === 'object') out[k] = local[k];
+            });
+            // Remote üzerine yaz (daha güncel online veri), ama local-only kullanıcıları koru
+            Object.keys(remote).forEach(function(k) {
+                if (!remote[k] || typeof remote[k] !== 'object') return;
+                if (!out[k]) {
+                    out[k] = remote[k];
+                    return;
+                }
+                // İkisinde de varsa: remote'u al ama inventory/balance daha zengin olanı koru
+                const a = out[k];
+                const b = remote[k];
+                const merged = Object.assign({}, a, b);
+                // Inventory: daha uzun olanı tercih et (silinmiş seed hariç gerçek ilerleme)
+                const invA = Array.isArray(a.inventory) ? a.inventory : [];
+                const invB = Array.isArray(b.inventory) ? b.inventory : [];
+                merged.inventory = invB.length >= invA.length ? invB : invA;
+                // Şifre: boş olmasın
+                if (!merged.password && a.password) merged.password = a.password;
+                if (!merged.password && b.password) merged.password = b.password;
+                out[k] = merged;
+            });
+            return out;
+        }
+
+        async function loadUsersAsync() {
+            const local = readLocalUsers();
+            let remote = null;
+            if (firebaseReady) {
+                try {
+                    remote = await fbGet('users');
+                } catch (e) {
+                    console.warn('Firebase users okunamadı, local kullanılıyor', e);
+                    remote = null;
+                }
+            }
+            // Firebase null/boş gelse bile local hesaplar SİLİNMEZ
+            if (remote && typeof remote === 'object' && Object.keys(remote).length > 0) {
+                _usersCache = mergeUsers(remote, local);
+            } else {
+                _usersCache = local && Object.keys(local).length ? local : (_usersCache || {});
+            }
+            // Her zaman local'e yedekle
+            try { localStorage.setItem('swordcity_users_v3', JSON.stringify(_usersCache || {})); } catch (e) {}
+            // Local'de olup Firebase'de olmayan hesapları yükle (kaybolmasın)
             if (firebaseReady && _usersCache && Object.keys(_usersCache).length > 0) {
-                fbSet('users', _usersCache);
+                // Tek tek yaz — tüm ağacı silmeden
+                Object.keys(_usersCache).forEach(function(uname) {
+                    fbSet('users/' + uname, _usersCache[uname]);
+                });
             }
             return _usersCache;
         }
 
         function saveUsers(users) {
             _usersCache = users || {};
-            // Her zaman localStorage yedek (sayfa kapanınca / offline)
+            // 1) localStorage — yenilemede / tarayıcı kapanınca kalır
             try { localStorage.setItem('swordcity_users_v3', JSON.stringify(_usersCache)); } catch (e) {}
+            // 2) Firebase — başka cihaz + online
             if (firebaseReady) {
-                fbSet('users', _usersCache); // online: tüm cihazlarda kalır
+                Object.keys(_usersCache).forEach(function(uname) {
+                    if (_usersCache[uname]) fbSet('users/' + uname, _usersCache[uname]);
+                });
+            }
+        }
+
+        // Tek kullanıcı kaydet (daha güvenli)
+        function saveUser(username, userObj) {
+            if (!username || !userObj) return;
+            if (!_usersCache) _usersCache = {};
+            _usersCache[username] = userObj;
+            try {
+                const all = readLocalUsers();
+                all[username] = userObj;
+                localStorage.setItem('swordcity_users_v3', JSON.stringify(all));
+            } catch (e) {}
+            if (firebaseReady) {
+                fbSet('users/' + username, userObj);
             }
         }
 
@@ -1478,12 +1542,17 @@
 
             db.ref('users').on('value', snap => {
                 const prev = _usersCache || {};
-                _usersCache = snap.val() || {};
+                const remote = snap.val();
+                // Firebase null/boş ise mevcut hesapları SİLME
+                if (remote && typeof remote === 'object' && Object.keys(remote).length > 0) {
+                    _usersCache = mergeUsers(remote, prev);
+                    try { localStorage.setItem('swordcity_users_v3', JSON.stringify(_usersCache)); } catch (e) {}
+                }
                 // Açık profil: envanter gizlilik / içerik değişince yenile (atılma olmasın)
                 if (window._viewingProfile) {
                     const u = window._viewingProfile;
                     const a = prev[u] || {};
-                    const b = _usersCache[u] || {};
+                    const b = (_usersCache || {})[u] || {};
                     if (!!a.inventoryPrivate !== !!b.inventoryPrivate || JSON.stringify(a.inventory || []) !== JSON.stringify(b.inventory || [])) {
                         try { viewUserProfile(u); } catch (e) {}
                     }
@@ -1915,8 +1984,18 @@
         (async function init() {
             await initData(); // Firebase / localStorage yükle
             const session = getCurrentUser();
-            if (session && getUser(session)) {
-                enterApp(session);
+            if (session) {
+                // Hesap cache'te yoksa bir kez daha yükle
+                if (!getUser(session)) {
+                    await loadUsersAsync();
+                }
+                if (getUser(session)) {
+                    enterApp(session);
+                } else {
+                    // Oturum var ama kullanıcı yok → giriş ekranı, hesap silinmedi mesajı yok
+                    // Session'ı silme; kullanıcı şifreyle tekrar girebilsin diye sadece UI
+                    console.warn('Oturum bulundu ama kullanıcı verisi henüz yok:', session);
+                }
             }
         })();
 
@@ -2056,7 +2135,7 @@
                     createdAt: new Date().toISOString()
                 };
                 saveUsers(users);
-                // Tek kullanıcıyı da Firebase'e yaz (cihazlar arası kalıcılık)
+                saveUser(username, users[username]);
                 if (firebaseReady) {
                     await fbSet('users/' + username, users[username]);
                 }
