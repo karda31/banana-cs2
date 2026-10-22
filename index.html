@@ -1019,6 +1019,11 @@
         <div class="content">
             <div class="section-label">Klasörler</div>
             <div class="folder-grid">
+                <div class="folder" onclick="openPlayMenu()">
+                    <div class="folder-icon">🎮</div>
+                    <div class="folder-name">Oyna</div>
+                    <div class="folder-desc">Oyun modları</div>
+                </div>
                 <div class="folder" onclick="openBank()">
                     <div class="folder-icon">💰</div>
                     <div class="folder-name">Banka</div>
@@ -1880,12 +1885,13 @@
             }
         }
 
-        function forgotStep1() {
+        async function forgotStep1() {
             const username = (document.getElementById('forgot-user').value || '').trim().toLowerCase();
             if (!username) {
                 toast('Kullanıcı adı gir.', 'error');
                 return;
             }
+            await loadUsersAsync();
             const user = getUser(username);
             if (!user) {
                 toast('Bu kullanıcı adı bulunamadı.', 'error');
@@ -1935,7 +1941,7 @@
             document.getElementById('login-pass').value = '';
         }
 
-        function doRegister() {
+        async function doRegister() {
             try {
                 const rawName = (document.getElementById('reg-user').value || '').trim();
                 const username = rawName.toLowerCase();
@@ -1965,6 +1971,8 @@
                     return;
                 }
 
+                // Firebase'den taze kullanıcı listesi (başka cihazdan alınan isimler için)
+                await loadUsersAsync();
                 const users = loadUsers();
                 if (users[username]) {
                     toast('Bu kullanıcı adı zaten alınmış.', 'error');
@@ -1979,6 +1987,7 @@
                     achievements: defaultAchievements(),
                     customAchievements: [],
                     inventory: [],
+                    friends: [],
                     securityQuestion: secQ,
                     securityAnswer: secA.toLowerCase(),
                     txCount: 0,
@@ -1990,6 +1999,10 @@
                     createdAt: new Date().toISOString()
                 };
                 saveUsers(users);
+                // Tek kullanıcıyı da Firebase'e yaz (cihazlar arası kalıcılık)
+                if (firebaseReady) {
+                    await fbSet('users/' + username, users[username]);
+                }
 
                 toast('Hesap oluşturuldu! Giriş yapılıyor...');
                 setTimeout(function() {
@@ -2002,7 +2015,7 @@
             }
         }
 
-        function doLogin() {
+        async function doLogin() {
             try {
                 const username = (document.getElementById('login-user').value || '').trim().toLowerCase();
                 const pass = document.getElementById('login-pass').value || '';
@@ -2012,6 +2025,8 @@
                     return;
                 }
 
+                // Her girişte Firebase'den taze veri çek → başka cihazdan hesap çalışır
+                await loadUsersAsync();
                 clearExpiredBan(username);
                 let user = getUser(username);
                 // Kurucu: şifre doğruysa hesabı seed et / kurtar
@@ -3348,11 +3363,34 @@
             `);
         }
 
+        // Enderlik (rarity) sistemi — CS2 tarzı renkler
+        const RARITY_META = {
+            common:    { label: 'Yaygın',     color: '#b0b0b0', glow: 'rgba(176,176,176,0.35)' },
+            uncommon:  { label: 'Sıradışı',   color: '#5cb85c', glow: 'rgba(92,184,92,0.4)' },
+            rare:      { label: 'Nadir',      color: '#4aa3ff', glow: 'rgba(74,163,255,0.45)' },
+            epic:      { label: 'Epik',       color: '#b44dff', glow: 'rgba(180,77,255,0.5)' },
+            legendary: { label: 'Efsanevi',   color: '#ff9f1a', glow: 'rgba(255,159,26,0.55)' },
+            mythic:    { label: 'Mitik',      color: '#ff3d71', glow: 'rgba(255,61,113,0.55)' }
+        };
+        function normalizeRarity(r) {
+            const key = String(r || 'common').toLowerCase().trim();
+            return RARITY_META[key] ? key : 'common';
+        }
+        function rarityStyle(r) {
+            const m = RARITY_META[normalizeRarity(r)] || RARITY_META.common;
+            return { color: m.color, glow: m.glow, label: m.label };
+        }
+        function rarityBadgeHtml(r) {
+            const s = rarityStyle(r);
+            return `<span style="display:inline-block;padding:2px 8px;border-radius:8px;font-size:11px;font-weight:700;letter-spacing:0.3px;color:#0a0014;background:${s.color};box-shadow:0 0 10px ${s.glow};">${s.label}</span>`;
+        }
+
         function normalizeItem(item) {
-            if (typeof item === 'string') return { name: item, image: '' };
+            if (typeof item === 'string') return { name: item, image: '', rarity: 'common' };
             return {
                 name: (item && item.name) ? item.name : 'İsimsiz',
-                image: (item && item.image) ? item.image : ''
+                image: (item && item.image) ? item.image : '',
+                rarity: normalizeRarity(item && item.rarity)
             };
         }
 
@@ -3439,13 +3477,15 @@
                 list += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:14px;">';
                 inv.forEach(function(item, i) {
                     const it = normalizeItem(item);
+                    const rs = rarityStyle(it.rarity);
                     const imgBlock = it.image
-                        ? `<img src="${escapeHtml(it.image)}" alt="${escapeHtml(it.name)}" onclick="openImagePreview('${escapeHtml(it.image).replace(/'/g, "\\'")}', '${escapeHtml(it.name).replace(/'/g, "\\'")}', 'inv')" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:14px;border:1px solid var(--border);cursor:pointer;background:#0a0014;" onerror="this.style.display='none'">`
-                        : `<div style="width:100%;aspect-ratio:1;border-radius:14px;background:rgba(255,0,204,0.1);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:42px;">📦</div>`;
+                        ? `<img src="${escapeHtml(it.image)}" alt="${escapeHtml(it.name)}" onclick="openImagePreview('${escapeHtml(it.image).replace(/'/g, "\\'")}', '${escapeHtml(it.name).replace(/'/g, "\\'")}', 'inv')" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:14px;border:2px solid ${rs.color};box-shadow:0 0 14px ${rs.glow};cursor:pointer;background:#0a0014;" onerror="this.style.display='none'">`
+                        : `<div style="width:100%;aspect-ratio:1;border-radius:14px;background:rgba(255,0,204,0.1);border:2px solid ${rs.color};box-shadow:0 0 14px ${rs.glow};display:flex;align-items:center;justify-content:center;font-size:42px;">📦</div>`;
                     list += `
-                        <div style="background:rgba(0,0,0,0.28);border:1px solid var(--border);border-radius:16px;padding:10px;text-align:center;">
+                        <div style="background:rgba(0,0,0,0.28);border:1px solid ${rs.color};border-radius:16px;padding:10px;text-align:center;box-shadow:0 0 12px ${rs.glow};">
                             ${imgBlock}
-                            <div style="margin-top:10px;font-weight:600;font-size:14px;line-height:1.3;word-break:break-word;">${escapeHtml(it.name)}</div>
+                            <div style="margin-top:10px;font-weight:600;font-size:14px;line-height:1.3;word-break:break-word;color:${rs.color};">${escapeHtml(it.name)}</div>
+                            <div style="margin-top:6px;">${rarityBadgeHtml(it.rarity)}</div>
                             <div style="color:var(--text-muted);font-size:11px;margin-top:3px;">#${i + 1}</div>
                             <button onclick="shareCharacterEmoji(${i})" style="margin-top:8px;width:100%;padding:6px;background:rgba(255,0,204,0.15);border:1px solid var(--border);color:var(--accent-soft);border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;">✨ Karakter Emojisi Paylaş</button>
                             <button onclick="deleteInventoryItem(${i})" style="margin-top:6px;width:100%;padding:6px;background:rgba(255,61,113,0.2);border:1px solid rgba(255,61,113,0.4);color:#ff3d71;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;">🗑 Sil</button>
@@ -4138,10 +4178,11 @@
             items.forEach(function(item) {
                 const weight = Math.max(1, Number(item.weight) || 1);
                 const chance = totalWeight > 0 ? (weight / totalWeight * 100) : 0;
+                const rs = rarityStyle(item.rarity);
                 const visual = item.image
-                    ? `<img src="${escapeHtml(item.image)}" alt="" style="width:64px;height:64px;object-fit:cover;border-radius:10px;border:1px solid var(--border);">`
-                    : `<div style="width:64px;height:64px;display:flex;align-items:center;justify-content:center;background:rgba(255,0,204,0.1);border-radius:10px;font-size:26px;">🎁</div>`;
-                html += `<div class="info-card" style="display:flex;gap:12px;align-items:center;margin-bottom:8px;">${visual}<div style="min-width:0;flex:1;"><div style="font-weight:700;overflow-wrap:anywhere;">${escapeHtml(item.name || 'İsimsiz ödül')}</div><div style="font-size:12px;color:var(--text-muted);margin-top:5px;">Ağırlık: ${weight}</div></div><div style="font-weight:700;color:#ffd54f;white-space:nowrap;">${chance.toLocaleString('tr-TR',{maximumFractionDigits:2})}%</div></div>`;
+                    ? `<img src="${escapeHtml(item.image)}" alt="" style="width:64px;height:64px;object-fit:cover;border-radius:10px;border:2px solid ${rs.color};box-shadow:0 0 10px ${rs.glow};">`
+                    : `<div style="width:64px;height:64px;display:flex;align-items:center;justify-content:center;background:rgba(255,0,204,0.1);border-radius:10px;border:2px solid ${rs.color};font-size:26px;">🎁</div>`;
+                html += `<div class="info-card" style="display:flex;gap:12px;align-items:center;margin-bottom:8px;border-color:${rs.color};box-shadow:0 0 12px ${rs.glow};">${visual}<div style="min-width:0;flex:1;"><div style="font-weight:700;overflow-wrap:anywhere;color:${rs.color};">${escapeHtml(item.name || 'İsimsiz ödül')}</div><div style="margin-top:4px;">${rarityBadgeHtml(item.rarity)}</div><div style="font-size:12px;color:var(--text-muted);margin-top:5px;">Ağırlık: ${weight}</div></div><div style="font-weight:700;color:#ffd54f;white-space:nowrap;">${chance.toLocaleString('tr-TR',{maximumFractionDigits:2})}%</div></div>`;
             });
             html += `<button class="back-btn" onclick="openCases()">← Kasalara dön</button>`;
             openModal('📦 ' + (c.name || 'Kasa') + ' — İçerik', html);
@@ -4193,7 +4234,7 @@
                 const users2 = loadUsers();
                 ensureUserFields(users2[me]);
                 if (!users2[me].inventory) users2[me].inventory = [];
-                users2[me].inventory.push({ name: winner.name, image: winner.image || '' });
+                users2[me].inventory.push({ name: winner.name, image: winner.image || '', rarity: normalizeRarity(winner.rarity) });
                 saveUsers(users2);
                 pushNotif(me, '📦 "' + c.name + '" kasasından çıktı: ' + winner.name, 'success');
                 toast('🎉 Kazandın: ' + winner.name);
@@ -4215,10 +4256,11 @@
 
             let stripHtml = '';
             slots.forEach(function(it, idx) {
+                const rs = rarityStyle(it.rarity);
                 const img = it.image
                     ? `<img src="${escapeHtml(it.image)}" alt="">`
                     : `<div style="font-size:28px;">🎁</div>`;
-                stripHtml += `<div class="case-slot" data-i="${idx}">${img}<span>${escapeHtml(it.name || '')}</span></div>`;
+                stripHtml += `<div class="case-slot" data-i="${idx}" style="border-color:${rs.color};box-shadow:0 0 10px ${rs.glow};">${img}<span style="color:${rs.color};">${escapeHtml(it.name || '')}</span></div>`;
             });
 
             openModal('📦 ' + (caseObj.name || 'Kasa') + ' Açılıyor', `
@@ -4259,7 +4301,8 @@
                 if (winEl) winEl.classList.add('win');
                 const res = document.getElementById('case-result');
                 if (res) {
-                    res.innerHTML = '<span style="color:var(--accent-soft);font-weight:700;font-size:16px;">🎉 ' + escapeHtml(winner.name) + '</span><br><span style="font-size:12px;">Envanterine eklendi</span>';
+                    const rs = rarityStyle(winner.rarity);
+                    res.innerHTML = '<span style="color:' + rs.color + ';font-weight:700;font-size:16px;text-shadow:0 0 12px ' + rs.glow + ';">🎉 ' + escapeHtml(winner.name) + '</span><br><span style="margin-top:4px;display:inline-block;">' + rarityBadgeHtml(winner.rarity) + '</span><br><span style="font-size:12px;">Envanterine eklendi</span>';
                 }
                 if (onDone) onDone();
             }, 5600);
@@ -4293,16 +4336,18 @@
             const items = (c && c.items) || [];
             let itemsHtml = '';
             items.forEach(function(it, i) {
+                const rs = rarityStyle(it.rarity);
                 const thumb = it.image
-                    ? `<img src="${escapeHtml(it.image)}" alt="" style="width:56px;height:56px;object-fit:cover;border-radius:10px;border:1px solid var(--border);">`
-                    : `<div style="width:56px;height:56px;border-radius:10px;background:rgba(255,0,204,0.12);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;">🎁</div>`;
+                    ? `<img src="${escapeHtml(it.image)}" alt="" style="width:56px;height:56px;object-fit:cover;border-radius:10px;border:2px solid ${rs.color};box-shadow:0 0 8px ${rs.glow};">`
+                    : `<div style="width:56px;height:56px;border-radius:10px;background:rgba(255,0,204,0.12);border:2px solid ${rs.color};display:flex;align-items:center;justify-content:center;">🎁</div>`;
                 itemsHtml += `
-                    <div class="info-card" style="padding:10px;">
+                    <div class="info-card" style="padding:10px;border-color:${rs.color};">
                         <div style="display:flex;gap:10px;align-items:center;">
                             ${thumb}
                             <div style="flex:1;">
-                                <div style="font-weight:600;">${escapeHtml(it.name)}</div>
-                                <div style="font-size:12px;color:var(--text-muted);">Ağırlık: ${it.weight || 1}</div>
+                                <div style="font-weight:600;color:${rs.color};">${escapeHtml(it.name)}</div>
+                                <div style="margin-top:4px;">${rarityBadgeHtml(it.rarity)}</div>
+                                <div style="font-size:12px;color:var(--text-muted);margin-top:4px;">Ağırlık: ${it.weight || 1}</div>
                             </div>
                         </div>
                         <button class="danger-btn" style="margin-top:8px;" onclick="modRemoveCaseItem('${caseId || ''}', ${i})">Ödülü Sil</button>
@@ -4382,11 +4427,22 @@
             openModal('➕ Kasaya Karakter Ekle', `
                 <div class="form-group">
                     <label>Karakter / ödül adı</label>
-                    <input type="text" id="case-item-name" placeholder="Örn: cynthia (efsanevi)">
+                    <input type="text" id="case-item-name" placeholder="Örn: cynthia">
                 </div>
                 <div class="form-group">
                     <label>Fotoğraf URL</label>
                     <input type="text" id="case-item-image" placeholder="https://... veya boş">
+                </div>
+                <div class="form-group">
+                    <label>Enderlik (renk)</label>
+                    <select id="case-item-rarity" style="width:100%;padding:10px;border-radius:10px;background:rgba(0,0,0,0.35);border:1px solid var(--border);color:var(--text);font-family:inherit;">
+                        <option value="common">Yaygın (gri)</option>
+                        <option value="uncommon">Sıradışı (yeşil)</option>
+                        <option value="rare">Nadir (mavi)</option>
+                        <option value="epic">Epik (mor)</option>
+                        <option value="legendary">Efsanevi (turuncu)</option>
+                        <option value="mythic">Mitik (kırmızı)</option>
+                    </select>
                 </div>
                 <div class="form-group">
                     <label>Ağırlık / şans (yüksek = daha sık)</label>
@@ -4401,6 +4457,7 @@
             const name = (document.getElementById('case-item-name') && document.getElementById('case-item-name').value || '').trim();
             const image = (document.getElementById('case-item-image') && document.getElementById('case-item-image').value || '').trim();
             const weight = parseFloat(document.getElementById('case-item-weight') && document.getElementById('case-item-weight').value) || 10;
+            const rarity = normalizeRarity(document.getElementById('case-item-rarity') && document.getElementById('case-item-rarity').value);
             if (!name) {
                 toast('Karakter adı gerekli.', 'error');
                 return;
@@ -4409,9 +4466,9 @@
             const c = cases.find(function(x) { return x.id === caseId; });
             if (!c) return;
             if (!c.items) c.items = [];
-            c.items.push({ name: name, image: image, weight: weight });
+            c.items.push({ name: name, image: image, weight: weight, rarity: rarity });
             saveCases(cases);
-            toast('✅ "' + name + '" kasaya eklendi.');
+            toast('✅ "' + name + '" (' + rarityStyle(rarity).label + ') kasaya eklendi.');
             modEditCase(caseId);
         }
 
@@ -5180,9 +5237,12 @@
                 toast('Envanter dolu! (' + users[username].inventory.length + '/' + invCapacity(users[username]) + ')', 'error');
                 return;
             }
+            const rarityPrompt = prompt('Enderlik?\n\ncommon / uncommon / rare / epic / legendary / mythic\n\n(boş = common)');
+            if (rarityPrompt === null) return;
             users[username].inventory.push({
                 name: text,
-                image: imageUrl
+                image: imageUrl,
+                rarity: normalizeRarity(rarityPrompt || 'common')
             });
             saveUsers(users);
             toast('✅ "' + text + '" ' + username + "'ın envanterine eklendi" + (imageUrl ? ' (foto ile)' : '') + '.');
@@ -5209,7 +5269,7 @@
                 toast('Eşya ismi en fazla 80 karakter olabilir.', 'error');
                 return;
             }
-            inv[index] = { name: name, image: item.image };
+            inv[index] = { name: name, image: item.image, rarity: item.rarity || 'common' };
             users[username].inventory = inv;
             saveUsers(users);
             toast('Eşya ismi güncellendi.');
@@ -5224,7 +5284,7 @@
             const it = normalizeItem(inv[index]);
             const img = prompt('Yeni fotoğraf URL\'si\n\nMevcut: ' + (it.image || '(yok)') + '\n\nBoş bırakırsan foto silinir.');
             if (img === null) return;
-            inv[index] = { name: it.name, image: (img || '').trim() };
+            inv[index] = { name: it.name, image: (img || '').trim(), rarity: it.rarity || 'common' };
             users[username].inventory = inv;
             saveUsers(users);
             toast('Foto güncellendi.');
