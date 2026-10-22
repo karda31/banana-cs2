@@ -1242,33 +1242,39 @@
             } catch (e) { return {}; }
         }
 
-        // Firebase + local birleştir — ASLA hesabı silme
+        // Firebase + local birleştir — ASLA hesabı silme; güncel olan kazanır
         function mergeUsers(remote, local) {
             const out = {};
             remote = remote && typeof remote === 'object' ? remote : {};
             local = local && typeof local === 'object' ? local : {};
-            // Önce local (yedek)
-            Object.keys(local).forEach(function(k) {
-                if (local[k] && typeof local[k] === 'object') out[k] = local[k];
-            });
-            // Remote üzerine yaz (daha güncel online veri), ama local-only kullanıcıları koru
-            Object.keys(remote).forEach(function(k) {
-                if (!remote[k] || typeof remote[k] !== 'object') return;
-                if (!out[k]) {
-                    out[k] = remote[k];
+            const keys = {};
+            Object.keys(local).forEach(function(k) { keys[k] = true; });
+            Object.keys(remote).forEach(function(k) { keys[k] = true; });
+            Object.keys(keys).forEach(function(k) {
+                const a = local[k];
+                const b = remote[k];
+                if (a && typeof a === 'object' && !(b && typeof b === 'object')) {
+                    out[k] = a;
                     return;
                 }
-                // İkisinde de varsa: remote'u al ama inventory/balance daha zengin olanı koru
-                const a = out[k];
-                const b = remote[k];
-                const merged = Object.assign({}, a, b);
-                // Inventory: daha uzun olanı tercih et (silinmiş seed hariç gerçek ilerleme)
-                const invA = Array.isArray(a.inventory) ? a.inventory : [];
-                const invB = Array.isArray(b.inventory) ? b.inventory : [];
-                merged.inventory = invB.length >= invA.length ? invB : invA;
-                // Şifre: boş olmasın
-                if (!merged.password && a.password) merged.password = a.password;
-                if (!merged.password && b.password) merged.password = b.password;
+                if (b && typeof b === 'object' && !(a && typeof a === 'object')) {
+                    out[k] = b;
+                    return;
+                }
+                if (!a || !b) return;
+                const ta = Date.parse(a.updatedAt || a.createdAt || 0) || 0;
+                const tb = Date.parse(b.updatedAt || b.createdAt || 0) || 0;
+                // Daha yeni kayıt kazanır (bakiye + envanter doğru kalır)
+                let merged;
+                if (tb > ta) {
+                    merged = Object.assign({}, a, b);
+                } else if (ta > tb) {
+                    merged = Object.assign({}, b, a);
+                } else {
+                    // Aynı zaman: local (bu cihazın son işlemi) öncelikli
+                    merged = Object.assign({}, b, a);
+                }
+                if (!merged.password) merged.password = a.password || b.password || '';
                 out[k] = merged;
             });
             return out;
@@ -1305,9 +1311,13 @@
 
         function saveUsers(users) {
             _usersCache = users || {};
-            // 1) localStorage — yenilemede / tarayıcı kapanınca kalır
+            const now = new Date().toISOString();
+            Object.keys(_usersCache).forEach(function(uname) {
+                if (_usersCache[uname] && typeof _usersCache[uname] === 'object') {
+                    _usersCache[uname].updatedAt = now;
+                }
+            });
             try { localStorage.setItem('swordcity_users_v3', JSON.stringify(_usersCache)); } catch (e) {}
-            // 2) Firebase — başka cihaz + online
             if (firebaseReady) {
                 Object.keys(_usersCache).forEach(function(uname) {
                     if (_usersCache[uname]) fbSet('users/' + uname, _usersCache[uname]);
@@ -1315,10 +1325,10 @@
             }
         }
 
-        // Tek kullanıcı kaydet (daha güvenli)
         function saveUser(username, userObj) {
             if (!username || !userObj) return;
             if (!_usersCache) _usersCache = {};
+            userObj.updatedAt = new Date().toISOString();
             _usersCache[username] = userObj;
             try {
                 const all = readLocalUsers();
@@ -2808,7 +2818,13 @@
         }
 
         function openModal(title, html) {
-            document.getElementById('modal-title').textContent = title;
+            const titleEl = document.getElementById('modal-title');
+            // HTML içeriyorsa innerHTML, değilse textContent (XSS'siz)
+            if (title && (title.indexOf('<') !== -1 || title.indexOf('&') !== -1)) {
+                titleEl.innerHTML = title;
+            } else {
+                titleEl.textContent = title;
+            }
             document.getElementById('modal-body').innerHTML = html;
             document.getElementById('modal').classList.add('active');
         }
@@ -3583,12 +3599,41 @@
             return s;
         }
 
+        // Eşya kategorileri
+        const CATEGORY_META = {
+            karakter: { label: 'Karakter', icon: '⚔️' },
+            kart:     { label: 'Koleksiyon Kartı', icon: '🃏' },
+            esya:     { label: 'Eşya', icon: '📦' }
+        };
+        function normalizeCategory(c) {
+            const key = String(c || 'karakter').toLowerCase().trim();
+            if (key === 'card' || key === 'kartlar' || key === 'koleksiyon' || key === 'collection') return 'kart';
+            if (key === 'item' || key === 'esya' || key === 'eşya' || key === 'other' || key === 'diger' || key === 'diğer') return 'esya';
+            if (key === 'char' || key === 'character' || key === 'karakterler') return 'karakter';
+            return CATEGORY_META[key] ? key : 'karakter';
+        }
+        function categoryBadgeHtml(c) {
+            const k = normalizeCategory(c);
+            const m = CATEGORY_META[k] || CATEGORY_META.karakter;
+            return `<span style="display:inline-block;padding:2px 8px;border-radius:8px;font-size:11px;font-weight:600;background:rgba(255,0,204,0.12);border:1px solid var(--border);color:var(--accent-soft);">${m.icon} ${m.label}</span>`;
+        }
+        function categorySelectHtml(selected, selectId) {
+            selected = normalizeCategory(selected || 'karakter');
+            let opts = '';
+            Object.keys(CATEGORY_META).forEach(function(k) {
+                const m = CATEGORY_META[k];
+                opts += `<option value="${k}" ${k === selected ? 'selected' : ''}>${m.icon} ${m.label}</option>`;
+            });
+            return `<select id="${selectId || 'item-category'}" style="width:100%;padding:10px;border-radius:10px;background:rgba(0,0,0,0.35);border:1px solid var(--border);color:var(--text);font-family:inherit;">${opts}</select>`;
+        }
+
         function normalizeItem(item) {
-            if (typeof item === 'string') return { name: item, image: '', rarity: 'siradan' };
+            if (typeof item === 'string') return { name: item, image: '', rarity: 'siradan', category: 'karakter' };
             return {
                 name: (item && item.name) ? item.name : 'İsimsiz',
                 image: (item && item.image) ? item.image : '',
-                rarity: normalizeRarity(item && item.rarity)
+                rarity: normalizeRarity(item && item.rarity),
+                category: normalizeCategory(item && item.category)
             };
         }
 
@@ -3653,12 +3698,25 @@
             `);
         }
 
-        function showInventory() {
+        function showInventory(filterCat) {
             const me = getCurrentUser();
             const user = getUser(me);
             if (!user) return;
             const inv = user.inventory || [];
             const cap = invCapacity(user);
+            filterCat = filterCat || window._invFilter || 'all';
+            window._invFilter = filterCat;
+
+            const counts = { all: inv.length, karakter: 0, kart: 0, esya: 0 };
+            inv.forEach(function(item) {
+                const c = normalizeCategory(normalizeItem(item).category);
+                if (counts[c] !== undefined) counts[c]++;
+            });
+
+            function tabBtn(id, label) {
+                const active = filterCat === id;
+                return `<button onclick="showInventory('${id}')" style="flex:1;padding:8px 6px;border-radius:10px;border:1px solid ${active ? 'var(--accent)' : 'var(--border)'};background:${active ? 'rgba(255,0,204,0.25)' : 'rgba(0,0,0,0.25)'};color:${active ? 'var(--accent-soft)' : 'var(--text-muted)'};font-weight:600;font-size:12px;cursor:pointer;font-family:inherit;">${label}</button>`;
+            }
 
             let list = `
                 <div class="info-card" style="margin-bottom:12px;">
@@ -3668,32 +3726,45 @@
                     </div>
                     <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Başlangıç 40 · her level +10 slot</div>
                 </div>
+                <div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap;">
+                    ${tabBtn('all', 'Tümü (' + counts.all + ')')}
+                    ${tabBtn('karakter', '⚔️ Karakter (' + counts.karakter + ')')}
+                    ${tabBtn('kart', '🃏 Kart (' + counts.kart + ')')}
+                    ${tabBtn('esya', '📦 Eşya (' + counts.esya + ')')}
+                </div>
             `;
-            if (inv.length === 0) {
-                list += '<p style="color:var(--text-muted);text-align:center;padding:20px 0;">Envanterin boş.</p>';
+
+            const filtered = [];
+            inv.forEach(function(item, i) {
+                const it = normalizeItem(item);
+                if (filterCat === 'all' || it.category === filterCat) filtered.push({ item: item, index: i, it: it });
+            });
+
+            if (filtered.length === 0) {
+                list += '<p style="color:var(--text-muted);text-align:center;padding:20px 0;">Bu kategoride eşya yok.<br><span style="font-size:12px;">Koleksiyon kartlarını moderatör verebilir; pazarda satabilirsin.</span></p>';
             } else {
                 list += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:14px;">';
-                inv.forEach(function(item, i) {
-                    const it = normalizeItem(item);
+                filtered.forEach(function(row) {
+                    const i = row.index;
+                    const it = row.it;
                     const rs = rarityStyle(it.rarity);
                     const bStyle = rarityBorderStyle(it.rarity);
                     const nameColor = (rs.special === 'rainbow' || rs.special === 'galaxy') ? 'var(--text)' : rs.color;
                     const imgBlock = it.image
                         ? `<img src="${escapeHtml(it.image)}" alt="${escapeHtml(it.name)}" onclick="openImagePreview('${escapeHtml(it.image).replace(/'/g, "\\'")}', '${escapeHtml(it.name).replace(/'/g, "\\'")}', 'inv')" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:14px;${bStyle}cursor:pointer;background:#0a0014;" onerror="this.style.display='none'">`
-                        : `<div style="width:100%;aspect-ratio:1;border-radius:14px;background:rgba(255,0,204,0.1);${bStyle}display:flex;align-items:center;justify-content:center;font-size:42px;">📦</div>`;
+                        : `<div style="width:100%;aspect-ratio:1;border-radius:14px;background:rgba(255,0,204,0.1);${bStyle}display:flex;align-items:center;justify-content:center;font-size:42px;">${it.category === 'kart' ? '🃏' : '📦'}</div>`;
                     list += `
                         <div style="background:rgba(0,0,0,0.28);${bStyle}border-radius:16px;padding:10px;text-align:center;">
                             ${imgBlock}
                             <div style="margin-top:10px;font-weight:600;font-size:14px;line-height:1.3;word-break:break-word;color:${nameColor};">${escapeHtml(it.name)}</div>
                             <div style="margin-top:6px;">${rarityBadgeHtml(it.rarity)}</div>
-                            <div style="color:var(--text-muted);font-size:11px;margin-top:3px;">#${i + 1}</div>
-                            <button onclick="shareCharacterEmoji(${i})" style="margin-top:8px;width:100%;padding:6px;background:rgba(255,0,204,0.15);border:1px solid var(--border);color:var(--accent-soft);border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;">✨ Karakter Emojisi Paylaş</button>
+                            <div style="margin-top:4px;">${categoryBadgeHtml(it.category)}</div>
+                            <button onclick="shareCharacterEmoji(${i})" style="margin-top:8px;width:100%;padding:6px;background:rgba(255,0,204,0.15);border:1px solid var(--border);color:var(--accent-soft);border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;">✨ Paylaş</button>
                             <button onclick="deleteInventoryItem(${i})" style="margin-top:6px;width:100%;padding:6px;background:rgba(255,61,113,0.2);border:1px solid rgba(255,61,113,0.4);color:#ff3d71;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;">🗑 Sil</button>
                         </div>
                     `;
                 });
                 list += '</div>';
-                list += '<p style="color:var(--text-muted);font-size:12px;text-align:center;margin-top:14px;">Fotoğrafa tıklayınca büyür · Gereksiz karakteri silebilirsin</p>';
             }
 
             openModal('🎒 Envanterim', list);
@@ -3747,6 +3818,7 @@
                             ${imgBlock}
                             <div style="margin-top:10px;font-weight:600;font-size:14px;line-height:1.3;word-break:break-word;color:${nameColor};">${escapeHtml(it.name)}</div>
                             <div style="margin-top:6px;">${rarityBadgeHtml(it.rarity)}</div>
+                            <div style="margin-top:4px;">${categoryBadgeHtml(it.category)}</div>
                             <div style="color:var(--success);font-family:Orbitron,sans-serif;font-size:13px;margin-top:6px;">$${Number(listing.price).toLocaleString('tr-TR')}</div>
                             <div style="color:var(--text-muted);font-size:11px;margin-top:2px;display:flex;align-items:center;justify-content:center;gap:4px;flex-wrap:wrap;">Satıcı: ${formatDisplayName(listing.seller)}${isMine ? ' (sen)' : ''}</div>
                             ${actionBtn}
@@ -3756,7 +3828,7 @@
                 list += '</div>';
             }
 
-            openModal('🏪 Pazar <span style="font-size:11px;color:var(--success);font-weight:600;margin-left:6px;">● Canlı</span>', `
+            openModal('🏪 Pazar · ● Canlı', `
                 <button class="primary-btn" onclick="startSellItem()" style="margin-bottom:16px;">📤 Envanterden Sat</button>
                 ${list}
             `);
@@ -3870,7 +3942,7 @@
             let options = '';
             inv.forEach(function(item, i) {
                 const it = normalizeItem(item);
-                options += `<option value="${i}">${escapeHtml(it.name)}</option>`;
+                options += `<option value="${i}">[${(CATEGORY_META[it.category]||{}).label||'?'}] ${escapeHtml(it.name)} · ${rarityStyle(it.rarity).label}</option>`;
             });
 
             openModal('📤 Satışa Çıkar', `
@@ -3907,15 +3979,15 @@
                 return;
             }
 
-            const item = users[me].inventory[idx];
+            const item = normalizeItem(users[me].inventory[idx]);
             users[me].inventory.splice(idx, 1);
-            saveUsers(users);
+            saveUser(me, users[me]);
 
             const market = loadMarket();
             market.push({
                 id: 'm_' + Date.now() + '_' + Math.floor(Math.random() * 9999),
                 seller: me,
-                item: normalizeItem(item),
+                item: item,
                 price: price,
                 createdAt: new Date().toISOString()
             });
@@ -3977,19 +4049,51 @@
                 return;
             }
 
-            users[me].balance -= listing.price;
-            users[listing.seller].balance = (users[listing.seller].balance || 0) + listing.price;
-            if (!users[me].inventory) users[me].inventory = [];
-            users[me].inventory.push(boughtItem);
+            // Confirm sonrası taze kullanıcı verisi
+            await loadUsersAsync();
+            const users2 = loadUsers();
+            if (!users2[me] || !users2[listing.seller]) {
+                toast('Kullanıcı bulunamadı.', 'error');
+                return;
+            }
+            ensureUserFields(users2[me]);
+            ensureUserFields(users2[listing.seller]);
+
+            if ((users2[me].balance || 0) < listing.price) {
+                toast('Yetersiz bakiye!', 'error');
+                return;
+            }
+            if (invSpaceLeft(users2[me]) < 1) {
+                toast('Envanter dolu!', 'error');
+                return;
+            }
+
+            const price = Number(listing.price) || 0;
+            users2[me].balance = (Number(users2[me].balance) || 0) - price;
+            users2[listing.seller].balance = (Number(users2[listing.seller].balance) || 0) + price;
+            if (!users2[me].inventory) users2[me].inventory = [];
+            users2[me].inventory.push(boughtItem);
+
+            // Satıcı envanterinde aynı item kaldıysa temizle (eski bug yedekleri)
+            if (Array.isArray(users2[listing.seller].inventory)) {
+                const bi = boughtItem;
+                users2[listing.seller].inventory = users2[listing.seller].inventory.filter(function(it) {
+                    const n = normalizeItem(it);
+                    // Sadece isim+image birebir aynı ve listing'ten kalan kopya riski — silme: item zaten listelenirken çıkmalı
+                    return true; // envanter listelenirken düşmüş olmalı; merge bozmasın diye dokunma
+                });
+            }
 
             market2.splice(idx2, 1);
-            // Önce pazarı sil (herkeste anında yok olsun), sonra kullanıcıları kaydet
             saveMarket(market2);
-            saveUsers(users);
+            // Her iki kullanıcıyı ayrı kaydet (bakiye kesin yazılsın)
+            saveUser(me, users2[me]);
+            saveUser(listing.seller, users2[listing.seller]);
+            _usersCache = users2;
 
-            pushNotif(listing.seller, '🏪 "' + boughtItem.name + '" ürünün $' + listing.price.toLocaleString('tr-TR') + ' karşılığında satıldı. Alıcı: ' + me, 'success');
-            pushNotif(me, '🛒 "' + boughtItem.name + '" [' + rarityStyle(boughtItem.rarity).label + '] satın aldın. $' + listing.price.toLocaleString('tr-TR') + ' ödendi.', 'success');
-            toast('✅ Satın alındı! Envanterine eklendi.');
+            pushNotif(listing.seller, '🏪 "' + boughtItem.name + '" satıldı +$' + price.toLocaleString('tr-TR') + ' · Alıcı: ' + me, 'success');
+            pushNotif(me, '🛒 "' + boughtItem.name + '" alındı −$' + price.toLocaleString('tr-TR'), 'success');
+            toast('✅ Satın alındı! −$' + price.toLocaleString('tr-TR'));
             openMarket();
         }
 
@@ -5476,13 +5580,20 @@
             let rarKey = (rarityPrompt || 'siradan').trim().toLowerCase();
             const numMap = { '1':'siradan','2':'ender','3':'super_ender','4':'destansi','5':'gizemli','6':'super_gizemli','7':'efsanevi','8':'ultra_efsanevi','9':'superstar','10':'popstar','11':'limited','12':'kromatik' };
             if (numMap[rarKey]) rarKey = numMap[rarKey];
+            const catPrompt = prompt('Kategori:\n\n1 karakter\n2 kart (koleksiyon kartı)\n3 esya\n\n(boş = karakter)');
+            if (catPrompt === null) return;
+            let catKey = (catPrompt || 'karakter').trim().toLowerCase();
+            if (catKey === '1') catKey = 'karakter';
+            if (catKey === '2' || catKey === 'card') catKey = 'kart';
+            if (catKey === '3' || catKey === 'item') catKey = 'esya';
             users[username].inventory.push({
                 name: text,
                 image: imageUrl,
-                rarity: normalizeRarity(rarKey)
+                rarity: normalizeRarity(rarKey),
+                category: normalizeCategory(catKey)
             });
-            saveUsers(users);
-            toast('✅ "' + text + '" ' + username + "'ın envanterine eklendi" + (imageUrl ? ' (foto ile)' : '') + '.');
+            saveUser(username, users[username]);
+            toast('✅ "' + text + '" eklendi [' + (CATEGORY_META[normalizeCategory(catKey)] || {}).label + ']');
             modSelectUser(username);
         }
 
@@ -5506,7 +5617,7 @@
                 toast('Eşya ismi en fazla 80 karakter olabilir.', 'error');
                 return;
             }
-            inv[index] = { name: name, image: item.image, rarity: item.rarity || 'siradan' };
+            inv[index] = { name: name, image: item.image, rarity: item.rarity || 'siradan', category: item.category || 'karakter' };
             users[username].inventory = inv;
             saveUsers(users);
             toast('Eşya ismi güncellendi.');
@@ -5521,7 +5632,7 @@
             const it = normalizeItem(inv[index]);
             const img = prompt('Yeni fotoğraf URL\'si\n\nMevcut: ' + (it.image || '(yok)') + '\n\nBoş bırakırsan foto silinir.');
             if (img === null) return;
-            inv[index] = { name: it.name, image: (img || '').trim(), rarity: it.rarity || 'siradan' };
+            inv[index] = { name: it.name, image: (img || '').trim(), rarity: it.rarity || 'siradan', category: it.category || 'karakter' };
             users[username].inventory = inv;
             saveUsers(users);
             toast('Foto güncellendi.');
@@ -5563,9 +5674,46 @@
             const sel = document.getElementById('mod-item-rarity');
             const rarity = normalizeRarity(sel ? sel.value : 'siradan');
             const it = normalizeItem(users[username].inventory[index]);
-            users[username].inventory[index] = { name: it.name, image: it.image, rarity: rarity };
+            users[username].inventory[index] = { name: it.name, image: it.image, rarity: rarity, category: it.category || 'karakter' };
             saveUsers(users);
             toast('💎 Enderlik: ' + rarityStyle(rarity).label);
+            modViewInventory(username);
+        }
+
+
+        function modSetItemCategory(username, index) {
+            if (!isModerator()) {
+                toast('Sadece moderatör.', 'error');
+                return;
+            }
+            const users = loadUsers();
+            if (!users[username] || !users[username].inventory || !users[username].inventory[index]) return;
+            const item = normalizeItem(users[username].inventory[index]);
+            openModal('📁 Kategori — ' + escapeHtml(item.name), `
+                <div class="info-card" style="margin-bottom:12px;text-align:center;">
+                    <div style="font-weight:700;margin-bottom:8px;">${escapeHtml(item.name)}</div>
+                    <div>Mevcut: ${categoryBadgeHtml(item.category)}</div>
+                </div>
+                <div class="form-group">
+                    <label>Kategori</label>
+                    ${categorySelectHtml(item.category, 'mod-item-category')}
+                </div>
+                <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">🃏 Koleksiyon Kartı — takas/pazar için. Kartları sen vereceksin.</p>
+                <button class="primary-btn" onclick="modConfirmSetItemCategory('${username}', ${index})">KAYDET</button>
+                <button class="back-btn" onclick="modViewInventory('${username}')">← Geri</button>
+            `);
+        }
+
+        function modConfirmSetItemCategory(username, index) {
+            if (!isModerator()) return;
+            const users = loadUsers();
+            if (!users[username] || !users[username].inventory || !users[username].inventory[index]) return;
+            const sel = document.getElementById('mod-item-category');
+            const cat = normalizeCategory(sel ? sel.value : 'karakter');
+            const it = normalizeItem(users[username].inventory[index]);
+            users[username].inventory[index] = { name: it.name, image: it.image, rarity: it.rarity, category: cat };
+            saveUser(username, users[username]);
+            toast('📁 Kategori: ' + (CATEGORY_META[cat] || CATEGORY_META.karakter).label);
             modViewInventory(username);
         }
 
@@ -5593,10 +5741,12 @@
                             ${imgBlock}
                             <div style="margin-top:10px;font-weight:600;font-size:14px;line-height:1.3;word-break:break-word;color:${nameColor};">${escapeHtml(it.name)}</div>
                             <div style="margin-top:6px;">${rarityBadgeHtml(it.rarity)}</div>
+                            <div style="margin-top:4px;">${categoryBadgeHtml(it.category)}</div>
                             <div style="display:flex;gap:6px;justify-content:center;margin-top:10px;flex-wrap:wrap;">
                                 <button onclick="modRenameInventoryItem('${username}', ${i})" style="background:rgba(40,200,120,0.14);border:1px solid rgba(40,200,120,.35);color:var(--success);border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;">✏️ İsim</button>
                                 <button onclick="modEditItemImage('${username}', ${i})" style="background:rgba(255,0,204,0.15);border:1px solid var(--border);color:var(--accent-soft);border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;">📷 Foto</button>
                                 <button onclick="modSetItemRarity('${username}', ${i})" style="background:rgba(255,213,79,0.15);border:1px solid rgba(255,213,79,0.4);color:#ffd54f;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;">💎 Enderlik</button>
+                                <button onclick="modSetItemCategory('${username}', ${i})" style="background:rgba(74,163,255,0.15);border:1px solid rgba(74,163,255,0.4);color:#4aa3ff;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;">📁 Kategori</button>
                                 <button onclick="modRemoveInventory('${username}', ${i})" style="background:rgba(255,61,113,0.2);border:1px solid rgba(255,61,113,0.4);color:#ff3d71;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;">Sil</button>
                             </div>
                         </div>
