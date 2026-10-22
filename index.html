@@ -3853,8 +3853,16 @@
                         : `<div style="width:100%;aspect-ratio:1;border-radius:14px;background:rgba(255,0,204,0.1);${bStyle}display:flex;align-items:center;justify-content:center;font-size:42px;">📦</div>`;
 
                     let actionBtn = '';
+                    const isServer = isServerSeller(listing.seller);
                     if (isMine) {
                         actionBtn = `<button onclick="cancelListing('${listing.id}')" style="width:100%;margin-top:8px;padding:8px;background:rgba(255,61,113,0.2);border:1px solid rgba(255,61,113,0.4);color:#ff3d71;border-radius:10px;cursor:pointer;font-size:13px;font-weight:600;">İlanı Kaldır</button>`;
+                    } else if (isServer && isModerator(me)) {
+                        actionBtn = `
+                            <button onclick="buyListing('${listing.id}')" style="width:100%;margin-top:8px;padding:8px;background:var(--accent);border:none;color:#1a001f;border-radius:10px;cursor:pointer;font-size:13px;font-weight:600;">Satın Al</button>
+                            <button onclick="modRemoveServerListing('${listing.id}')" style="width:100%;margin-top:6px;padding:7px;background:rgba(255,61,113,0.2);border:1px solid rgba(255,61,113,0.4);color:#ff3d71;border-radius:10px;cursor:pointer;font-size:12px;font-weight:600;">🗑 SERVER İlanını Sil</button>
+                        `;
+                    } else if (isServer) {
+                        actionBtn = `<button onclick="buyListing('${listing.id}')" style="width:100%;margin-top:8px;padding:8px;background:var(--accent);border:none;color:#1a001f;border-radius:10px;cursor:pointer;font-size:13px;font-weight:600;">Satın Al</button>`;
                     } else {
                         actionBtn = `
                             <button onclick="buyListing('${listing.id}')" style="width:100%;margin-top:8px;padding:8px;background:var(--accent);border:none;color:#1a001f;border-radius:10px;cursor:pointer;font-size:13px;font-weight:600;">Satın Al</button>
@@ -3868,8 +3876,8 @@
                             <div style="margin-top:10px;font-weight:600;font-size:14px;line-height:1.3;word-break:break-word;color:${nameColor};">${escapeHtml(it.name)}</div>
                             <div style="margin-top:6px;">${rarityBadgeHtml(it.rarity)}</div>
                             <div style="margin-top:4px;">${categoryBadgeHtml(it.category)}</div>
-                            <div style="color:var(--success);font-family:Orbitron,sans-serif;font-size:13px;margin-top:6px;">$${Number(listing.price).toLocaleString('tr-TR')}</div>
-                            <div style="color:var(--text-muted);font-size:11px;margin-top:2px;display:flex;align-items:center;justify-content:center;gap:4px;flex-wrap:wrap;">Satıcı: ${formatDisplayName(listing.seller)}${isMine ? ' (sen)' : ''}</div>
+                            <div style="color:var(--success);font-family:Orbitron,sans-serif;font-size:13px;margin-top:6px;">$${Number(listing.price).toLocaleString('tr-TR')}${isServerSeller(listing.seller) && listing.stock > 1 ? ' · stok ' + listing.stock : ''}</div>
+                            <div style="color:var(--text-muted);font-size:11px;margin-top:2px;display:flex;align-items:center;justify-content:center;gap:4px;flex-wrap:wrap;">Satıcı: ${isServerSeller(listing.seller) ? '<span style="color:#00e676;font-weight:700;">🖥️ SERVER</span>' : formatDisplayName(listing.seller)}${isMine ? ' (sen)' : ''}</div>
                             ${actionBtn}
                         </div>
                     `;
@@ -4048,9 +4056,12 @@
             openMarket();
         }
 
+        function isServerSeller(seller) {
+            return String(seller || '').toUpperCase() === 'SERVER';
+        }
+
         async function buyListing(listingId) {
             const me = getCurrentUser();
-            // Firebase'den taze pazar + kullanıcı (başka biri almış olabilir)
             await loadMarketAsync();
             await loadUsersAsync();
             const market = loadMarket();
@@ -4062,19 +4073,24 @@
             }
 
             const listing = market[idx];
-            if (listing.seller === me) {
+            const serverSale = isServerSeller(listing.seller);
+            if (!serverSale && listing.seller === me) {
                 toast('Kendi ilanını alamazsın.', 'error');
                 return;
             }
 
             const users = loadUsers();
-            if (!users[me] || !users[listing.seller]) {
+            if (!users[me]) {
                 toast('Kullanıcı bulunamadı.', 'error');
+                return;
+            }
+            if (!serverSale && !users[listing.seller]) {
+                toast('Satıcı bulunamadı.', 'error');
                 return;
             }
 
             ensureUserFields(users[me]);
-            ensureUserFields(users[listing.seller]);
+            if (!serverSale) ensureUserFields(users[listing.seller]);
 
             if ((users[me].balance || 0) < listing.price) {
                 toast('Yetersiz bakiye! ($' + listing.price.toLocaleString('tr-TR') + ' gerekli)', 'error');
@@ -4086,11 +4102,11 @@
             }
 
             const boughtItem = normalizeItem(listing.item);
-            if (!confirm('"' + boughtItem.name + '" [' + rarityStyle(boughtItem.rarity).label + '] için $' + listing.price.toLocaleString('tr-TR') + ' ödeyecek misin?')) {
-                return;
-            }
+            const priceHint = serverSale
+                ? ('SERVER mağazasından "' + boughtItem.name + '" için $' + listing.price.toLocaleString('tr-TR') + ' harcanacak. Para kimseye gitmez.')
+                : ('"' + boughtItem.name + '" [' + rarityStyle(boughtItem.rarity).label + '] için $' + listing.price.toLocaleString('tr-TR') + ' ödeyecek misin?');
+            if (!confirm(priceHint)) return;
 
-            // Tekrar kontrol (confirm sırasında satılmış olabilir)
             await loadMarketAsync();
             const market2 = loadMarket();
             const idx2 = market2.findIndex(function(l) { return l.id === listingId; });
@@ -4100,15 +4116,20 @@
                 return;
             }
 
-            // Confirm sonrası taze kullanıcı verisi
             await loadUsersAsync();
             const users2 = loadUsers();
-            if (!users2[me] || !users2[listing.seller]) {
+            if (!users2[me]) {
                 toast('Kullanıcı bulunamadı.', 'error');
                 return;
             }
             ensureUserFields(users2[me]);
-            ensureUserFields(users2[listing.seller]);
+            if (!serverSale) {
+                if (!users2[listing.seller]) {
+                    toast('Satıcı bulunamadı.', 'error');
+                    return;
+                }
+                ensureUserFields(users2[listing.seller]);
+            }
 
             if ((users2[me].balance || 0) < listing.price) {
                 toast('Yetersiz bakiye!', 'error');
@@ -4120,36 +4141,40 @@
             }
 
             const price = Number(listing.price) || 0;
+            // Para sadece alıcıdan düşer
             users2[me].balance = (Number(users2[me].balance) || 0) - price;
-            users2[listing.seller].balance = (Number(users2[listing.seller].balance) || 0) + price;
+            if (!serverSale) {
+                // Oyuncu satışı: satıcı kazanır
+                users2[listing.seller].balance = (Number(users2[listing.seller].balance) || 0) + price;
+            }
+            // SERVER satışı: para yanar, kimse kazanmaz
+
             if (!Array.isArray(users2[me].inventory)) users2[me].inventory = [];
             users2[me].inventory = users2[me].inventory.slice();
             users2[me].inventory.push(boughtItem);
             bumpInvVersion(users2[me]);
-            // Satıcı envanteri zaten listelenirken düşmüş olmalı; version yine yükselt (geri gelmesin)
-            if (!Array.isArray(users2[listing.seller].inventory)) users2[listing.seller].inventory = [];
-            bumpInvVersion(users2[listing.seller]);
 
-            // Satıcı envanterinde aynı item kaldıysa temizle (eski bug yedekleri)
-            if (Array.isArray(users2[listing.seller].inventory)) {
-                const bi = boughtItem;
-                users2[listing.seller].inventory = users2[listing.seller].inventory.filter(function(it) {
-                    const n = normalizeItem(it);
-                    // Sadece isim+image birebir aynı ve listing'ten kalan kopya riski — silme: item zaten listelenirken çıkmalı
-                    return true; // envanter listelenirken düşmüş olmalı; merge bozmasın diye dokunma
-                });
+            if (!serverSale) {
+                if (!Array.isArray(users2[listing.seller].inventory)) users2[listing.seller].inventory = [];
+                bumpInvVersion(users2[listing.seller]);
             }
 
-            market2.splice(idx2, 1);
+            // SERVER stok: birden fazla alım
+            if (serverSale && Number(market2[idx2].stock) > 1) {
+                market2[idx2].stock = Number(market2[idx2].stock) - 1;
+            } else {
+                market2.splice(idx2, 1);
+            }
             saveMarket(market2);
-            // Her iki kullanıcıyı ayrı kaydet (bakiye kesin yazılsın)
             saveUser(me, users2[me]);
-            saveUser(listing.seller, users2[listing.seller]);
+            if (!serverSale) {
+                saveUser(listing.seller, users2[listing.seller]);
+                pushNotif(listing.seller, '🏪 "' + boughtItem.name + '" satıldı +$' + price.toLocaleString('tr-TR') + ' · Alıcı: ' + me, 'success');
+            }
             _usersCache = users2;
 
-            pushNotif(listing.seller, '🏪 "' + boughtItem.name + '" satıldı +$' + price.toLocaleString('tr-TR') + ' · Alıcı: ' + me, 'success');
-            pushNotif(me, '🛒 "' + boughtItem.name + '" alındı −$' + price.toLocaleString('tr-TR'), 'success');
-            toast('✅ Satın alındı! −$' + price.toLocaleString('tr-TR'));
+            pushNotif(me, '🛒 "' + boughtItem.name + '" ' + (serverSale ? 'SERVER mağazasından ' : '') + 'alındı −$' + price.toLocaleString('tr-TR'), 'success');
+            toast('✅ Satın alındı! −$' + price.toLocaleString('tr-TR') + (serverSale ? ' (SERVER)' : ''));
             openMarket();
         }
 
@@ -4956,6 +4981,130 @@
             closeModal();
         }
 
+
+        // ========== SERVER PAZAR (mod) ==========
+        function modServerShop() {
+            if (!isModerator()) {
+                toast('Sadece moderatör.', 'error');
+                return;
+            }
+            const market = loadMarket().filter(function(l) { return isServerSeller(l.seller); });
+            let list = '';
+            if (!market.length) {
+                list = '<p style="color:var(--text-muted);text-align:center;padding:12px 0;">Aktif SERVER ilanı yok.</p>';
+            } else {
+                market.forEach(function(l) {
+                    const it = normalizeItem(l.item);
+                    list += `
+                        <div class="info-card">
+                            <div class="info-row"><span class="label">Ürün</span><span class="value">${escapeHtml(it.name)}</span></div>
+                            <div class="info-row"><span class="label">Enderlik</span><span class="value">${rarityBadgeHtml(it.rarity)}</span></div>
+                            <div class="info-row"><span class="label">Kategori</span><span class="value">${categoryBadgeHtml(it.category)}</span></div>
+                            <div class="info-row"><span class="label">Fiyat</span><span class="value">$${(l.price || 0).toLocaleString('tr-TR')}</span></div>
+                            <button class="danger-btn" style="margin-top:8px;" onclick="modRemoveServerListing('${l.id}')">İlanı Sil</button>
+                        </div>
+                    `;
+                });
+            }
+            openModal('🖥️ SERVER Pazar Satışı', `
+                <p style="color:var(--text-muted);font-size:13px;margin-bottom:12px;">
+                    Satıcı <b style="color:#00e676;">SERVER</b> görünür. Oyuncular para harcar; <b>kimse para kazanmaz</b> (para yanar).
+                </p>
+                <button class="primary-btn" onclick="modAddServerListing()" style="margin-bottom:14px;">➕ SERVER İlanı Ekle</button>
+                ${list}
+                <button class="back-btn" onclick="showModUserList()">← Geri</button>
+            `);
+        }
+
+        function modAddServerListing() {
+            if (!isModerator()) return;
+            openModal('➕ SERVER İlanı', `
+                <div class="form-group">
+                    <label>Ürün adı</label>
+                    <input type="text" id="srv-name" placeholder="Örn: Cynthia Kartı">
+                </div>
+                <div class="form-group">
+                    <label>Fotoğraf URL (isteğe bağlı)</label>
+                    <input type="text" id="srv-image" placeholder="https://...">
+                </div>
+                <div class="form-group">
+                    <label>Enderlik</label>
+                    ${raritySelectHtml('siradan', 'srv-rarity')}
+                </div>
+                <div class="form-group">
+                    <label>Kategori (serbest yaz)</label>
+                    ${categorySelectHtml('kart', 'srv-category')}
+                </div>
+                <div class="form-group">
+                    <label>Fiyat ($)</label>
+                    <input type="number" id="srv-price" value="1000" min="1" step="1">
+                </div>
+                <div class="form-group">
+                    <label>Stok (kaç kişi alabilsin)</label>
+                    <input type="number" id="srv-stock" value="1" min="1" step="1">
+                    <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Her alımda 1 stok düşer; 0 olunca ilan silinir. Aynı üründen birden fazla ilan da ekleyebilirsin.</div>
+                </div>
+                <button class="primary-btn" onclick="modConfirmServerListing()">PAZARA KOY</button>
+                <button class="back-btn" onclick="modServerShop()">← Geri</button>
+            `);
+        }
+
+        function modConfirmServerListing() {
+            if (!isModerator()) return;
+            const name = (document.getElementById('srv-name') && document.getElementById('srv-name').value || '').trim();
+            const image = (document.getElementById('srv-image') && document.getElementById('srv-image').value || '').trim();
+            const rarity = normalizeRarity(document.getElementById('srv-rarity') && document.getElementById('srv-rarity').value);
+            const category = normalizeCategory(document.getElementById('srv-category') && document.getElementById('srv-category').value);
+            const price = parseFloat(document.getElementById('srv-price') && document.getElementById('srv-price').value);
+            let stock = parseInt(document.getElementById('srv-stock') && document.getElementById('srv-stock').value, 10);
+            if (!name) {
+                toast('Ürün adı gerekli.', 'error');
+                return;
+            }
+            if (!price || price <= 0) {
+                toast('Geçerli fiyat gir.', 'error');
+                return;
+            }
+            if (!stock || stock < 1) stock = 1;
+
+            const market = loadMarket();
+            // Stok kadar ayrı ilan VEYA tek ilan + stock alanı
+            market.push({
+                id: 'srv_' + Date.now() + '_' + Math.floor(Math.random() * 9999),
+                seller: 'SERVER',
+                item: { name: name, image: image, rarity: rarity, category: category },
+                price: price,
+                stock: stock,
+                createdAt: new Date().toISOString()
+            });
+            saveMarket(market);
+            toast('🖥️ SERVER ilanı yayınlandı: ' + name + ' ×' + stock);
+            modServerShop();
+        }
+
+        function modRemoveServerListing(listingId) {
+            if (!isModerator()) {
+                toast('Sadece moderatör.', 'error');
+                return;
+            }
+            const market = loadMarket();
+            const idx = market.findIndex(function(l) { return l.id === listingId; });
+            if (idx < 0) {
+                toast('İlan yok.', 'error');
+                return;
+            }
+            if (!isServerSeller(market[idx].seller)) {
+                toast('Bu SERVER ilanı değil.', 'error');
+                return;
+            }
+            if (!confirm('SERVER ilanını sil?')) return;
+            market.splice(idx, 1);
+            saveMarket(market);
+            toast('SERVER ilanı silindi.');
+            if (window._marketOpen) openMarket();
+            else modServerShop();
+        }
+
         function openModerator() {
             const me = getCurrentUser();
             if (!isModerator(me)) {
@@ -5013,8 +5162,11 @@
                 <button class="mod-btn" onclick="showShopOrders()" style="margin-bottom:8px;">
                     <span style="font-size:20px;">🛒</span> Mağaza Siparişleri
                 </button>
-                <button class="mod-btn" onclick="modManageCases()" style="margin-bottom:12px;">
+                <button class="mod-btn" onclick="modManageCases()" style="margin-bottom:8px;">
                     <span style="font-size:20px;">📦</span> Kasa Yönetimi
+                </button>
+                <button class="mod-btn" onclick="modServerShop()" style="margin-bottom:12px;">
+                    <span style="font-size:20px;">🖥️</span> SERVER Pazar Satışı
                 </button>
                 <p style="color:var(--text-muted);margin-bottom:14px;font-size:13px;">İşlem yapmak istediğin kişiyi seç:</p>
                 ${list}
