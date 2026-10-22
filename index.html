@@ -1447,6 +1447,10 @@
             });
             db.ref('chats').on('value', snap => {
                 _chatsCache = snap.val() || {};
+                // Sohbet açıksa otomatik yenile
+                if (window._openChatWith) {
+                    refreshOpenChatMessages(window._openChatWith);
+                }
             });
             db.ref('reports').on('value', snap => {
                 const v = snap.val();
@@ -2297,29 +2301,49 @@
             openModal('💬 Sohbetler', html + `<button class="back-btn" onclick="openSocial()">← Geri</button>`);
         }
 
+        function buildChatMessagesHtml(me, msgs) {
+            if (!msgs || !msgs.length) {
+                return '<p style="color:var(--text-muted);text-align:center;padding:20px 0;">Henüz mesaj yok. İlk mesajı sen gönder!</p>';
+            }
+            let msgHtml = '';
+            msgs.slice(-50).forEach(function(m) {
+                const mine = m.from === me;
+                msgHtml += `
+                    <div style="display:flex;justify-content:${mine ? 'flex-end' : 'flex-start'};margin-bottom:8px;">
+                        <div style="max-width:75%;padding:10px 14px;border-radius:14px;background:${mine ? 'rgba(255,0,204,0.25)' : 'rgba(0,0,0,0.35)'};border:1px solid var(--border);">
+                            <div style="font-size:13px;line-height:1.4;">${escapeHtml(m.text || '')}</div>
+                            <div style="font-size:10px;color:var(--text-muted);margin-top:4px;text-align:right;">${m.at ? new Date(m.at).toLocaleTimeString('tr-TR', {hour:'2-digit',minute:'2-digit'}) : ''}</div>
+                        </div>
+                    </div>
+                `;
+            });
+            return msgHtml;
+        }
+
+        function refreshOpenChatMessages(other) {
+            const box = document.getElementById('chat-messages');
+            if (!box) {
+                window._openChatWith = null;
+                return;
+            }
+            const me = getCurrentUser();
+            if (!me) return;
+            const cid = getChatId(me, other);
+            const chats = loadChats();
+            const msgs = (chats[cid] && chats[cid].messages) ? chats[cid].messages : [];
+            const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 80;
+            box.innerHTML = buildChatMessagesHtml(me, msgs);
+            if (atBottom) box.scrollTop = box.scrollHeight;
+        }
+
         function openPrivateChat(other) {
             const me = getCurrentUser();
+            window._openChatWith = other;
             const cid = getChatId(me, other);
             const chats = loadChats();
             if (!chats[cid]) chats[cid] = { messages: [] };
             const msgs = chats[cid].messages || [];
-
-            let msgHtml = '';
-            if (!msgs.length) {
-                msgHtml = '<p style="color:var(--text-muted);text-align:center;padding:20px 0;">Henüz mesaj yok. İlk mesajı sen gönder!</p>';
-            } else {
-                msgs.slice(-50).forEach(function(m) {
-                    const mine = m.from === me;
-                    msgHtml += `
-                        <div style="display:flex;justify-content:${mine ? 'flex-end' : 'flex-start'};margin-bottom:8px;">
-                            <div style="max-width:75%;padding:10px 14px;border-radius:14px;background:${mine ? 'rgba(255,0,204,0.25)' : 'rgba(0,0,0,0.35)'};border:1px solid var(--border);">
-                                <div style="font-size:13px;line-height:1.4;">${escapeHtml(m.text || '')}</div>
-                                <div style="font-size:10px;color:var(--text-muted);margin-top:4px;text-align:right;">${m.at ? new Date(m.at).toLocaleTimeString('tr-TR', {hour:'2-digit',minute:'2-digit'}) : ''}</div>
-                            </div>
-                        </div>
-                    `;
-                });
-            }
+            const msgHtml = buildChatMessagesHtml(me, msgs);
 
             openModal('💬 ' + other, `
                 <div id="chat-messages" style="max-height:340px;overflow-y:auto;margin-bottom:12px;padding:4px;">${msgHtml}</div>
@@ -2327,7 +2351,7 @@
                     <input type="text" id="chat-input" placeholder="Mesaj yaz..." onkeydown="if(event.key==='Enter')sendChatMessage('${escapeHtml(other)}')">
                 </div>
                 <button class="primary-btn" onclick="sendChatMessage('${escapeHtml(other)}')">Gönder</button>
-                <button class="back-btn" onclick="showChatList()">← Sohbetler</button>
+                <button class="back-btn" onclick="window._openChatWith=null;showChatList()">← Sohbetler</button>
             `);
             setTimeout(function() {
                 const box = document.getElementById('chat-messages');
@@ -2432,6 +2456,7 @@
         }
 
         function closeModal() {
+            window._openChatWith = null;
             document.getElementById('modal').classList.remove('active');
         }
 
