@@ -1238,22 +1238,31 @@
         async function loadUsersAsync() {
             if (firebaseReady) {
                 const data = await fbGet('users');
-                _usersCache = data || {};
-                return _usersCache;
+                if (data && typeof data === 'object' && Object.keys(data).length > 0) {
+                    _usersCache = data;
+                    // Firebase'den gelen taze veriyi localStorage'a yedekle
+                    try { localStorage.setItem('swordcity_users_v3', JSON.stringify(_usersCache)); } catch (e) {}
+                    return _usersCache;
+                }
+                // Firebase boşsa local yedekten oku (ilk kurulum / geçici kesinti)
             }
             try {
                 const raw = localStorage.getItem('swordcity_users_v3');
                 _usersCache = raw ? JSON.parse(raw) : {};
             } catch (e) { _usersCache = {}; }
+            // Local'de veri varsa ve Firebase açıksa bir kez yükle (hesap kaybı olmasın)
+            if (firebaseReady && _usersCache && Object.keys(_usersCache).length > 0) {
+                fbSet('users', _usersCache);
+            }
             return _usersCache;
         }
 
         function saveUsers(users) {
             _usersCache = users || {};
+            // Her zaman localStorage yedek (sayfa kapanınca / offline)
+            try { localStorage.setItem('swordcity_users_v3', JSON.stringify(_usersCache)); } catch (e) {}
             if (firebaseReady) {
-                fbSet('users', _usersCache);
-            } else {
-                localStorage.setItem('swordcity_users_v3', JSON.stringify(_usersCache));
+                fbSet('users', _usersCache); // online: tüm cihazlarda kalır
             }
         }
 
@@ -1274,8 +1283,8 @@
         }
         function saveMarket(list) {
             _marketCache = list || [];
+            try { localStorage.setItem('swordcity_market_v1', JSON.stringify(_marketCache)); } catch (e) {}
             if (firebaseReady) fbSet('market', _marketCache);
-            else localStorage.setItem('swordcity_market_v1', JSON.stringify(_marketCache));
         }
 
         // ---------- TRADES ----------
@@ -1483,6 +1492,10 @@
             db.ref('market').on('value', snap => {
                 const v = snap.val();
                 _marketCache = Array.isArray(v) ? v : (v ? Object.values(v) : []);
+                // Pazar açıkken anlık yenile (satın alınca herkeste kaybolsun)
+                if (window._marketOpen) {
+                    try { openMarket(); } catch (e) {}
+                }
             });
             db.ref('trades').on('value', snap => {
                 const v = snap.val();
@@ -2725,6 +2738,7 @@
             window._openChatWith = null;
             window._viewingProfile = null;
             window._replyToMsg = null;
+            window._marketOpen = false;
             document.getElementById('modal').classList.remove('active');
         }
 
@@ -3620,20 +3634,24 @@
 
         // ========== PAZAR ==========
         function openMarket() {
+            window._marketOpen = true;
             const me = getCurrentUser();
             const market = loadMarket();
 
             let list = '';
             if (!market.length) {
-                list = '<p style="color:var(--text-muted);text-align:center;padding:20px 0;">Pazarda henüz ilan yok.</p>';
+                list = '<p style="color:var(--text-muted);text-align:center;padding:20px 0;">Pazarda henüz ilan yok.<br><span style="font-size:12px;">Online — biri alınca anında kaybolur.</span></p>';
             } else {
                 list = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:14px;">';
                 market.forEach(function(listing) {
                     const it = normalizeItem(listing.item);
+                    const rs = rarityStyle(it.rarity);
+                    const bStyle = rarityBorderStyle(it.rarity);
+                    const nameColor = (rs.special === 'rainbow' || rs.special === 'galaxy') ? 'var(--text)' : rs.color;
                     const isMine = listing.seller === me;
                     const imgBlock = it.image
-                        ? `<img src="${escapeHtml(it.image)}" alt="${escapeHtml(it.name)}" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:14px;border:1px solid var(--border);background:#0a0014;" onerror="this.style.display='none'">`
-                        : `<div style="width:100%;aspect-ratio:1;border-radius:14px;background:rgba(255,0,204,0.1);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:42px;">📦</div>`;
+                        ? `<img src="${escapeHtml(it.image)}" alt="${escapeHtml(it.name)}" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:14px;${bStyle}background:#0a0014;" onerror="this.style.display='none'">`
+                        : `<div style="width:100%;aspect-ratio:1;border-radius:14px;background:rgba(255,0,204,0.1);${bStyle}display:flex;align-items:center;justify-content:center;font-size:42px;">📦</div>`;
 
                     let actionBtn = '';
                     if (isMine) {
@@ -3646,10 +3664,11 @@
                     }
 
                     list += `
-                        <div style="background:rgba(0,0,0,0.28);border:1px solid var(--border);border-radius:16px;padding:10px;text-align:center;">
+                        <div style="background:rgba(0,0,0,0.28);${bStyle}border-radius:16px;padding:10px;text-align:center;">
                             ${imgBlock}
-                            <div style="margin-top:10px;font-weight:600;font-size:14px;line-height:1.3;word-break:break-word;">${escapeHtml(it.name)}</div>
-                            <div style="color:var(--success);font-family:Orbitron,sans-serif;font-size:13px;margin-top:4px;">$${Number(listing.price).toLocaleString('tr-TR')}</div>
+                            <div style="margin-top:10px;font-weight:600;font-size:14px;line-height:1.3;word-break:break-word;color:${nameColor};">${escapeHtml(it.name)}</div>
+                            <div style="margin-top:6px;">${rarityBadgeHtml(it.rarity)}</div>
+                            <div style="color:var(--success);font-family:Orbitron,sans-serif;font-size:13px;margin-top:6px;">$${Number(listing.price).toLocaleString('tr-TR')}</div>
                             <div style="color:var(--text-muted);font-size:11px;margin-top:2px;display:flex;align-items:center;justify-content:center;gap:4px;flex-wrap:wrap;">Satıcı: ${formatDisplayName(listing.seller)}${isMine ? ' (sen)' : ''}</div>
                             ${actionBtn}
                         </div>
@@ -3658,7 +3677,7 @@
                 list += '</div>';
             }
 
-            openModal('🏪 Pazar', `
+            openModal('🏪 Pazar <span style="font-size:11px;color:var(--success);font-weight:600;margin-left:6px;">● Canlı</span>', `
                 <button class="primary-btn" onclick="startSellItem()" style="margin-bottom:16px;">📤 Envanterden Sat</button>
                 ${list}
             `);
@@ -3827,12 +3846,15 @@
             openMarket();
         }
 
-        function buyListing(listingId) {
+        async function buyListing(listingId) {
             const me = getCurrentUser();
+            // Firebase'den taze pazar + kullanıcı (başka biri almış olabilir)
+            await loadMarketAsync();
+            await loadUsersAsync();
             const market = loadMarket();
             const idx = market.findIndex(function(l) { return l.id === listingId; });
             if (idx < 0) {
-                toast('İlan bulunamadı.', 'error');
+                toast('İlan artık yok (başkası almış olabilir).', 'error');
                 openMarket();
                 return;
             }
@@ -3861,21 +3883,33 @@
                 return;
             }
 
-            if (!confirm('"' + normalizeItem(listing.item).name + '" için $' + listing.price.toLocaleString('tr-TR') + ' ödeyecek misin?')) {
+            const boughtItem = normalizeItem(listing.item);
+            if (!confirm('"' + boughtItem.name + '" [' + rarityStyle(boughtItem.rarity).label + '] için $' + listing.price.toLocaleString('tr-TR') + ' ödeyecek misin?')) {
+                return;
+            }
+
+            // Tekrar kontrol (confirm sırasında satılmış olabilir)
+            await loadMarketAsync();
+            const market2 = loadMarket();
+            const idx2 = market2.findIndex(function(l) { return l.id === listingId; });
+            if (idx2 < 0) {
+                toast('İlan az önce satıldı.', 'error');
+                openMarket();
                 return;
             }
 
             users[me].balance -= listing.price;
-            users[listing.seller].balance += listing.price;
+            users[listing.seller].balance = (users[listing.seller].balance || 0) + listing.price;
             if (!users[me].inventory) users[me].inventory = [];
-            users[me].inventory.push(listing.item);
+            users[me].inventory.push(boughtItem);
 
-            market.splice(idx, 1);
+            market2.splice(idx2, 1);
+            // Önce pazarı sil (herkeste anında yok olsun), sonra kullanıcıları kaydet
+            saveMarket(market2);
             saveUsers(users);
-            saveMarket(market);
 
-            pushNotif(listing.seller, '🏪 "' + normalizeItem(listing.item).name + '" ürünün $' + listing.price.toLocaleString('tr-TR') + ' karşılığında satıldı. Alıcı: ' + me, 'success');
-            pushNotif(me, '🛒 "' + normalizeItem(listing.item).name + '" satın aldın. $' + listing.price.toLocaleString('tr-TR') + ' ödendi.', 'success');
+            pushNotif(listing.seller, '🏪 "' + boughtItem.name + '" ürünün $' + listing.price.toLocaleString('tr-TR') + ' karşılığında satıldı. Alıcı: ' + me, 'success');
+            pushNotif(me, '🛒 "' + boughtItem.name + '" [' + rarityStyle(boughtItem.rarity).label + '] satın aldın. $' + listing.price.toLocaleString('tr-TR') + ' ödendi.', 'success');
             toast('✅ Satın alındı! Envanterine eklendi.');
             openMarket();
         }
