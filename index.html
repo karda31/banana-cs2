@@ -1419,7 +1419,17 @@
             if (!firebaseReady || !db) return;
 
             db.ref('users').on('value', snap => {
+                const prev = _usersCache || {};
                 _usersCache = snap.val() || {};
+                // Açık profil: envanter gizlilik / içerik değişince yenile (atılma olmasın)
+                if (window._viewingProfile) {
+                    const u = window._viewingProfile;
+                    const a = prev[u] || {};
+                    const b = _usersCache[u] || {};
+                    if (!!a.inventoryPrivate !== !!b.inventoryPrivate || JSON.stringify(a.inventory || []) !== JSON.stringify(b.inventory || [])) {
+                        try { viewUserProfile(u); } catch (e) {}
+                    }
+                }
             });
             db.ref('market').on('value', snap => {
                 const v = snap.val();
@@ -2037,6 +2047,7 @@
 
         // ========== SOSYAL SİSTEM (Profil, Arkadaş, Sohbet) ==========
         function openSocial() {
+            window._viewingProfile = null;
             const me = getCurrentUser();
             if (!me) return;
             const users = loadUsers();
@@ -2097,6 +2108,7 @@
         }
 
         function viewUserProfile(username) {
+            window._viewingProfile = username;
             const me = getCurrentUser();
             const users = loadUsers();
             const u = ensureUserFields(users[username] || {});
@@ -2326,13 +2338,24 @@
                 return '<p style="color:var(--text-muted);text-align:center;padding:20px 0;">Henüz mesaj yok. İlk mesajı sen gönder!</p>';
             }
             let msgHtml = '';
-            msgs.slice(-50).forEach(function(m) {
+            msgs.slice(-50).forEach(function(m, idx) {
                 const mine = m.from === me;
+                const mid = m.id || ('idx_' + idx);
+                const replyBlock = m.replyTo ? `<div style="font-size:11px;color:var(--text-muted);border-left:2px solid var(--accent);padding-left:8px;margin-bottom:4px;opacity:0.85;">↩️ ${escapeHtml((m.replyTo.text || '').slice(0, 60))}</div>` : '';
+                const emojiReaction = m.emoji ? `<span style="margin-left:6px;">${escapeHtml(m.emoji)}</span>` : '';
+                const actions = `
+                    <div style="display:flex;gap:6px;margin-top:6px;justify-content:${mine ? 'flex-end' : 'flex-start'};flex-wrap:wrap;">
+                        <button onclick="setReplyToMessage('${escapeHtml(mid)}')" style="background:none;border:none;color:var(--text-muted);font-size:11px;cursor:pointer;padding:0;">↩️ Yanıtla</button>
+                        <button onclick="reactToMessage('${escapeHtml(mid)}')" style="background:none;border:none;color:var(--text-muted);font-size:11px;cursor:pointer;padding:0;">😊 Emoji</button>
+                        ${mine ? `<button onclick="deleteChatMessage('${escapeHtml(mid)}')" style="background:none;border:none;color:var(--danger);font-size:11px;cursor:pointer;padding:0;">🗑️ Sil</button>` : ''}
+                    </div>`;
                 msgHtml += `
-                    <div style="display:flex;justify-content:${mine ? 'flex-end' : 'flex-start'};margin-bottom:8px;">
-                        <div style="max-width:75%;padding:10px 14px;border-radius:14px;background:${mine ? 'rgba(255,0,204,0.25)' : 'rgba(0,0,0,0.35)'};border:1px solid var(--border);">
-                            <div style="font-size:13px;line-height:1.4;">${escapeHtml(m.text || '')}</div>
+                    <div style="display:flex;justify-content:${mine ? 'flex-end' : 'flex-start'};margin-bottom:8px;" data-msg-id="${escapeHtml(mid)}">
+                        <div style="max-width:80%;padding:10px 14px;border-radius:14px;background:${mine ? 'rgba(255,0,204,0.25)' : 'rgba(0,0,0,0.35)'};border:1px solid var(--border);">
+                            ${replyBlock}
+                            <div style="font-size:13px;line-height:1.4;">${escapeHtml(m.text || '')}${emojiReaction}</div>
                             <div style="font-size:10px;color:var(--text-muted);margin-top:4px;text-align:right;">${m.at ? new Date(m.at).toLocaleTimeString('tr-TR', {hour:'2-digit',minute:'2-digit'}) : ''}</div>
+                            ${actions}
                         </div>
                     </div>
                 `;
@@ -2359,24 +2382,106 @@
         function openPrivateChat(other) {
             const me = getCurrentUser();
             window._openChatWith = other;
+            window._viewingProfile = null;
             const cid = getChatId(me, other);
             const chats = loadChats();
             if (!chats[cid]) chats[cid] = { messages: [] };
+            // Eski mesajlara id ekle
+            (chats[cid].messages || []).forEach(function(m, i) {
+                if (!m.id) m.id = 'msg_' + (m.at || Date.now()) + '_' + i;
+            });
+            saveChats(chats);
             const msgs = chats[cid].messages || [];
             const msgHtml = buildChatMessagesHtml(me, msgs);
+            const replyHint = window._replyToMsg
+                ? `<div id="reply-hint" style="font-size:12px;color:var(--accent-soft);margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;">
+                    <span>↩️ Yanıt: ${escapeHtml((window._replyToMsg.text || '').slice(0, 40))}</span>
+                    <button onclick="window._replyToMsg=null;openPrivateChat('${escapeHtml(other)}')" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:12px;">✕</button>
+                   </div>`
+                : '<div id="reply-hint"></div>';
 
             openModal('💬 ' + other, `
-                <div id="chat-messages" style="max-height:340px;overflow-y:auto;margin-bottom:12px;padding:4px;">${msgHtml}</div>
+                <div id="chat-messages" style="max-height:300px;overflow-y:auto;margin-bottom:12px;padding:4px;">${msgHtml}</div>
+                ${replyHint}
+                <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px;" id="emoji-bar">
+                    ${['😀','😂','❤️','🔥','👍','👎','😎','🎮','⚔️','👑','💰','🎒'].map(e =>
+                        `<button type="button" onclick="insertChatEmoji('${e}')" style="background:rgba(0,0,0,0.3);border:1px solid var(--border);border-radius:8px;padding:4px 8px;cursor:pointer;font-size:16px;">${e}</button>`
+                    ).join('')}
+                </div>
                 <div class="form-group" style="margin-bottom:8px;">
                     <input type="text" id="chat-input" placeholder="Mesaj yaz..." onkeydown="if(event.key==='Enter')sendChatMessage('${escapeHtml(other)}')">
                 </div>
                 <button class="primary-btn" onclick="sendChatMessage('${escapeHtml(other)}')">Gönder</button>
-                <button class="back-btn" onclick="window._openChatWith=null;showChatList()">← Sohbetler</button>
+                <button class="back-btn" onclick="window._openChatWith=null;window._replyToMsg=null;showChatList()">← Sohbetler</button>
             `);
             setTimeout(function() {
                 const box = document.getElementById('chat-messages');
                 if (box) box.scrollTop = box.scrollHeight;
             }, 50);
+        }
+
+        function insertChatEmoji(emoji) {
+            const input = document.getElementById('chat-input');
+            if (!input) return;
+            const start = input.selectionStart || input.value.length;
+            const end = input.selectionEnd || input.value.length;
+            input.value = input.value.slice(0, start) + emoji + input.value.slice(end);
+            input.focus();
+            input.selectionStart = input.selectionEnd = start + emoji.length;
+        }
+
+        function setReplyToMessage(msgId) {
+            const other = window._openChatWith;
+            if (!other) return;
+            const me = getCurrentUser();
+            const cid = getChatId(me, other);
+            const chats = loadChats();
+            const msgs = (chats[cid] && chats[cid].messages) || [];
+            const m = msgs.find(function(x) { return x.id === msgId; });
+            if (!m) return;
+            window._replyToMsg = { id: m.id, text: m.text || '', from: m.from };
+            openPrivateChat(other);
+            setTimeout(function() {
+                const input = document.getElementById('chat-input');
+                if (input) input.focus();
+            }, 80);
+        }
+
+        function deleteChatMessage(msgId) {
+            const other = window._openChatWith;
+            if (!other) return;
+            const me = getCurrentUser();
+            const cid = getChatId(me, other);
+            const chats = loadChats();
+            if (!chats[cid] || !chats[cid].messages) return;
+            const before = chats[cid].messages.length;
+            chats[cid].messages = chats[cid].messages.filter(function(m) {
+                return !(m.id === msgId && m.from === me);
+            });
+            if (chats[cid].messages.length === before) {
+                toast('Sadece kendi mesajını silebilirsin.', 'error');
+                return;
+            }
+            saveChats(chats);
+            toast('Mesaj silindi.');
+            openPrivateChat(other);
+        }
+
+        function reactToMessage(msgId) {
+            const other = window._openChatWith;
+            if (!other) return;
+            const emojis = ['😀','😂','❤️','🔥','👍','👎','😎','⚔️'];
+            const choice = prompt('Emoji seç (yaz veya kopyala):\n' + emojis.join(' '), '❤️');
+            if (!choice) return;
+            const me = getCurrentUser();
+            const cid = getChatId(me, other);
+            const chats = loadChats();
+            const msgs = (chats[cid] && chats[cid].messages) || [];
+            const m = msgs.find(function(x) { return x.id === msgId; });
+            if (!m) return;
+            m.emoji = choice.trim().slice(0, 8);
+            saveChats(chats);
+            openPrivateChat(other);
         }
 
         function sendChatMessage(other) {
@@ -2391,12 +2496,17 @@
             const cid = getChatId(me, other);
             const chats = loadChats();
             if (!chats[cid]) chats[cid] = { messages: [] };
-            chats[cid].messages.push({
+            const msg = {
+                id: 'msg_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
                 from: me,
                 text: text,
                 at: new Date().toISOString()
-            });
-            // max 200 mesaj tut
+            };
+            if (window._replyToMsg) {
+                msg.replyTo = { id: window._replyToMsg.id, text: window._replyToMsg.text, from: window._replyToMsg.from };
+                window._replyToMsg = null;
+            }
+            chats[cid].messages.push(msg);
             if (chats[cid].messages.length > 200) {
                 chats[cid].messages = chats[cid].messages.slice(-200);
             }
@@ -2416,17 +2526,80 @@
             ensureUserFields(users[me]);
             const next = !users[me].inventoryPrivate;
             users[me].inventoryPrivate = next;
-            // Firebase boolean kaybı olmasın diye açıkça yaz
             saveUsers(users);
-            // Cache'ten hemen doğrula
-            const check = loadUsers()[me];
-            const ok = check && !!check.inventoryPrivate === next;
-            toast(next ? 'Envanter gizlendi 🔒' : 'Envanter herkese açık 🔓');
-            showProfile();
-            if (!ok && firebaseReady) {
-                // Tek kullanıcıyı zorla güncelle
+            if (firebaseReady) {
                 fbUpdate('users/' + me, { inventoryPrivate: next });
             }
+            toast(next ? 'Envanter gizlendi 🔒' : 'Envanter herkese açık 🔓');
+            // Sadece kendi profilimiz açıksa yenile; başkasının profilini kapatma
+            if (!window._viewingProfile || window._viewingProfile === me) {
+                showProfile();
+            }
+        }
+
+
+        // ========== OYNA / OYUN MODLARI ==========
+        function openPlayMenu() {
+            window._viewingProfile = null;
+            openModal('🎮 Oyna', `
+                <p style="color:var(--text-muted);font-size:13px;text-align:center;margin-bottom:14px;">Oyun modunu seç. Nasıl oynanacağını göreceksin.</p>
+                <div class="action-grid">
+                    <button class="action-btn" onclick="selectGameMode('sandbox')"><span class="btn-icon">🧪</span>Sandbox</button>
+                    <button class="action-btn" onclick="selectGameMode('classic')"><span class="btn-icon">⚔️</span>Klasik</button>
+                    <button class="action-btn" onclick="selectGameMode('multiplayer')" style="opacity:0.75;"><span class="btn-icon">🌐</span>Multiplayer (Soon)</button>
+                </div>
+                <button class="back-btn" onclick="closeModal()">← Kapat</button>
+            `);
+        }
+
+        function selectGameMode(mode) {
+            let title = '';
+            let body = '';
+            if (mode === 'sandbox') {
+                title = '🧪 Sandbox';
+                body = `
+                    <div class="info-card" style="margin-bottom:12px;">
+                        <div style="font-weight:700;color:var(--accent-soft);margin-bottom:8px;">Nasıl oynanır?</div>
+                        <ul style="margin:0;padding-left:18px;line-height:1.7;font-size:14px;color:var(--text);">
+                            <li>Serbest deneme modu — kurallar gevşek.</li>
+                            <li>Envanterindeki karakterleri ve eşyaları dilediğin gibi dene.</li>
+                            <li>Banka, pazar ve takas işlemleri gerçek bakiyeyi etkilemez (eğitim amaçlı).</li>
+                            <li>Yeni oyuncular için ideal; hata yapsan da sorun olmaz.</li>
+                            <li>Çıkış yaptığında sandbox ilerlemesi sıfırlanabilir.</li>
+                        </ul>
+                    </div>
+                    <button class="primary-btn" onclick="toast('Sandbox moduna girildi! (demo)');closeModal();">Başla</button>
+                `;
+            } else if (mode === 'classic') {
+                title = '⚔️ Klasik';
+                body = `
+                    <div class="info-card" style="margin-bottom:12px;">
+                        <div style="font-weight:700;color:var(--accent-soft);margin-bottom:8px;">Nasıl oynanır?</div>
+                        <ul style="margin:0;padding-left:18px;line-height:1.7;font-size:14px;color:var(--text);">
+                            <li>Ana Hard RP deneyimi — tüm sistemler aktif.</li>
+                            <li>Banka, kredi, envanter, pazar, takas ve klan gerçek çalışır.</li>
+                            <li>Seviye atla, karakter topla, ticaret yap.</li>
+                            <li>Arkadaş ekle, sohbet et, başarı kazan.</li>
+                            <li>Kurallara uy; moderatör şikayetlerini inceler.</li>
+                        </ul>
+                    </div>
+                    <button class="primary-btn" onclick="toast('Klasik moda devam!');closeModal();">Devam Et</button>
+                `;
+            } else {
+                title = '🌐 Multiplayer (Soon)';
+                body = `
+                    <div class="info-card" style="margin-bottom:12px;">
+                        <div style="font-weight:700;color:var(--accent-soft);margin-bottom:8px;">Yakında</div>
+                        <ul style="margin:0;padding-left:18px;line-height:1.7;font-size:14px;color:var(--text);">
+                            <li>Canlı çok oyunculu odalar ve etkinlikler planlanıyor.</li>
+                            <li>Şimdilik Klasik veya Sandbox ile oynayabilirsin.</li>
+                            <li>Duyurular için Sosyal ve Destek sekmesini takip et.</li>
+                        </ul>
+                    </div>
+                    <button class="back-btn" disabled style="opacity:0.6;">Yakında açılacak</button>
+                `;
+            }
+            openModal(title, body + `<button class="back-btn" onclick="openPlayMenu()">← Mod seçimine dön</button>`);
         }
 
         function doLogout() {
@@ -2491,6 +2664,8 @@
 
         function closeModal() {
             window._openChatWith = null;
+            window._viewingProfile = null;
+            window._replyToMsg = null;
             document.getElementById('modal').classList.remove('active');
         }
 
@@ -3208,6 +3383,40 @@
             `);
         }
 
+        function shareCharacterEmoji(index) {
+            const me = getCurrentUser();
+            const users = loadUsers();
+            if (!users[me] || !users[me].inventory || !users[me].inventory[index]) {
+                toast('Karakter bulunamadı.', 'error');
+                return;
+            }
+            const it = normalizeItem(users[me].inventory[index]);
+            // Karakter adından basit emoji üret / veya isim + ✨
+            const name = it.name || 'Karakter';
+            const shareText = '✨ ' + name + ' ✨ (Sword City karakterim)';
+            // Panoya kopyala
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(shareText).then(function() {
+                    toast('Karakter emojisi panoya kopyalandı! Sohbette yapıştır.');
+                }).catch(function() {
+                    prompt('Kopyala:', shareText);
+                });
+            } else {
+                prompt('Kopyala:', shareText);
+            }
+            // Sosyal sohbet listesine yönlendir (isterse paylaşsın)
+            openModal('✨ Karakter Emojisi', `
+                <div class="info-card" style="text-align:center;margin-bottom:14px;">
+                    <div style="font-size:42px;margin-bottom:8px;">⚔️</div>
+                    <div style="font-size:18px;font-weight:700;color:var(--accent-soft);">${escapeHtml(name)}</div>
+                    <div style="margin-top:10px;padding:10px;background:rgba(0,0,0,0.3);border-radius:10px;font-size:14px;word-break:break-word;">${escapeHtml(shareText)}</div>
+                </div>
+                <p style="color:var(--text-muted);font-size:13px;text-align:center;margin-bottom:12px;">Metin panoya kopyalandı. Arkadaşına sohbette yapıştırabilirsin.</p>
+                <button class="primary-btn" onclick="showChatList()">💬 Sohbete Git & Yapıştır</button>
+                <button class="back-btn" onclick="showInventory()">← Envantere Dön</button>
+            `);
+        }
+
         function showInventory() {
             const me = getCurrentUser();
             const user = getUser(me);
@@ -3238,7 +3447,8 @@
                             ${imgBlock}
                             <div style="margin-top:10px;font-weight:600;font-size:14px;line-height:1.3;word-break:break-word;">${escapeHtml(it.name)}</div>
                             <div style="color:var(--text-muted);font-size:11px;margin-top:3px;">#${i + 1}</div>
-                            <button onclick="deleteInventoryItem(${i})" style="margin-top:8px;width:100%;padding:6px;background:rgba(255,61,113,0.2);border:1px solid rgba(255,61,113,0.4);color:#ff3d71;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;">🗑 Sil</button>
+                            <button onclick="shareCharacterEmoji(${i})" style="margin-top:8px;width:100%;padding:6px;background:rgba(255,0,204,0.15);border:1px solid var(--border);color:var(--accent-soft);border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;">✨ Karakter Emojisi Paylaş</button>
+                            <button onclick="deleteInventoryItem(${i})" style="margin-top:6px;width:100%;padding:6px;background:rgba(255,61,113,0.2);border:1px solid rgba(255,61,113,0.4);color:#ff3d71;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;">🗑 Sil</button>
                         </div>
                     `;
                 });
