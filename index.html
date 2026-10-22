@@ -2104,12 +2104,15 @@
                 toast('Kullanıcı bulunamadı.', 'error');
                 return;
             }
-            const isFriend = (u.friends || []).includes(me) || (ensureUserFields(users[me] || {}).friends || []).includes(username);
+            const meUser = ensureUserFields(users[me] || {});
+            const isFriend = (u.friends || []).includes(me) || (meUser.friends || []).includes(username);
             const pendingOut = loadFriendRequests().some(r => r.from === me && r.to === username && r.status === 'pending');
             const pendingIn = loadFriendRequests().some(r => r.from === username && r.to === me && r.status === 'pending');
+            // Gizli envanter: sadece sahibi ve moderatör görür
+            const canSeeInv = (username === me) || isModerator(me) || !u.inventoryPrivate;
 
             let invHtml = '';
-            if (u.inventoryPrivate && !isFriend && !isModerator(me)) {
+            if (!canSeeInv) {
                 invHtml = '<p style="color:var(--text-muted);font-size:13px;">🔒 Bu kullanıcının envanteri gizli.</p>';
             } else {
                 const inv = u.inventory || [];
@@ -2186,16 +2189,21 @@
 
         function acceptFriendRequest(fromUser) {
             const me = getCurrentUser();
-            const reqs = loadFriendRequests();
+            let reqs = loadFriendRequests();
             const idx = reqs.findIndex(r => r.from === fromUser && r.to === me && r.status === 'pending');
             if (idx === -1) {
                 toast('İstek bulunamadı.', 'error');
                 return;
             }
-            reqs[idx].status = 'accepted';
+            // İsteği listeden kaldır
+            reqs = reqs.filter(r => !(r.from === fromUser && r.to === me && r.status === 'pending'));
             saveFriendRequests(reqs);
 
             const users = loadUsers();
+            if (!users[me] || !users[fromUser]) {
+                toast('Kullanıcı bulunamadı.', 'error');
+                return;
+            }
             ensureUserFields(users[me]);
             ensureUserFields(users[fromUser]);
             if (!users[me].friends.includes(fromUser)) users[me].friends.push(fromUser);
@@ -2209,12 +2217,21 @@
 
         function rejectFriendRequest(fromUser) {
             const me = getCurrentUser();
-            const reqs = loadFriendRequests();
-            const idx = reqs.findIndex(r => r.from === fromUser && r.to === me && r.status === 'pending');
-            if (idx === -1) return;
-            reqs[idx].status = 'rejected';
+            let reqs = loadFriendRequests();
+            // İsteği tamamen sil (kapat)
+            reqs = reqs.filter(r => !(r.from === fromUser && r.to === me && r.status === 'pending'));
             saveFriendRequests(reqs);
-            toast('İstek reddedildi.');
+            toast('İstek kapatıldı.');
+            showFriendRequests();
+        }
+
+        function clearAllFriendRequests() {
+            const me = getCurrentUser();
+            if (!confirm('Tüm bekleyen arkadaşlık isteklerini kapatmak istiyor musun?')) return;
+            let reqs = loadFriendRequests();
+            reqs = reqs.filter(r => !(r.to === me && r.status === 'pending'));
+            saveFriendRequests(reqs);
+            toast('Tüm istekler kapatıldı.');
             showFriendRequests();
         }
 
@@ -2259,16 +2276,19 @@
                 html = '<p style="color:var(--text-muted);text-align:center;padding:16px;">Bekleyen istek yok.</p>';
             } else {
                 reqs.forEach(function(r) {
+                    const when = r.at ? new Date(r.at).toLocaleString('tr-TR') : '';
                     html += `
                         <div class="info-card">
                             <div class="info-row"><span class="label">Kimden</span><span class="value">${formatDisplayName(r.from)}</span></div>
-                            <div style="display:flex;gap:8px;margin-top:10px;">
-                                <button class="primary-btn" style="margin:0;" onclick="acceptFriendRequest('${escapeHtml(r.from)}')">Kabul</button>
-                                <button class="danger-btn" style="margin:0;" onclick="rejectFriendRequest('${escapeHtml(r.from)}')">Reddet</button>
+                            ${when ? `<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">${when}</div>` : ''}
+                            <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
+                                <button class="primary-btn" style="margin:0;flex:1;" onclick="acceptFriendRequest('${escapeHtml(r.from)}')">✅ Kabul Et</button>
+                                <button class="danger-btn" style="margin:0;flex:1;" onclick="rejectFriendRequest('${escapeHtml(r.from)}')">❌ Kapat</button>
                             </div>
                         </div>
                     `;
                 });
+                html += `<button class="danger-btn" onclick="clearAllFriendRequests()">Tümünü Kapat</button>`;
             }
             openModal('📨 Arkadaşlık İstekleri', html + `<button class="back-btn" onclick="openSocial()">← Geri</button>`);
         }
@@ -2387,12 +2407,26 @@
 
         function toggleInventoryPrivacy() {
             const me = getCurrentUser();
+            if (!me) return;
             const users = loadUsers();
+            if (!users[me]) {
+                toast('Hesap bulunamadı.', 'error');
+                return;
+            }
             ensureUserFields(users[me]);
-            users[me].inventoryPrivate = !users[me].inventoryPrivate;
+            const next = !users[me].inventoryPrivate;
+            users[me].inventoryPrivate = next;
+            // Firebase boolean kaybı olmasın diye açıkça yaz
             saveUsers(users);
-            toast(users[me].inventoryPrivate ? 'Envanter gizlendi 🔒' : 'Envanter herkese açık 🔓');
+            // Cache'ten hemen doğrula
+            const check = loadUsers()[me];
+            const ok = check && !!check.inventoryPrivate === next;
+            toast(next ? 'Envanter gizlendi 🔒' : 'Envanter herkese açık 🔓');
             showProfile();
+            if (!ok && firebaseReady) {
+                // Tek kullanıcıyı zorla güncelle
+                fbUpdate('users/' + me, { inventoryPrivate: next });
+            }
         }
 
         function doLogout() {
