@@ -1034,6 +1034,11 @@
                     <div class="folder-name">Profilim</div>
                     <div class="folder-desc">Hesap Bilgisi</div>
                 </div>
+                <div class="folder" onclick="openSocial()">
+                    <div class="folder-icon">👥</div>
+                    <div class="folder-name">Sosyal</div>
+                    <div class="folder-desc">Arkadaş & Sohbet</div>
+                </div>
                 <div class="folder" onclick="showInventory()">
                     <div class="folder-icon">🎒</div>
                     <div class="folder-name">Envanter</div>
@@ -1364,6 +1369,51 @@
             else localStorage.setItem('swordcity_support_tickets', JSON.stringify(_supportCache));
         }
 
+        // ---------- FRIEND REQUESTS ----------
+        let _friendReqCache = [];
+        function loadFriendRequests() {
+            return _friendReqCache || [];
+        }
+        async function loadFriendRequestsAsync() {
+            if (firebaseReady) {
+                const data = await fbGet('friend_requests');
+                _friendReqCache = Array.isArray(data) ? data : (data ? Object.values(data) : []);
+                return _friendReqCache;
+            }
+            try { _friendReqCache = JSON.parse(localStorage.getItem('swordcity_friend_requests') || '[]'); }
+            catch (e) { _friendReqCache = []; }
+            return _friendReqCache;
+        }
+        function saveFriendRequests(list) {
+            _friendReqCache = list || [];
+            if (firebaseReady) fbSet('friend_requests', _friendReqCache);
+            else localStorage.setItem('swordcity_friend_requests', JSON.stringify(_friendReqCache));
+        }
+
+        // ---------- CHATS ----------
+        let _chatsCache = {};
+        function loadChats() {
+            return _chatsCache || {};
+        }
+        async function loadChatsAsync() {
+            if (firebaseReady) {
+                const data = await fbGet('chats');
+                _chatsCache = data || {};
+                return _chatsCache;
+            }
+            try { _chatsCache = JSON.parse(localStorage.getItem('swordcity_chats') || '{}'); }
+            catch (e) { _chatsCache = {}; }
+            return _chatsCache;
+        }
+        function saveChats(obj) {
+            _chatsCache = obj || {};
+            if (firebaseReady) fbSet('chats', _chatsCache);
+            else localStorage.setItem('swordcity_chats', JSON.stringify(_chatsCache));
+        }
+        function getChatId(u1, u2) {
+            return [u1, u2].sort().join('__');
+        }
+
         // Real-time listeners (canlı güncelleme)
         function startRealtimeListeners() {
             if (!firebaseReady || !db) return;
@@ -1391,6 +1441,13 @@
                 const v = snap.val();
                 _shopOrdersCache = Array.isArray(v) ? v : (v ? Object.values(v) : []);
             });
+            db.ref('friend_requests').on('value', snap => {
+                const v = snap.val();
+                _friendReqCache = Array.isArray(v) ? v : (v ? Object.values(v) : []);
+            });
+            db.ref('chats').on('value', snap => {
+                _chatsCache = snap.val() || {};
+            });
             db.ref('reports').on('value', snap => {
                 const v = snap.val();
                 _reportsCache = Array.isArray(v) ? v : (v ? Object.values(v) : []);
@@ -1413,7 +1470,9 @@
                 loadClansAsync(),
                 loadShopOrdersAsync(),
                 loadReportsAsync(),
-                loadSupportTicketsAsync()
+                loadSupportTicketsAsync(),
+                loadFriendRequestsAsync(),
+                loadChatsAsync()
             ]);
             startRealtimeListeners();
             console.log("📦 Tüm veriler yüklendi");
@@ -1657,6 +1716,9 @@
             if (typeof user.level !== 'number') user.level = 0;
             if (typeof user.tp !== 'number') user.tp = 0;
             if (typeof user.prime === 'undefined') user.prime = false;
+            // Sosyal özellikler
+            if (typeof user.inventoryPrivate === 'undefined') user.inventoryPrivate = false;
+            if (!Array.isArray(user.friends)) user.friends = [];
             return user;
         }
 
@@ -1967,6 +2029,346 @@
                 console.error(err);
                 toast('Giriş yapılırken hata oluştu.', 'error');
             }
+        }
+
+        // ========== SOSYAL SİSTEM (Profil, Arkadaş, Sohbet) ==========
+        function openSocial() {
+            const me = getCurrentUser();
+            if (!me) return;
+            const users = loadUsers();
+            const meUser = ensureUserFields(users[me] || {});
+            const friends = meUser.friends || [];
+            const reqs = loadFriendRequests().filter(r => r.to === me && r.status === 'pending');
+
+            let html = `
+                <div class="info-card">
+                    <div class="info-row"><span class="label">Arkadaşların</span><span class="value">${friends.length}</span></div>
+                    <div class="info-row"><span class="label">Bekleyen istek</span><span class="value">${reqs.length}</span></div>
+                </div>
+                <div class="action-grid" style="margin-bottom:14px;">
+                    <button class="action-btn" onclick="showUserSearch()"><span class="btn-icon">🔍</span>Kullanıcı Ara</button>
+                    <button class="action-btn" onclick="showMyFriends()"><span class="btn-icon">👥</span>Arkadaşlarım</button>
+                    <button class="action-btn" onclick="showFriendRequests()"><span class="btn-icon">📨</span>İstekler (${reqs.length})</button>
+                    <button class="action-btn" onclick="showChatList()"><span class="btn-icon">💬</span>Sohbetler</button>
+                </div>
+            `;
+            openModal('👥 Sosyal', html);
+        }
+
+        function showUserSearch() {
+            const me = getCurrentUser();
+            const users = loadUsers();
+            let html = `
+                <div class="form-group">
+                    <label>Kullanıcı adı ara</label>
+                    <input type="text" id="user-search-input" placeholder="İsim yaz..." oninput="filterUserSearch()">
+                </div>
+                <div id="user-search-results" style="max-height:320px;overflow-y:auto;"></div>
+                <button class="back-btn" onclick="openSocial()">← Geri</button>
+            `;
+            openModal('🔍 Kullanıcı Ara', html);
+            filterUserSearch();
+        }
+
+        function filterUserSearch() {
+            const me = getCurrentUser();
+            const q = ((document.getElementById('user-search-input') || {}).value || '').toLowerCase().trim();
+            const users = loadUsers();
+            const box = document.getElementById('user-search-results');
+            if (!box) return;
+            let html = '';
+            Object.keys(users).forEach(function(uname) {
+                if (uname === me) return;
+                if (q && uname.toLowerCase().indexOf(q) === -1) return;
+                const u = ensureUserFields(users[uname]);
+                html += `
+                    <div class="user-list-item" onclick="viewUserProfile('${escapeHtml(uname)}')">
+                        <div class="user-list-name">${formatDisplayName(uname)}</div>
+                        <div style="font-size:12px;color:var(--text-muted);">Lv.${u.level || 0}</div>
+                    </div>
+                `;
+            });
+            if (!html) html = '<p style="color:var(--text-muted);text-align:center;padding:16px;">Kullanıcı bulunamadı.</p>';
+            box.innerHTML = html;
+        }
+
+        function viewUserProfile(username) {
+            const me = getCurrentUser();
+            const users = loadUsers();
+            const u = ensureUserFields(users[username] || {});
+            if (!users[username]) {
+                toast('Kullanıcı bulunamadı.', 'error');
+                return;
+            }
+            const isFriend = (u.friends || []).includes(me) || (ensureUserFields(users[me] || {}).friends || []).includes(username);
+            const pendingOut = loadFriendRequests().some(r => r.from === me && r.to === username && r.status === 'pending');
+            const pendingIn = loadFriendRequests().some(r => r.from === username && r.to === me && r.status === 'pending');
+
+            let invHtml = '';
+            if (u.inventoryPrivate && !isFriend && !isModerator(me)) {
+                invHtml = '<p style="color:var(--text-muted);font-size:13px;">🔒 Bu kullanıcının envanteri gizli.</p>';
+            } else {
+                const inv = u.inventory || [];
+                if (!inv.length) {
+                    invHtml = '<p style="color:var(--text-muted);font-size:13px;">Envanter boş.</p>';
+                } else {
+                    invHtml = '<div style="display:flex;flex-wrap:wrap;gap:8px;">';
+                    inv.slice(0, 30).forEach(function(it) {
+                        const name = typeof it === 'string' ? it : (it.name || '?');
+                        const img = (typeof it === 'object' && it.image) ? it.image : '';
+                        invHtml += `<div style="width:64px;text-align:center;">
+                            ${img ? `<img src="${img}" style="width:56px;height:56px;object-fit:cover;border-radius:10px;border:1px solid var(--border);">` : `<div style="width:56px;height:56px;border-radius:10px;background:rgba(255,0,204,0.1);display:grid;place-items:center;">🎒</div>`}
+                            <div style="font-size:10px;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(name)}</div>
+                        </div>`;
+                    });
+                    invHtml += '</div>';
+                    if (inv.length > 30) invHtml += `<p style="font-size:11px;color:var(--text-muted);margin-top:6px;">+${inv.length - 30} daha...</p>`;
+                }
+            }
+
+            let actionBtns = '';
+            if (username !== me) {
+                if (isFriend) {
+                    actionBtns = `
+                        <button class="primary-btn" onclick="openPrivateChat('${escapeHtml(username)}')">💬 Sohbet Aç</button>
+                        <button class="danger-btn" onclick="removeFriend('${escapeHtml(username)}')">Arkadaşlıktan Çıkar</button>
+                    `;
+                } else if (pendingOut) {
+                    actionBtns = `<button class="back-btn" disabled>İstek gönderildi</button>`;
+                } else if (pendingIn) {
+                    actionBtns = `
+                        <button class="primary-btn" onclick="acceptFriendRequest('${escapeHtml(username)}')">✅ İsteği Kabul Et</button>
+                        <button class="danger-btn" onclick="rejectFriendRequest('${escapeHtml(username)}')">❌ Reddet</button>
+                    `;
+                } else {
+                    actionBtns = `<button class="primary-btn" onclick="sendFriendRequest('${escapeHtml(username)}')">➕ Arkadaş Ekle</button>`;
+                }
+            }
+
+            openModal('👤 ' + username, `
+                <div class="info-card">
+                    <div class="info-row"><span class="label">Kullanıcı</span><span class="value">${formatDisplayName(username)}</span></div>
+                    <div class="info-row"><span class="label">Seviye</span><span class="value">Lv.${u.level || 0}</span></div>
+                    <div class="info-row"><span class="label">Prime</span><span class="value">${u.prime || isModerator(username) ? '👑 Evet' : 'Hayır'}</span></div>
+                    <div class="info-row"><span class="label">Envanter</span><span class="value">${u.inventoryPrivate ? '🔒 Gizli' : 'Açık'}</span></div>
+                </div>
+                <h4 style="color:var(--accent-soft);margin:14px 0 8px;">Envanter</h4>
+                ${invHtml}
+                <div style="margin-top:16px;">${actionBtns}</div>
+                <button class="back-btn" onclick="openSocial()">← Sosyal</button>
+            `);
+        }
+
+        function sendFriendRequest(toUser) {
+            const me = getCurrentUser();
+            if (!me || me === toUser) return;
+            const reqs = loadFriendRequests();
+            if (reqs.some(r => r.from === me && r.to === toUser && r.status === 'pending')) {
+                toast('Zaten istek gönderdin.', 'error');
+                return;
+            }
+            reqs.push({
+                id: 'fr_' + Date.now(),
+                from: me,
+                to: toUser,
+                status: 'pending',
+                at: new Date().toISOString()
+            });
+            saveFriendRequests(reqs);
+            pushNotif(toUser, '👥 ' + me + ' sana arkadaşlık isteği gönderdi.', 'info');
+            toast('Arkadaşlık isteği gönderildi.');
+            viewUserProfile(toUser);
+        }
+
+        function acceptFriendRequest(fromUser) {
+            const me = getCurrentUser();
+            const reqs = loadFriendRequests();
+            const idx = reqs.findIndex(r => r.from === fromUser && r.to === me && r.status === 'pending');
+            if (idx === -1) {
+                toast('İstek bulunamadı.', 'error');
+                return;
+            }
+            reqs[idx].status = 'accepted';
+            saveFriendRequests(reqs);
+
+            const users = loadUsers();
+            ensureUserFields(users[me]);
+            ensureUserFields(users[fromUser]);
+            if (!users[me].friends.includes(fromUser)) users[me].friends.push(fromUser);
+            if (!users[fromUser].friends.includes(me)) users[fromUser].friends.push(me);
+            saveUsers(users);
+
+            pushNotif(fromUser, '✅ ' + me + ' arkadaşlık isteğini kabul etti.', 'success');
+            toast('Artık arkadaşsınız!');
+            viewUserProfile(fromUser);
+        }
+
+        function rejectFriendRequest(fromUser) {
+            const me = getCurrentUser();
+            const reqs = loadFriendRequests();
+            const idx = reqs.findIndex(r => r.from === fromUser && r.to === me && r.status === 'pending');
+            if (idx === -1) return;
+            reqs[idx].status = 'rejected';
+            saveFriendRequests(reqs);
+            toast('İstek reddedildi.');
+            showFriendRequests();
+        }
+
+        function removeFriend(other) {
+            if (!confirm(other + ' arkadaşlıktan çıkarılsın mı?')) return;
+            const me = getCurrentUser();
+            const users = loadUsers();
+            ensureUserFields(users[me]);
+            ensureUserFields(users[other] || {});
+            users[me].friends = (users[me].friends || []).filter(f => f !== other);
+            if (users[other]) users[other].friends = (users[other].friends || []).filter(f => f !== me);
+            saveUsers(users);
+            toast('Arkadaşlıktan çıkarıldı.');
+            openSocial();
+        }
+
+        function showMyFriends() {
+            const me = getCurrentUser();
+            const users = loadUsers();
+            const friends = ensureUserFields(users[me] || {}).friends || [];
+            let html = '';
+            if (!friends.length) {
+                html = '<p style="color:var(--text-muted);text-align:center;padding:16px;">Henüz arkadaşın yok.</p>';
+            } else {
+                friends.forEach(function(f) {
+                    html += `
+                        <div class="user-list-item">
+                            <div class="user-list-name" onclick="viewUserProfile('${escapeHtml(f)}')">${formatDisplayName(f)}</div>
+                            <button class="primary-btn" style="width:auto;padding:6px 12px;margin:0;font-size:13px;" onclick="openPrivateChat('${escapeHtml(f)}')">💬</button>
+                        </div>
+                    `;
+                });
+            }
+            openModal('👥 Arkadaşlarım', html + `<button class="back-btn" onclick="openSocial()">← Geri</button>`);
+        }
+
+        function showFriendRequests() {
+            const me = getCurrentUser();
+            const reqs = loadFriendRequests().filter(r => r.to === me && r.status === 'pending');
+            let html = '';
+            if (!reqs.length) {
+                html = '<p style="color:var(--text-muted);text-align:center;padding:16px;">Bekleyen istek yok.</p>';
+            } else {
+                reqs.forEach(function(r) {
+                    html += `
+                        <div class="info-card">
+                            <div class="info-row"><span class="label">Kimden</span><span class="value">${formatDisplayName(r.from)}</span></div>
+                            <div style="display:flex;gap:8px;margin-top:10px;">
+                                <button class="primary-btn" style="margin:0;" onclick="acceptFriendRequest('${escapeHtml(r.from)}')">Kabul</button>
+                                <button class="danger-btn" style="margin:0;" onclick="rejectFriendRequest('${escapeHtml(r.from)}')">Reddet</button>
+                            </div>
+                        </div>
+                    `;
+                });
+            }
+            openModal('📨 Arkadaşlık İstekleri', html + `<button class="back-btn" onclick="openSocial()">← Geri</button>`);
+        }
+
+        function showChatList() {
+            const me = getCurrentUser();
+            const users = loadUsers();
+            const friends = ensureUserFields(users[me] || {}).friends || [];
+            const chats = loadChats();
+            let html = '';
+            if (!friends.length) {
+                html = '<p style="color:var(--text-muted);text-align:center;padding:16px;">Sohbet için önce arkadaş ekle.</p>';
+            } else {
+                friends.forEach(function(f) {
+                    const cid = getChatId(me, f);
+                    const msgs = (chats[cid] && chats[cid].messages) ? chats[cid].messages : [];
+                    const last = msgs.length ? msgs[msgs.length - 1] : null;
+                    const preview = last ? (last.from === me ? 'Sen: ' : '') + (last.text || '').slice(0, 40) : 'Henüz mesaj yok';
+                    html += `
+                        <div class="user-list-item" onclick="openPrivateChat('${escapeHtml(f)}')">
+                            <div>
+                                <div class="user-list-name">${formatDisplayName(f)}</div>
+                                <div style="font-size:12px;color:var(--text-muted);">${escapeHtml(preview)}</div>
+                            </div>
+                            <div style="font-size:18px;">💬</div>
+                        </div>
+                    `;
+                });
+            }
+            openModal('💬 Sohbetler', html + `<button class="back-btn" onclick="openSocial()">← Geri</button>`);
+        }
+
+        function openPrivateChat(other) {
+            const me = getCurrentUser();
+            const cid = getChatId(me, other);
+            const chats = loadChats();
+            if (!chats[cid]) chats[cid] = { messages: [] };
+            const msgs = chats[cid].messages || [];
+
+            let msgHtml = '';
+            if (!msgs.length) {
+                msgHtml = '<p style="color:var(--text-muted);text-align:center;padding:20px 0;">Henüz mesaj yok. İlk mesajı sen gönder!</p>';
+            } else {
+                msgs.slice(-50).forEach(function(m) {
+                    const mine = m.from === me;
+                    msgHtml += `
+                        <div style="display:flex;justify-content:${mine ? 'flex-end' : 'flex-start'};margin-bottom:8px;">
+                            <div style="max-width:75%;padding:10px 14px;border-radius:14px;background:${mine ? 'rgba(255,0,204,0.25)' : 'rgba(0,0,0,0.35)'};border:1px solid var(--border);">
+                                <div style="font-size:13px;line-height:1.4;">${escapeHtml(m.text || '')}</div>
+                                <div style="font-size:10px;color:var(--text-muted);margin-top:4px;text-align:right;">${m.at ? new Date(m.at).toLocaleTimeString('tr-TR', {hour:'2-digit',minute:'2-digit'}) : ''}</div>
+                            </div>
+                        </div>
+                    `;
+                });
+            }
+
+            openModal('💬 ' + other, `
+                <div id="chat-messages" style="max-height:340px;overflow-y:auto;margin-bottom:12px;padding:4px;">${msgHtml}</div>
+                <div class="form-group" style="margin-bottom:8px;">
+                    <input type="text" id="chat-input" placeholder="Mesaj yaz..." onkeydown="if(event.key==='Enter')sendChatMessage('${escapeHtml(other)}')">
+                </div>
+                <button class="primary-btn" onclick="sendChatMessage('${escapeHtml(other)}')">Gönder</button>
+                <button class="back-btn" onclick="showChatList()">← Sohbetler</button>
+            `);
+            setTimeout(function() {
+                const box = document.getElementById('chat-messages');
+                if (box) box.scrollTop = box.scrollHeight;
+            }, 50);
+        }
+
+        function sendChatMessage(other) {
+            const me = getCurrentUser();
+            const input = document.getElementById('chat-input');
+            const text = (input && input.value || '').trim();
+            if (!text) return;
+            if (text.length > 500) {
+                toast('Mesaj çok uzun (max 500).', 'error');
+                return;
+            }
+            const cid = getChatId(me, other);
+            const chats = loadChats();
+            if (!chats[cid]) chats[cid] = { messages: [] };
+            chats[cid].messages.push({
+                from: me,
+                text: text,
+                at: new Date().toISOString()
+            });
+            // max 200 mesaj tut
+            if (chats[cid].messages.length > 200) {
+                chats[cid].messages = chats[cid].messages.slice(-200);
+            }
+            saveChats(chats);
+            pushNotif(other, '💬 ' + me + ': ' + text.slice(0, 60), 'info');
+            openPrivateChat(other);
+        }
+
+        function toggleInventoryPrivacy() {
+            const me = getCurrentUser();
+            const users = loadUsers();
+            ensureUserFields(users[me]);
+            users[me].inventoryPrivate = !users[me].inventoryPrivate;
+            saveUsers(users);
+            toast(users[me].inventoryPrivate ? 'Envanter gizlendi 🔒' : 'Envanter herkese açık 🔓');
+            showProfile();
         }
 
         function doLogout() {
@@ -2631,6 +3033,10 @@
                         <span class="value">${(user.inventory || []).length} eşya</span>
                     </div>
                     <div class="info-row">
+                        <span class="label">Envanter Gizliliği</span>
+                        <span class="value">${user.inventoryPrivate ? '🔒 Gizli' : '🔓 Açık'}</span>
+                    </div>
+                    <div class="info-row">
                         <span class="label">Özel Başarı</span>
                         <span class="value">${(user.customAchievements || []).length}</span>
                     </div>
@@ -2639,6 +3045,7 @@
                         <span class="value">${date}</span>
                     </div>
                 </div>
+                <button class="primary-btn" onclick="toggleInventoryPrivacy()">${user.inventoryPrivate ? '🔓 Envanteri Herkese Aç' : '🔒 Envanteri Gizle'}</button>
             `);
         }
 
