@@ -1242,7 +1242,7 @@
             } catch (e) { return {}; }
         }
 
-        // Firebase + local birleştir — ASLA hesabı silme; güncel olan kazanır
+        // Firebase + local birleştir — ASLA hesabı silme; envanter için invVersion / updatedAt
         function mergeUsers(remote, local) {
             const out = {};
             remote = remote && typeof remote === 'object' ? remote : {};
@@ -1264,20 +1264,44 @@
                 if (!a || !b) return;
                 const ta = Date.parse(a.updatedAt || a.createdAt || 0) || 0;
                 const tb = Date.parse(b.updatedAt || b.createdAt || 0) || 0;
-                // Daha yeni kayıt kazanır (bakiye + envanter doğru kalır)
+                const va = Number(a.invVersion) || 0;
+                const vb = Number(b.invVersion) || 0;
                 let merged;
                 if (tb > ta) {
                     merged = Object.assign({}, a, b);
                 } else if (ta > tb) {
                     merged = Object.assign({}, b, a);
                 } else {
-                    // Aynı zaman: local (bu cihazın son işlemi) öncelikli
-                    merged = Object.assign({}, b, a);
+                    merged = Object.assign({}, b, a); // local öncelik
                 }
+                // Envanter: daha yüksek invVersion kesin kazanır (silme/satış geri gelmesin)
+                if (va > vb) {
+                    merged.inventory = Array.isArray(a.inventory) ? a.inventory.slice() : [];
+                    merged.invVersion = va;
+                } else if (vb > va) {
+                    merged.inventory = Array.isArray(b.inventory) ? b.inventory.slice() : [];
+                    merged.invVersion = vb;
+                } else if (ta >= tb) {
+                    merged.inventory = Array.isArray(a.inventory) ? a.inventory.slice() : (Array.isArray(merged.inventory) ? merged.inventory : []);
+                    merged.invVersion = va;
+                } else {
+                    merged.inventory = Array.isArray(b.inventory) ? b.inventory.slice() : (Array.isArray(merged.inventory) ? merged.inventory : []);
+                    merged.invVersion = vb;
+                }
+                // Bakiye: daha yeni updatedAt
+                if (ta > tb) merged.balance = a.balance;
+                else if (tb > ta) merged.balance = b.balance;
+                else merged.balance = (typeof a.balance === 'number' ? a.balance : b.balance);
                 if (!merged.password) merged.password = a.password || b.password || '';
                 out[k] = merged;
             });
             return out;
+        }
+
+        function bumpInvVersion(user) {
+            if (!user || typeof user !== 'object') return;
+            user.invVersion = (Number(user.invVersion) || 0) + 1;
+            user.updatedAt = new Date().toISOString();
         }
 
         async function loadUsersAsync() {
@@ -3599,32 +3623,47 @@
             return s;
         }
 
-        // Eşya kategorileri
+        // Eşya kategorileri — serbest yazılabilir (sınır yok)
+        const CATEGORY_PRESETS = [
+            { key: 'karakter', label: 'Karakter', icon: '⚔️' },
+            { key: 'kart', label: 'Koleksiyon Kartı', icon: '🃏' },
+            { key: 'esya', label: 'Eşya', icon: '📦' }
+        ];
+        // geriye uyumluluk
         const CATEGORY_META = {
             karakter: { label: 'Karakter', icon: '⚔️' },
             kart:     { label: 'Koleksiyon Kartı', icon: '🃏' },
             esya:     { label: 'Eşya', icon: '📦' }
         };
         function normalizeCategory(c) {
-            const key = String(c || 'karakter').toLowerCase().trim();
-            if (key === 'card' || key === 'kartlar' || key === 'koleksiyon' || key === 'collection') return 'kart';
-            if (key === 'item' || key === 'esya' || key === 'eşya' || key === 'other' || key === 'diger' || key === 'diğer') return 'esya';
-            if (key === 'char' || key === 'character' || key === 'karakterler') return 'karakter';
-            return CATEGORY_META[key] ? key : 'karakter';
+            let key = String(c == null ? 'karakter' : c).trim();
+            if (!key) key = 'karakter';
+            // max 48 karakter, serbest metin
+            if (key.length > 48) key = key.slice(0, 48);
+            return key;
+        }
+        function categoryIcon(c) {
+            const k = normalizeCategory(c).toLowerCase();
+            if (k.indexOf('kart') !== -1 || k.indexOf('card') !== -1 || k.indexOf('koleksiyon') !== -1) return '🃏';
+            if (k.indexOf('karakter') !== -1 || k.indexOf('char') !== -1) return '⚔️';
+            if (k.indexOf('esya') !== -1 || k.indexOf('eşya') !== -1 || k.indexOf('item') !== -1) return '📦';
+            return '🏷️';
         }
         function categoryBadgeHtml(c) {
             const k = normalizeCategory(c);
-            const m = CATEGORY_META[k] || CATEGORY_META.karakter;
-            return `<span style="display:inline-block;padding:2px 8px;border-radius:8px;font-size:11px;font-weight:600;background:rgba(255,0,204,0.12);border:1px solid var(--border);color:var(--accent-soft);">${m.icon} ${m.label}</span>`;
+            const icon = categoryIcon(k);
+            return `<span style="display:inline-block;padding:2px 8px;border-radius:8px;font-size:11px;font-weight:600;background:rgba(255,0,204,0.12);border:1px solid var(--border);color:var(--accent-soft);">${icon} ${escapeHtml(k)}</span>`;
         }
         function categorySelectHtml(selected, selectId) {
+            // Serbest yazım: input + öneriler
             selected = normalizeCategory(selected || 'karakter');
-            let opts = '';
-            Object.keys(CATEGORY_META).forEach(function(k) {
-                const m = CATEGORY_META[k];
-                opts += `<option value="${k}" ${k === selected ? 'selected' : ''}>${m.icon} ${m.label}</option>`;
-            });
-            return `<select id="${selectId || 'item-category'}" style="width:100%;padding:10px;border-radius:10px;background:rgba(0,0,0,0.35);border:1px solid var(--border);color:var(--text);font-family:inherit;">${opts}</select>`;
+            const id = selectId || 'item-category';
+            let opts = CATEGORY_PRESETS.map(function(p) {
+                return `<option value="${p.key}">${p.icon} ${p.label}</option>`;
+            }).join('');
+            return `<input type="text" id="${id}" list="${id}-list" value="${escapeHtml(selected)}" placeholder="İstediğin kategoriyi yaz..." style="width:100%;padding:10px;border-radius:10px;background:rgba(0,0,0,0.35);border:1px solid var(--border);color:var(--text);font-family:inherit;">
+                <datalist id="${id}-list">${opts}</datalist>
+                <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">İstediğini yazabilirsin — sınır yok</div>`;
         }
 
         function normalizeItem(item) {
@@ -3707,16 +3746,23 @@
             filterCat = filterCat || window._invFilter || 'all';
             window._invFilter = filterCat;
 
-            const counts = { all: inv.length, karakter: 0, kart: 0, esya: 0 };
+            const counts = { all: inv.length };
             inv.forEach(function(item) {
                 const c = normalizeCategory(normalizeItem(item).category);
-                if (counts[c] !== undefined) counts[c]++;
+                counts[c] = (counts[c] || 0) + 1;
             });
 
             function tabBtn(id, label) {
                 const active = filterCat === id;
-                return `<button onclick="showInventory('${id}')" style="flex:1;padding:8px 6px;border-radius:10px;border:1px solid ${active ? 'var(--accent)' : 'var(--border)'};background:${active ? 'rgba(255,0,204,0.25)' : 'rgba(0,0,0,0.25)'};color:${active ? 'var(--accent-soft)' : 'var(--text-muted)'};font-weight:600;font-size:12px;cursor:pointer;font-family:inherit;">${label}</button>`;
+                const safeId = String(id).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+                return `<button onclick="showInventory('${safeId}')" style="flex:1;min-width:90px;padding:8px 6px;border-radius:10px;border:1px solid ${active ? 'var(--accent)' : 'var(--border)'};background:${active ? 'rgba(255,0,204,0.25)' : 'rgba(0,0,0,0.25)'};color:${active ? 'var(--accent-soft)' : 'var(--text-muted)'};font-weight:600;font-size:12px;cursor:pointer;font-family:inherit;">${label}</button>`;
             }
+
+            let catTabs = tabBtn('all', 'Tümü (' + counts.all + ')');
+            Object.keys(counts).forEach(function(c) {
+                if (c === 'all') return;
+                catTabs += tabBtn(c, categoryIcon(c) + ' ' + escapeHtml(c) + ' (' + counts[c] + ')');
+            });
 
             let list = `
                 <div class="info-card" style="margin-bottom:12px;">
@@ -3727,17 +3773,14 @@
                     <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Başlangıç 40 · her level +10 slot</div>
                 </div>
                 <div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap;">
-                    ${tabBtn('all', 'Tümü (' + counts.all + ')')}
-                    ${tabBtn('karakter', '⚔️ Karakter (' + counts.karakter + ')')}
-                    ${tabBtn('kart', '🃏 Kart (' + counts.kart + ')')}
-                    ${tabBtn('esya', '📦 Eşya (' + counts.esya + ')')}
+                    ${catTabs}
                 </div>
             `;
 
             const filtered = [];
             inv.forEach(function(item, i) {
                 const it = normalizeItem(item);
-                if (filterCat === 'all' || it.category === filterCat) filtered.push({ item: item, index: i, it: it });
+                if (filterCat === 'all' || normalizeCategory(it.category) === normalizeCategory(filterCat)) filtered.push({ item: item, index: i, it: it });
             });
 
             if (filtered.length === 0) {
@@ -3773,13 +3816,19 @@
         function deleteInventoryItem(index) {
             const me = getCurrentUser();
             const users = loadUsers();
-            if (!users[me] || !users[me].inventory || !users[me].inventory[index]) return;
+            if (!users[me] || !Array.isArray(users[me].inventory) || !users[me].inventory[index]) {
+                toast('Eşya bulunamadı.', 'error');
+                return;
+            }
             const it = normalizeItem(users[me].inventory[index]);
             if (!confirm('"' + it.name + '" silinsin mi? Geri alınamaz.')) return;
+            users[me].inventory = users[me].inventory.slice();
             users[me].inventory.splice(index, 1);
-            saveUsers(users);
+            bumpInvVersion(users[me]);
+            saveUser(me, users[me]);
+            // Anında UI
             toast('Silindi: ' + it.name);
-            showInventory();
+            showInventory(window._invFilter || 'all');
         }
 
         // ========== PAZAR ==========
@@ -3942,7 +3991,7 @@
             let options = '';
             inv.forEach(function(item, i) {
                 const it = normalizeItem(item);
-                options += `<option value="${i}">[${(CATEGORY_META[it.category]||{}).label||'?'}] ${escapeHtml(it.name)} · ${rarityStyle(it.rarity).label}</option>`;
+                options += `<option value="${i}">[${escapeHtml(it.category)}] ${escapeHtml(it.name)} · ${rarityStyle(it.rarity).label}</option>`;
             });
 
             openModal('📤 Satışa Çıkar', `
@@ -3980,7 +4029,9 @@
             }
 
             const item = normalizeItem(users[me].inventory[idx]);
+            users[me].inventory = users[me].inventory.slice();
             users[me].inventory.splice(idx, 1);
+            bumpInvVersion(users[me]);
             saveUser(me, users[me]);
 
             const market = loadMarket();
@@ -4071,8 +4122,13 @@
             const price = Number(listing.price) || 0;
             users2[me].balance = (Number(users2[me].balance) || 0) - price;
             users2[listing.seller].balance = (Number(users2[listing.seller].balance) || 0) + price;
-            if (!users2[me].inventory) users2[me].inventory = [];
+            if (!Array.isArray(users2[me].inventory)) users2[me].inventory = [];
+            users2[me].inventory = users2[me].inventory.slice();
             users2[me].inventory.push(boughtItem);
+            bumpInvVersion(users2[me]);
+            // Satıcı envanteri zaten listelenirken düşmüş olmalı; version yine yükselt (geri gelmesin)
+            if (!Array.isArray(users2[listing.seller].inventory)) users2[listing.seller].inventory = [];
+            bumpInvVersion(users2[listing.seller]);
 
             // Satıcı envanterinde aynı item kaldıysa temizle (eski bug yedekleri)
             if (Array.isArray(users2[listing.seller].inventory)) {
@@ -4119,10 +4175,13 @@
             if (!users[me]) return;
             ensureUserFields(users[me]);
             if (!users[me].inventory) users[me].inventory = [];
-            users[me].inventory.push(listing.item);
+            if (!Array.isArray(users[me].inventory)) users[me].inventory = [];
+            users[me].inventory = users[me].inventory.slice();
+            users[me].inventory.push(normalizeItem(listing.item));
+            bumpInvVersion(users[me]);
 
             market.splice(idx, 1);
-            saveUsers(users);
+            saveUser(me, users[me]);
             saveMarket(market);
 
             toast('İlan kaldırıldı, eşya envanterine döndü.');
@@ -5580,20 +5639,20 @@
             let rarKey = (rarityPrompt || 'siradan').trim().toLowerCase();
             const numMap = { '1':'siradan','2':'ender','3':'super_ender','4':'destansi','5':'gizemli','6':'super_gizemli','7':'efsanevi','8':'ultra_efsanevi','9':'superstar','10':'popstar','11':'limited','12':'kromatik' };
             if (numMap[rarKey]) rarKey = numMap[rarKey];
-            const catPrompt = prompt('Kategori:\n\n1 karakter\n2 kart (koleksiyon kartı)\n3 esya\n\n(boş = karakter)');
+            const catPrompt = prompt('Kategori (istediğini yaz, sınır yok):\n\nÖrn: karakter, kart, silah, skin, özel...\n\n(boş = karakter)');
             if (catPrompt === null) return;
-            let catKey = (catPrompt || 'karakter').trim().toLowerCase();
-            if (catKey === '1') catKey = 'karakter';
-            if (catKey === '2' || catKey === 'card') catKey = 'kart';
-            if (catKey === '3' || catKey === 'item') catKey = 'esya';
+            const catKey = normalizeCategory(catPrompt || 'karakter');
+            if (!Array.isArray(users[username].inventory)) users[username].inventory = [];
+            users[username].inventory = users[username].inventory.slice();
             users[username].inventory.push({
                 name: text,
                 image: imageUrl,
                 rarity: normalizeRarity(rarKey),
-                category: normalizeCategory(catKey)
+                category: catKey
             });
+            bumpInvVersion(users[username]);
             saveUser(username, users[username]);
-            toast('✅ "' + text + '" eklendi [' + (CATEGORY_META[normalizeCategory(catKey)] || {}).label + ']');
+            toast('✅ "' + text + '" eklendi [' + catKey + ']');
             modSelectUser(username);
         }
 
@@ -5711,9 +5770,11 @@
             const sel = document.getElementById('mod-item-category');
             const cat = normalizeCategory(sel ? sel.value : 'karakter');
             const it = normalizeItem(users[username].inventory[index]);
+            users[username].inventory = users[username].inventory.slice();
             users[username].inventory[index] = { name: it.name, image: it.image, rarity: it.rarity, category: cat };
+            bumpInvVersion(users[username]);
             saveUser(username, users[username]);
-            toast('📁 Kategori: ' + (CATEGORY_META[cat] || CATEGORY_META.karakter).label);
+            toast('📁 Kategori: ' + cat);
             modViewInventory(username);
         }
 
@@ -5782,8 +5843,10 @@
             const users = loadUsers();
             ensureUserFields(users[username]);
             if (!users[username].inventory) return;
+            users[username].inventory = users[username].inventory.slice();
             users[username].inventory.splice(index, 1);
-            saveUsers(users);
+            bumpInvVersion(users[username]);
+            saveUser(username, users[username]);
             toast('Eşya silindi.');
             modViewInventory(username);
         }
