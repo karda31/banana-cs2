@@ -1345,6 +1345,11 @@
                     <div class="folder-name">Notlar</div>
                     <div class="folder-desc">Herkes not tutar</div>
                 </div>
+                <div class="folder" onclick="openPets()">
+                    <div class="folder-icon">🐾</div>
+                    <div class="folder-name">Petler</div>
+                    <div class="folder-desc">Yumurta & arkadaşlar</div>
+                </div>
                 <div class="folder" onclick="openNews()">
                     <div class="folder-icon">📰</div>
                     <div class="folder-name">Haberler</div>
@@ -2212,6 +2217,7 @@
             // Sosyal özellikler
             if (typeof user.inventoryPrivate === 'undefined') user.inventoryPrivate = false;
             if (!Array.isArray(user.friends)) user.friends = [];
+            if (!Array.isArray(user.pets)) user.pets = [];
             return user;
         }
 
@@ -4096,7 +4102,13 @@
             if (k.indexOf('karakter') !== -1 || k.indexOf('char') !== -1) return '⚔️';
             if (k.indexOf('esya') !== -1 || k.indexOf('eşya') !== -1 || k.indexOf('item') !== -1) return '📦';
             if (k.indexOf('cikartma') !== -1 || k.indexOf('çıkartma') !== -1 || k.indexOf('sticker') !== -1) return '🎨';
+            if (k.indexOf('yumurta') !== -1 || k.indexOf('egg') !== -1) return '🥚';
+            if (k.indexOf('pet') !== -1) return '🐾';
             return '🏷️';
+        }
+        function isEggCategory(c) {
+            const k = normalizeCategory(c).toLowerCase();
+            return k.indexOf('yumurta') !== -1 || k.indexOf('egg') !== -1;
         }
         function isStickerCategory(c) {
             const k = normalizeCategory(c).toLowerCase();
@@ -4284,6 +4296,7 @@
                             <div style="margin-top:4px;">${categoryBadgeHtml(it.category)}</div>
                             ${mvTxt}
                             ${isStickerCategory(it.category) ? (it.pendingStickerRequest ? `<button disabled style="margin-top:8px;width:100%;padding:6px;background:rgba(255,193,7,0.12);border:1px solid rgba(255,193,7,0.45);color:var(--warning);border-radius:8px;cursor:not-allowed;font-size:12px;font-weight:600;">⏳ Talep bekleniyor</button>` : `<button onclick="startUseSticker(${i})" style="margin-top:8px;width:100%;padding:6px;background:rgba(0,230,118,0.15);border:1px solid rgba(0,230,118,0.4);color:var(--success);border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;">🎨 Çıkartma Kullan</button>`) : ''}
+                            ${isEggCategory(it.category) ? `<button onclick="hatchEggFromInventory(${i})" style="margin-top:8px;width:100%;padding:6px;background:rgba(255,193,7,0.15);border:1px solid rgba(255,193,7,0.45);color:var(--warning);border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;">🥚 Yumurtayı Kır</button>` : ''}
                             <button onclick="shareCharacterToChat(${i})" style="margin-top:8px;width:100%;padding:6px;background:rgba(255,0,204,0.15);border:1px solid var(--border);color:var(--accent-soft);border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;">✨ Paylaş (DM)</button>
                             <button onclick="deleteInventoryItem(${i})" style="margin-top:6px;width:100%;padding:6px;background:rgba(255,61,113,0.2);border:1px solid rgba(255,61,113,0.4);color:#ff3d71;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;">🗑 Sil</button>
                         </div>
@@ -5780,6 +5793,9 @@
                 </button>
                 <button class="mod-btn" onclick="showStickerRequests()" style="margin-bottom:8px;">
                     <span style="font-size:20px;">🎨</span> Çıkartma Talepleri
+                </button>
+                <button class="mod-btn" onclick="modManagePets()" style="margin-bottom:8px;">
+                    <span style="font-size:20px;">🐾</span> Pet Yönetimi
                 </button>
                 <button class="mod-btn" onclick="openMaintenancePanel()" style="margin-bottom:12px;">
                     <span style="font-size:20px;">🔧</span> Bakım Modu
@@ -7586,29 +7602,63 @@ Lütfen daha sonra tekrar gelin.</textarea>
         async function openNews() {
             const me = getCurrentUser();
             const list = await loadNewsList();
+            const isMod = isModerator(me);
             let html = '';
             if (!list.length) {
                 html = '<p style="color:var(--text-muted);text-align:center;padding:16px;">Henüz haber yok.</p>';
             } else {
                 html = list.map(function(n) {
+                    const id = escapeHtml(n.id || '');
+                    const delBtn = isMod
+                        ? `<button class="danger-btn" style="margin-top:10px;" onclick="deleteNews('${id}')">🗑 Haberi Sil</button>`
+                        : '';
                     return `<div class="info-card" style="margin-bottom:10px;">
                         <div style="font-weight:700;color:var(--accent-soft);">${escapeHtml(n.title || 'Haber')}</div>
                         <div style="font-size:12px;color:var(--text-muted);margin:4px 0 8px;">${escapeHtml((n.at || '').slice(0,19).replace('T',' '))} · ${escapeHtml(n.by || '')}</div>
                         <div style="font-size:14px;line-height:1.45;white-space:pre-wrap;">${escapeHtml(n.body || '')}</div>
+                        ${delBtn}
                     </div>`;
                 }).join('');
             }
             let admin = '';
-            if (isModerator(me)) {
+            if (isMod) {
                 admin = `
                 <div class="info-card" style="margin-top:14px;border-color:var(--accent);">
                     <h4 style="color:var(--accent);margin-bottom:8px;">✍️ Yeni Haber Yaz (sadece sen)</h4>
                     <div class="form-group"><label>Başlık</label><input type="text" id="news-title" placeholder="Haber başlığı"></div>
                     <div class="form-group"><label>İçerik</label><textarea id="news-body" rows="4" placeholder="Haber metni..." style="width:100%;padding:10px;border-radius:10px;background:rgba(0,0,0,0.35);border:1px solid var(--border);color:var(--text);font-family:inherit;"></textarea></div>
                     <button class="primary-btn" onclick="postNews()">Yayınla</button>
+                    ${list.length ? '<button class="danger-btn" onclick="deleteAllNews()">🗑 Tüm Haberleri Sil</button>' : ''}
                 </div>`;
             }
             openModal('📰 Haberler', html + admin + `<button class="back-btn" onclick="closeModal()">← Kapat</button>`);
+        }
+
+        async function deleteNews(id) {
+            const me = getCurrentUser();
+            if (!isModerator(me)) {
+                toast('Sadece moderatör silebilir.', 'error');
+                return;
+            }
+            if (!id) return;
+            if (!confirm('Bu haberi silmek istiyor musun?')) return;
+            let list = await loadNewsList();
+            list = list.filter(function(n) { return n && n.id !== id; });
+            saveNewsList(list);
+            toast('Haber silindi.');
+            openNews();
+        }
+
+        async function deleteAllNews() {
+            const me = getCurrentUser();
+            if (!isModerator(me)) {
+                toast('Sadece moderatör silebilir.', 'error');
+                return;
+            }
+            if (!confirm('Tüm haberleri silmek istiyor musun? Bu geri alınamaz.')) return;
+            saveNewsList([]);
+            toast('Tüm haberler silindi.');
+            openNews();
         }
 
         async function postNews() {
@@ -7636,6 +7686,455 @@ Lütfen daha sonra tekrar gelin.</textarea>
             toast('Haber yayınlandı!');
             openNews();
         }
+
+
+        // ========== PET SİSTEMİ ==========
+        const DEFAULT_PETS = [
+            { id: 'pet_cat', name: 'Minik Kedi', emoji: '🐱', rarity: 'siradan', weight: 30 },
+            { id: 'pet_dog', name: 'Yavru Köpek', emoji: '🐶', rarity: 'siradan', weight: 28 },
+            { id: 'pet_rabbit', name: 'Tavşan', emoji: '🐰', rarity: 'ender', weight: 18 },
+            { id: 'pet_fox', name: 'Tilki', emoji: '🦊', rarity: 'destansi', weight: 12 },
+            { id: 'pet_dragon', name: 'Bebek Ejderha', emoji: '🐉', rarity: 'efsanevi', weight: 5 },
+            { id: 'pet_phoenix', name: 'Anka', emoji: '🔥', rarity: 'ultra_efsanevi', weight: 2 }
+        ];
+        const DEFAULT_EGG_SHOP = [
+            { id: 'egg_basic', name: 'Basit Yumurta', price: 2500, emoji: '🥚' },
+            { id: 'egg_rare', name: 'Nadir Yumurta', price: 12000, emoji: '🌟' },
+            { id: 'egg_legend', name: 'Efsane Yumurta', price: 50000, emoji: '💫' }
+        ];
+
+        function loadPetCatalog() {
+            try {
+                const raw = localStorage.getItem('swordcity_pets_catalog');
+                if (raw) {
+                    const arr = JSON.parse(raw);
+                    if (Array.isArray(arr) && arr.length) return arr;
+                }
+            } catch (e) {}
+            return DEFAULT_PETS.slice();
+        }
+        function savePetCatalog(list) {
+            try { localStorage.setItem('swordcity_pets_catalog', JSON.stringify(list || [])); } catch (e) {}
+            if (firebaseReady) fbSet('pets_catalog', list || []);
+        }
+        async function loadPetCatalogAsync() {
+            let list = loadPetCatalog();
+            if (firebaseReady) {
+                try {
+                    const data = await fbGet('pets_catalog');
+                    if (Array.isArray(data) && data.length) list = data;
+                    else if (data && typeof data === 'object') {
+                        const vals = Object.values(data);
+                        if (vals.length) list = vals;
+                    }
+                } catch (e) {}
+            }
+            try { localStorage.setItem('swordcity_pets_catalog', JSON.stringify(list)); } catch (e) {}
+            return list;
+        }
+        function loadEggShop() {
+            try {
+                const raw = localStorage.getItem('swordcity_egg_shop');
+                if (raw) {
+                    const arr = JSON.parse(raw);
+                    if (Array.isArray(arr) && arr.length) return arr;
+                }
+            } catch (e) {}
+            return DEFAULT_EGG_SHOP.slice();
+        }
+        function saveEggShop(list) {
+            try { localStorage.setItem('swordcity_egg_shop', JSON.stringify(list || [])); } catch (e) {}
+            if (firebaseReady) fbSet('egg_shop', list || []);
+        }
+        async function loadEggShopAsync() {
+            let list = loadEggShop();
+            if (firebaseReady) {
+                try {
+                    const data = await fbGet('egg_shop');
+                    if (Array.isArray(data) && data.length) list = data;
+                    else if (data && typeof data === 'object') {
+                        const vals = Object.values(data);
+                        if (vals.length) list = vals;
+                    }
+                } catch (e) {}
+            }
+            try { localStorage.setItem('swordcity_egg_shop', JSON.stringify(list)); } catch (e) {}
+            return list;
+        }
+
+        function rollPetFromCatalog(catalog, eggId) {
+            let pool = (catalog || []).slice();
+            if (!pool.length) pool = DEFAULT_PETS.slice();
+            // Nadir / efsane yumurta: düşük weight'li petlere bonus
+            if (eggId === 'egg_rare') {
+                pool = pool.map(function(p) {
+                    const copy = Object.assign({}, p);
+                    const w = Number(p.weight) || 1;
+                    if (w <= 15) copy.weight = w * 2.5;
+                    return copy;
+                });
+            } else if (eggId === 'egg_legend') {
+                pool = pool.map(function(p) {
+                    const copy = Object.assign({}, p);
+                    const w = Number(p.weight) || 1;
+                    if (w <= 12) copy.weight = w * 4;
+                    else if (w <= 20) copy.weight = w * 1.5;
+                    return copy;
+                });
+            }
+            let total = 0;
+            pool.forEach(function(p) { total += Math.max(1, Number(p.weight) || 1); });
+            let r = Math.random() * total;
+            for (let i = 0; i < pool.length; i++) {
+                r -= Math.max(1, Number(pool[i].weight) || 1);
+                if (r <= 0) return pool[i];
+            }
+            return pool[pool.length - 1];
+        }
+
+        async function openPets() {
+            const me = getCurrentUser();
+            if (!me) return;
+            const user = ensureUserFields(getUser(me) || {});
+            const pets = user.pets || [];
+            const inv = user.inventory || [];
+            const eggs = [];
+            inv.forEach(function(it, i) {
+                const n = normalizeItem(it);
+                if (isEggCategory(n.category)) eggs.push({ index: i, item: n });
+            });
+            const eggShop = await loadEggShopAsync();
+            const catalog = await loadPetCatalogAsync();
+
+            let petsHtml = '';
+            if (!pets.length) {
+                petsHtml = '<p style="color:var(--text-muted);text-align:center;padding:12px;">Henüz petin yok. Yumurta alıp kır!</p>';
+            } else {
+                petsHtml = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px;">';
+                pets.forEach(function(pt, i) {
+                    const em = pt.emoji || '🐾';
+                    const img = pt.image
+                        ? '<img src="' + escapeHtml(pt.image) + '" style="width:64px;height:64px;object-fit:cover;border-radius:12px;border:1px solid var(--border);">'
+                        : '<div style="font-size:42px;">' + em + '</div>';
+                    petsHtml += `
+                        <div class="info-card" style="text-align:center;margin:0;padding:12px;">
+                            ${img}
+                            <div style="font-weight:700;margin-top:6px;font-size:13px;">${escapeHtml(pt.name || 'Pet')}</div>
+                            <div style="font-size:11px;color:var(--text-muted);">Lv.${pt.level || 1}</div>
+                            ${rarityBadgeHtml(pt.rarity || 'siradan')}
+                        </div>`;
+                });
+                petsHtml += '</div>';
+            }
+
+            let eggsHtml = '';
+            if (!eggs.length) {
+                eggsHtml = '<p style="color:var(--text-muted);font-size:13px;">Envanterde yumurta yok.</p>';
+            } else {
+                eggs.forEach(function(e) {
+                    eggsHtml += `
+                        <div class="info-card" style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+                            <div>
+                                <div style="font-weight:600;">🥚 ${escapeHtml(e.item.name)}</div>
+                                <div style="font-size:11px;color:var(--text-muted);">Envanter #${e.index + 1}</div>
+                            </div>
+                            <button class="primary-btn" style="width:auto;margin:0;padding:8px 14px;" onclick="hatchEggFromInventory(${e.index})">Kır</button>
+                        </div>`;
+                });
+            }
+
+            let shopHtml = '';
+            eggShop.forEach(function(egg) {
+                shopHtml += `
+                    <div class="info-card">
+                        <div class="info-row">
+                            <span class="label">${egg.emoji || '🥚'} ${escapeHtml(egg.name)}</span>
+                            <span class="value">$${(egg.price || 0).toLocaleString('tr-TR')}</span>
+                        </div>
+                        <button class="primary-btn" style="margin-top:8px;" onclick="buyPetEgg('${escapeHtml(egg.id)}')">Satın Al</button>
+                    </div>`;
+            });
+
+            openModal('🐾 Petler', `
+                <div class="info-card" style="margin-bottom:12px;">
+                    <div class="info-row"><span class="label">Petlerin</span><span class="value">${pets.length}</span></div>
+                    <div class="info-row"><span class="label">Yumurtalar</span><span class="value">${eggs.length}</span></div>
+                    <div class="info-row"><span class="label">Katalog</span><span class="value">${catalog.length} pet</span></div>
+                </div>
+                <h4 style="color:var(--accent-soft);margin:8px 0;">Senin Petlerin</h4>
+                ${petsHtml}
+                <h4 style="color:var(--accent-soft);margin:16px 0 8px;">🥚 Yumurtaların</h4>
+                ${eggsHtml}
+                <h4 style="color:var(--accent-soft);margin:16px 0 8px;">🛒 Yumurta Mağazası</h4>
+                <p style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">Oyun parası ($) ile al. Kasadan da yumurta düşebilir.</p>
+                ${shopHtml || '<p style="color:var(--text-muted);">Mağaza boş — moderatör eklemeli.</p>'}
+                <button class="back-btn" onclick="closeModal()">← Kapat</button>
+            `);
+        }
+
+        async function buyPetEgg(eggId) {
+            const me = getCurrentUser();
+            if (!me) return;
+            const shop = await loadEggShopAsync();
+            const egg = shop.find(function(e) { return e.id === eggId; });
+            if (!egg) {
+                toast('Yumurta bulunamadı.', 'error');
+                return;
+            }
+            const users = loadUsers();
+            if (!users[me]) return;
+            ensureUserFields(users[me]);
+            const price = Number(egg.price) || 0;
+            if ((users[me].balance || 0) < price) {
+                toast('Yetersiz bakiye. Gerekli: $' + price.toLocaleString('tr-TR'), 'error');
+                return;
+            }
+            if (invSpaceLeft(users[me]) < 1) {
+                toast('Envanter dolu!', 'error');
+                return;
+            }
+            if (!confirm(egg.name + ' — $' + price.toLocaleString('tr-TR') + '\nSatın al?')) return;
+            users[me].balance -= price;
+            if (!Array.isArray(users[me].inventory)) users[me].inventory = [];
+            users[me].inventory = users[me].inventory.slice();
+            const rollAs = egg.rollAs || egg.baseType || egg.id || 'egg_basic';
+            users[me].inventory.push({
+                name: egg.name,
+                image: egg.image || '',
+                rarity: egg.rarity || (String(rollAs).indexOf('legend') >= 0 ? 'efsanevi' : (String(rollAs).indexOf('rare') >= 0 ? 'destansi' : 'siradan')),
+                category: 'yumurta',
+                eggId: rollAs,
+                marketValue: Math.floor(price * 0.4)
+            });
+            bumpInvVersion(users[me]);
+            saveUser(me, users[me]);
+            toast('🥚 ' + egg.name + ' envanterine eklendi!');
+            openPets();
+        }
+
+        async function hatchEggFromInventory(index) {
+            const me = getCurrentUser();
+            if (!me) return;
+            const users = loadUsers();
+            if (!users[me] || !users[me].inventory || !users[me].inventory[index]) {
+                toast('Yumurta bulunamadı.', 'error');
+                return;
+            }
+            ensureUserFields(users[me]);
+            const it = normalizeItem(users[me].inventory[index]);
+            if (!isEggCategory(it.category)) {
+                toast('Bu bir yumurta değil.', 'error');
+                return;
+            }
+            if (!confirm('"' + it.name + '" kırılsın mı?')) return;
+
+            const catalog = await loadPetCatalogAsync();
+            const raw = users[me].inventory[index];
+            let eggId = (raw && (raw.eggId || raw.rollAs)) || 'egg_basic';
+            if (String(eggId).indexOf('legend') >= 0) eggId = 'egg_legend';
+            else if (String(eggId).indexOf('rare') >= 0) eggId = 'egg_rare';
+            else if (String(eggId).indexOf('basic') >= 0) eggId = 'egg_basic';
+            const rolled = rollPetFromCatalog(catalog, eggId);
+
+            users[me].inventory = users[me].inventory.slice();
+            users[me].inventory.splice(index, 1);
+            if (!Array.isArray(users[me].pets)) users[me].pets = [];
+            users[me].pets = users[me].pets.slice();
+            users[me].pets.push({
+                id: 'upet_' + Date.now() + '_' + Math.floor(Math.random() * 999),
+                petId: rolled.id || '',
+                name: rolled.name || 'Pet',
+                emoji: rolled.emoji || '🐾',
+                image: rolled.image || '',
+                rarity: rolled.rarity || 'siradan',
+                level: 1,
+                xp: 0,
+                hatchedAt: new Date().toISOString()
+            });
+            bumpInvVersion(users[me]);
+            saveUser(me, users[me]);
+            toast('🎉 ' + (rolled.emoji || '🐾') + ' ' + (rolled.name || 'Pet') + ' çıktı!');
+            openPets();
+        }
+
+        async function modManagePets() {
+            if (!isModerator(getCurrentUser())) {
+                toast('Sadece moderatör.', 'error');
+                return;
+            }
+            const catalog = await loadPetCatalogAsync();
+            const shop = await loadEggShopAsync();
+            let petList = '';
+            catalog.forEach(function(pt, i) {
+                petList += `
+                    <div class="info-card">
+                        <div style="display:flex;align-items:center;gap:10px;">
+                            <span style="font-size:28px;">${pt.emoji || '🐾'}</span>
+                            <div style="flex:1;">
+                                <div style="font-weight:700;">${escapeHtml(pt.name)}</div>
+                                <div style="font-size:12px;color:var(--text-muted);">weight: ${pt.weight || 1} · ${pt.rarity || 'siradan'}</div>
+                            </div>
+                        </div>
+                        <button class="danger-btn" style="margin-top:8px;" onclick="modRemovePetDef(${i})">Sil</button>
+                    </div>`;
+            });
+            let eggList = '';
+            shop.forEach(function(eg, i) {
+                eggList += `
+                    <div class="info-card">
+                        <div class="info-row"><span class="label">${eg.emoji || '🥚'} ${escapeHtml(eg.name)}</span><span class="value">$${(eg.price||0).toLocaleString('tr-TR')}</span></div>
+                        <button class="danger-btn" style="margin-top:8px;" onclick="modRemoveEggShop(${i})">Sil</button>
+                    </div>`;
+            });
+            openModal('🐾 Pet Yönetimi', `
+                <p style="color:var(--text-muted);font-size:13px;margin-bottom:12px;">Pet katalogu (yumurtadan çıkanlar) ve yumurta mağazası. Kasaya da kategori <b>yumurta</b> ekleyebilirsin.</p>
+                <button class="mod-btn" onclick="modAddPetDef()" style="margin-bottom:8px;"><span style="font-size:20px;">➕</span> Pet Ekle (katalog)</button>
+                <button class="mod-btn" onclick="modAddEggShop()" style="margin-bottom:8px;"><span style="font-size:20px;">🥚</span> Yumurta Mağazasına Ekle</button>
+                <button class="mod-btn" onclick="modGiveEggToUser()" style="margin-bottom:12px;"><span style="font-size:20px;">🎁</span> Oyuncuya Yumurta Ver</button>
+                <h4 style="color:var(--accent-soft);margin:8px 0;">Katalog (${catalog.length})</h4>
+                ${petList || '<p style="color:var(--text-muted);">Boş</p>'}
+                <h4 style="color:var(--accent-soft);margin:16px 0 8px;">Yumurta Mağazası (${shop.length})</h4>
+                ${eggList || '<p style="color:var(--text-muted);">Boş</p>'}
+                <button class="back-btn" onclick="showModUserList()">← Geri</button>
+            `);
+        }
+
+        function modAddPetDef() {
+            if (!isModerator()) return;
+            openModal('➕ Pet Ekle', `
+                <div class="form-group"><label>İsim</label><input type="text" id="pet-def-name" placeholder="Örn: Gölge Kurt"></div>
+                <div class="form-group"><label>Emoji</label><input type="text" id="pet-def-emoji" value="🐾" placeholder="🐾"></div>
+                <div class="form-group"><label>Görsel URL (isteğe bağlı)</label><input type="text" id="pet-def-img" placeholder="https://..."></div>
+                <div class="form-group"><label>Enderlik</label>${raritySelectHtml('siradan', 'pet-def-rarity')}</div>
+                <div class="form-group"><label>Ağırlık / şans (yüksek = daha sık çıkar)</label><input type="number" id="pet-def-weight" value="10" min="1"></div>
+                <button class="primary-btn" onclick="modConfirmAddPetDef()">Kaydet</button>
+                <button class="back-btn" onclick="modManagePets()">← Geri</button>
+            `);
+        }
+        async function modConfirmAddPetDef() {
+            if (!isModerator()) return;
+            const name = ((document.getElementById('pet-def-name') || {}).value || '').trim();
+            const emoji = ((document.getElementById('pet-def-emoji') || {}).value || '🐾').trim() || '🐾';
+            const image = ((document.getElementById('pet-def-img') || {}).value || '').trim();
+            const rarity = normalizeRarity((document.getElementById('pet-def-rarity') || {}).value);
+            const weight = parseFloat((document.getElementById('pet-def-weight') || {}).value) || 10;
+            if (!name) { toast('İsim gerekli.', 'error'); return; }
+            const list = await loadPetCatalogAsync();
+            list.push({
+                id: 'pet_' + Date.now(),
+                name: name,
+                emoji: emoji,
+                image: image,
+                rarity: rarity,
+                weight: weight
+            });
+            savePetCatalog(list);
+            toast('Pet kataloga eklendi.');
+            modManagePets();
+        }
+        async function modRemovePetDef(index) {
+            if (!isModerator()) return;
+            if (!confirm('Bu pet katalogdan silinsin mi?')) return;
+            const list = await loadPetCatalogAsync();
+            list.splice(index, 1);
+            savePetCatalog(list);
+            toast('Silindi.');
+            modManagePets();
+        }
+
+        function modAddEggShop() {
+            if (!isModerator()) return;
+            openModal('🥚 Yumurta Ekle', `
+                <div class="form-group"><label>İsim</label><input type="text" id="egg-shop-name" placeholder="Örn: Altın Yumurta"></div>
+                <div class="form-group"><label>Emoji</label><input type="text" id="egg-shop-emoji" value="🥚"></div>
+                <div class="form-group"><label>Fiyat ($)</label><input type="number" id="egg-shop-price" value="5000" min="1"></div>
+                <div class="form-group"><label>Tip (şans)</label>
+                    <select id="egg-shop-type" style="width:100%;padding:10px;border-radius:10px;background:rgba(0,0,0,0.35);border:1px solid var(--border);color:var(--text);">
+                        <option value="egg_basic">Basit</option>
+                        <option value="egg_rare">Nadir (daha iyi pet)</option>
+                        <option value="egg_legend">Efsane (en iyi şans)</option>
+                    </select>
+                </div>
+                <button class="primary-btn" onclick="modConfirmAddEggShop()">Kaydet</button>
+                <button class="back-btn" onclick="modManagePets()">← Geri</button>
+            `);
+        }
+        async function modConfirmAddEggShop() {
+            if (!isModerator()) return;
+            const name = ((document.getElementById('egg-shop-name') || {}).value || '').trim();
+            const emoji = ((document.getElementById('egg-shop-emoji') || {}).value || '🥚').trim();
+            const price = parseFloat((document.getElementById('egg-shop-price') || {}).value) || 1000;
+            const type = ((document.getElementById('egg-shop-type') || {}).value) || 'egg_basic';
+            if (!name) { toast('İsim gerekli.', 'error'); return; }
+            const list = await loadEggShopAsync();
+            list.push({ id: type + '_' + Date.now(), name: name, emoji: emoji, price: price, baseType: type });
+            // roll uses eggId prefix - store baseType on item when buying via matching
+            // Fix: use type as eggId for roll bonus
+            list[list.length - 1].id = type;
+            // if duplicate type ids, use unique but pass baseType in buy
+            list[list.length - 1].id = type + '_' + Date.now();
+            list[list.length - 1].rollAs = type;
+            saveEggShop(list);
+            toast('Yumurta mağazaya eklendi.');
+            modManagePets();
+        }
+        async function modRemoveEggShop(index) {
+            if (!isModerator()) return;
+            if (!confirm('Yumurta mağazadan silinsin mi?')) return;
+            const list = await loadEggShopAsync();
+            list.splice(index, 1);
+            saveEggShop(list);
+            toast('Silindi.');
+            modManagePets();
+        }
+
+        function modGiveEggToUser() {
+            if (!isModerator()) return;
+            const users = loadUsers();
+            const names = Object.keys(users);
+            let opts = names.map(function(n) {
+                return '<option value="' + escapeHtml(n) + '">' + escapeHtml(n) + '</option>';
+            }).join('');
+            openModal('🎁 Oyuncuya Yumurta Ver', `
+                <div class="form-group"><label>Oyuncu</label>
+                    <select id="give-egg-user" style="width:100%;padding:10px;border-radius:10px;background:rgba(0,0,0,0.35);border:1px solid var(--border);color:var(--text);">${opts}</select>
+                </div>
+                <div class="form-group"><label>Yumurta adı</label><input type="text" id="give-egg-name" value="Hediye Yumurta"></div>
+                <div class="form-group"><label>Tip</label>
+                    <select id="give-egg-type" style="width:100%;padding:10px;border-radius:10px;background:rgba(0,0,0,0.35);border:1px solid var(--border);color:var(--text);">
+                        <option value="egg_basic">Basit</option>
+                        <option value="egg_rare">Nadir</option>
+                        <option value="egg_legend">Efsane</option>
+                    </select>
+                </div>
+                <button class="primary-btn" onclick="modConfirmGiveEgg()">Ver</button>
+                <button class="back-btn" onclick="modManagePets()">← Geri</button>
+            `);
+        }
+        function modConfirmGiveEgg() {
+            if (!isModerator()) return;
+            const uname = ((document.getElementById('give-egg-user') || {}).value || '').trim();
+            const name = ((document.getElementById('give-egg-name') || {}).value || 'Yumurta').trim();
+            const type = ((document.getElementById('give-egg-type') || {}).value) || 'egg_basic';
+            const users = loadUsers();
+            if (!users[uname]) { toast('Kullanıcı yok.', 'error'); return; }
+            ensureUserFields(users[uname]);
+            if (invSpaceLeft(users[uname]) < 1) { toast('Envanter dolu.', 'error'); return; }
+            users[uname].inventory = (users[uname].inventory || []).slice();
+            users[uname].inventory.push({
+                name: name,
+                image: '',
+                rarity: type === 'egg_legend' ? 'efsanevi' : (type === 'egg_rare' ? 'destansi' : 'siradan'),
+                category: 'yumurta',
+                eggId: type
+            });
+            bumpInvVersion(users[uname]);
+            saveUser(uname, users[uname]);
+            pushNotif(uname, '🥚 Moderasyon: sana "' + name + '" yumurtası verildi!', 'success');
+            toast('Yumurta verildi: ' + uname);
+            modManagePets();
+        }
+
 
         // Karakterleri ardakilic5534 (mod) envanterine bir kez ekle
         function seedArdaInventory() {
