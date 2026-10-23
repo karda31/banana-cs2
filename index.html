@@ -1025,8 +1025,25 @@
             align-items: center;
             gap: 10px;
             flex-wrap: wrap;
-            max-width: calc(100vw - 24px);
-            min-width: 200px;
+            width: fit-content;
+            max-width: min(320px, calc(100vw - 24px));
+            min-width: 0;
+            box-sizing: border-box;
+        }
+        #music-player #mp-youtube-wrap {
+            display: none;
+            flex: 0 1 200px;
+            width: 200px;
+            max-width: 100%;
+            box-sizing: border-box;
+        }
+        #music-player #mp-youtube-frame {
+            display: block;
+            width: 200px;
+            max-width: 100%;
+            height: 113px;
+            border: 0;
+            border-radius: 8px;
         }
         #music-player .mp-title {
             font-size: 11px;
@@ -1054,7 +1071,9 @@
         }
         #music-player button:active { background: rgba(255,0,204,0.4); }
         @media (max-width: 480px) {
-            #music-player { left: 8px; bottom: 8px; padding: 8px 10px; }
+            #music-player { left: 8px; bottom: 8px; padding: 8px 10px; max-width: calc(100vw - 16px); }
+            #music-player #mp-youtube-wrap { width: min(200px, calc(100vw - 40px)); }
+            #music-player #mp-youtube-frame { width: 100%; height: auto; aspect-ratio: 16 / 9; }
             #music-player .mp-title { max-width: 80px; font-size: 10px; }
         }
 
@@ -1277,10 +1296,10 @@
             <div style="font-size:12px;font-weight:600;color:var(--accent-soft);">🎵 Müzik</div>
             <div class="mp-title" id="mp-title">Hazır</div>
         </div>
-        <div id="mp-youtube-wrap" style="display:none;flex-basis:100%;width:100%;">
+        <div id="mp-youtube-wrap" style="display:none;">
             <iframe id="mp-youtube-frame" title="YouTube müzik oynatıcı" width="200" height="113"
                 style="display:block;max-width:100%;border:0;border-radius:8px;"
-                allow="autoplay; encrypted-media; picture-in-picture" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+                allow="autoplay; encrypted-media; picture-in-picture" referrerpolicy="strict-origin-when-cross-origin"></iframe>
         </div>
     </div>
     <audio id="site-audio" preload="none"></audio>
