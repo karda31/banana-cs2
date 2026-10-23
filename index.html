@@ -1231,6 +1231,16 @@
                     <div class="folder-name">SWOR Destek</div>
                     <div class="folder-desc">Yardım & İletişim</div>
                 </div>
+                <div class="folder" onclick="openNews()">
+                    <div class="folder-icon">📰</div>
+                    <div class="folder-name">Haberler</div>
+                    <div class="folder-desc">Duyurular & Güncellemeler</div>
+                </div>
+                <div class="folder" onclick="openConsole()">
+                    <div class="folder-icon">💻</div>
+                    <div class="folder-name">Console</div>
+                    <div class="folder-desc">Komutlar (yakında)</div>
+                </div>
                 <div class="folder" id="mod-folder" onclick="openModerator()" style="display:none;">
                     <div class="folder-icon">🛡️</div>
                     <div class="folder-name">Moderatör</div>
@@ -2783,7 +2793,9 @@
                    </div>`
                 : '<div id="reply-hint"></div>';
 
-            openModal('💬 ' + other, `
+            const _onlineNow = isUserOnline(other);
+            openModal('💬 ' + other + (_onlineNow ? ' ●' : ''), `
+                <div id="chat-online-status" style="font-size:12px;margin-bottom:6px;color:${_onlineNow ? 'var(--success)' : 'var(--text-muted)'};">${_onlineNow ? '🟢 Çevrimiçi' : '⚫ Çevrimdışı'}</div>
                 <div id="chat-messages" style="max-height:300px;overflow-y:auto;margin-bottom:12px;padding:4px;">${msgHtml}</div>
                 ${replyHint}
                 <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px;" id="emoji-bar">
@@ -4087,7 +4099,7 @@
                             <div style="margin-top:6px;">${rarityBadgeHtml(it.rarity)}</div>
                             <div style="margin-top:4px;">${categoryBadgeHtml(it.category)}</div>
                             ${mvTxt}
-                            ${isStickerCategory(it.category) ? `<button onclick="startUseSticker(${i})" style="margin-top:8px;width:100%;padding:6px;background:rgba(0,230,118,0.15);border:1px solid rgba(0,230,118,0.4);color:var(--success);border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;">🎨 Çıkartma Kullan</button>` : ''}
+                            ${isStickerCategory(it.category) ? (it.pendingStickerRequest ? `<button disabled style="margin-top:8px;width:100%;padding:6px;background:rgba(255,193,7,0.12);border:1px solid rgba(255,193,7,0.45);color:var(--warning);border-radius:8px;cursor:not-allowed;font-size:12px;font-weight:600;">⏳ Talep bekleniyor</button>` : `<button onclick="startUseSticker(${i})" style="margin-top:8px;width:100%;padding:6px;background:rgba(0,230,118,0.15);border:1px solid rgba(0,230,118,0.4);color:var(--success);border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;">🎨 Çıkartma Kullan</button>`) : ''}
                             <button onclick="shareCharacterToChat(${i})" style="margin-top:8px;width:100%;padding:6px;background:rgba(255,0,204,0.15);border:1px solid var(--border);color:var(--accent-soft);border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;">✨ Paylaş (DM)</button>
                             <button onclick="deleteInventoryItem(${i})" style="margin-top:6px;width:100%;padding:6px;background:rgba(255,61,113,0.2);border:1px solid rgba(255,61,113,0.4);color:#ff3d71;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;">🗑 Sil</button>
                         </div>
@@ -5435,14 +5447,45 @@
                 try { all = JSON.parse(localStorage.getItem('swordcity_sticker_req') || '{}'); } catch (e2) {}
             }
             if (all[id]) {
+                const req = all[id];
                 all[id].status = 'done';
                 all[id].doneAt = new Date().toISOString();
+                // Onaylanınca çıkartmayı envanterden sil
+                try {
+                    const users = loadUsers();
+                    const uname = req.user;
+                    if (users[uname] && Array.isArray(users[uname].inventory)) {
+                        let inv = users[uname].inventory.slice();
+                        let removed = false;
+                        // Önce index ile dene
+                        const idx = typeof req.stickerInvIndex === 'number' ? req.stickerInvIndex : -1;
+                        if (idx >= 0 && idx < inv.length) {
+                            const n = normalizeItem(inv[idx]);
+                            if (isStickerCategory(n.category) && (n.name === req.stickerName || n.pendingStickerRequest === id)) {
+                                inv.splice(idx, 1);
+                                removed = true;
+                            }
+                        }
+                        if (!removed) {
+                            inv = inv.filter(function(it) {
+                                const n = normalizeItem(it);
+                                if (n.pendingStickerRequest === id) return false;
+                                if (isStickerCategory(n.category) && n.name === req.stickerName && n.pendingStickerRequest) return false;
+                                return true;
+                            });
+                        }
+                        users[uname].inventory = inv;
+                        users[uname].invVersion = (users[uname].invVersion || 0) + 1;
+                        users[uname].updatedAt = new Date().toISOString();
+                        saveUsers(users);
+                    }
+                } catch (eDel) { console.warn('sticker delete', eDel); }
                 if (firebaseReady) fbSet('sticker_requests', all);
                 try { localStorage.setItem('swordcity_sticker_req', JSON.stringify(all)); } catch (e) {}
-                if (all[id].user) {
-                    pushNotif(all[id].user, '🎨 Çıkartman eklendi: ' + (all[id].stickerName || '') + ' → ' + (all[id].characterName || ''), 'success');
+                if (req.user) {
+                    pushNotif(req.user, '🎨 Çıkartman eklendi ve envanterden düşüldü: ' + (req.stickerName || '') + ' → ' + (req.characterName || ''), 'success');
                 }
-                toast('Talep tamamlandı.');
+                toast('Talep tamamlandı, çıkartma silindi.');
             }
             showStickerRequests();
         }
@@ -6460,6 +6503,10 @@
                 toast('Bu eşya çıkartma değil.', 'error');
                 return;
             }
+            if (sticker.pendingStickerRequest) {
+                toast('Bu çıkartma için zaten bekleyen bir talep var. Onaylanana kadar tekrar kullanılamaz.', 'error');
+                return;
+            }
             const chars = [];
             (user.inventory || []).forEach(function(it, i) {
                 const n = normalizeItem(it);
@@ -6538,10 +6585,27 @@
                 localStorage.setItem('swordcity_sticker_req', JSON.stringify(local));
             } catch (e) {}
 
+            // Talebi varken çıkartmayı kilitle
+            try {
+                users[me].inventory = users[me].inventory.slice();
+                const raw = users[me].inventory[stickerIndex];
+                if (raw && typeof raw === 'object') {
+                    raw.pendingStickerRequest = req.id;
+                } else {
+                    const n = normalizeItem(raw);
+                    n.pendingStickerRequest = req.id;
+                    users[me].inventory[stickerIndex] = n;
+                }
+                users[me].invVersion = (users[me].invVersion || 0) + 1;
+                users[me].updatedAt = new Date().toISOString();
+                saveUsers(users);
+            } catch (eLock) { console.warn(eLock); }
+
             pushNotif(MOD_USER, '🎨 Çıkartma talebi: ' + me + ' · "' + sticker.name + '" → karakter "' + character.name + '"', 'info');
             pushNotif(me, '🎨 Çıkartma talebin alındı. Moderatör 24 saat içinde ekleyecek: ' + sticker.name + ' → ' + character.name, 'success');
-            toast('Talep gönderildi! Moderatör 24 saat içinde ekleyecek.');
+            toast('Talep gönderildi! Onaylanana kadar bu çıkartma kullanılamaz.');
             closeModal();
+            showInventory();
         }
 
         // ========== CANLI ONLINE + YAZIYOR ==========
@@ -6608,7 +6672,24 @@
             const el = document.getElementById('typing-indicator');
             if (!el) return;
             const list = window._othersTyping || [];
-            el.textContent = list.length ? (list.join(', ') + ' yazıyor...') : '';
+            if (list.length) {
+                // Küçük gecikme ile daha doğal "yazıyor..."
+                clearTimeout(window._typingUiDelay);
+                window._typingUiDelay = setTimeout(function() {
+                    const el2 = document.getElementById('typing-indicator');
+                    if (el2) el2.textContent = list.join(', ') + ' yazıyor...';
+                }, 350);
+            } else {
+                clearTimeout(window._typingUiDelay);
+                el.textContent = '';
+            }
+            // Online durumunu da canlı güncelle
+            const st = document.getElementById('chat-online-status');
+            if (st && other) {
+                const on = isUserOnline(other);
+                st.style.color = on ? 'var(--success)' : 'var(--text-muted)';
+                st.textContent = on ? '🟢 Çevrimiçi' : '⚫ Çevrimdışı';
+            }
         }
 
         function onChatInputTyping(other) {
@@ -6617,6 +6698,7 @@
 
         // ========== MÜZİK ÇALAR ==========
         const MUSIC_TRACKS = [
+            { title: 'YouTube Track', url: 'https://www.youtube.com/watch?v=t1pz3TO3NJY', youtube: 't1pz3TO3NJY' },
             { title: 'Ambient Chill 1', url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3' },
             { title: 'Ambient Chill 2', url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3' },
             { title: 'Ambient Chill 3', url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3' },
@@ -6644,6 +6726,20 @@
             if (!audio || !MUSIC_TRACKS.length) return;
             _musicIndex = ((idx % MUSIC_TRACKS.length) + MUSIC_TRACKS.length) % MUSIC_TRACKS.length;
             const t = MUSIC_TRACKS[_musicIndex];
+            // YouTube şarkısı: yeni sekmede aç / embed notu
+            if (t.youtube) {
+                audio.removeAttribute('src');
+                audio.load();
+                if (title) title.textContent = t.title + ' (YT)';
+                try { localStorage.setItem('swordcity_music_idx', String(_musicIndex)); } catch (e) {}
+                if (autoplay) {
+                    window.open('https://www.youtube.com/watch?v=' + t.youtube, '_blank', 'noopener');
+                    _musicPlaying = false;
+                    updateMusicBtn();
+                    toast('YouTube şarkısı yeni sekmede açıldı 🎵');
+                }
+                return;
+            }
             audio.src = t.url;
             if (title) title.textContent = t.title;
             try { localStorage.setItem('swordcity_music_idx', String(_musicIndex)); } catch (e) {}
@@ -6695,6 +6791,93 @@
             setTimeout(musicInit, 100);
         }
 
+
+
+        // ========== CONSOLE (şimdilik komut yok) ==========
+        function openConsole() {
+            openModal('💻 Console', `
+                <div class="info-card">
+                    <p style="color:var(--text-muted);font-size:14px;line-height:1.5;">Konsol yakında aktif olacak. Şimdilik komut bulunmuyor.</p>
+                    <pre style="margin-top:12px;padding:12px;background:rgba(0,0,0,0.4);border-radius:10px;border:1px solid var(--border);color:var(--accent-soft);font-size:13px;">&gt; _</pre>
+                </div>
+                <button class="back-btn" onclick="closeModal()">← Kapat</button>
+            `);
+        }
+
+        // ========== HABERLER (sadece moderatör yazar) ==========
+        async function loadNewsList() {
+            try {
+                if (firebaseReady) {
+                    const data = await fbGet('news');
+                    if (data) {
+                        const arr = Array.isArray(data) ? data : Object.values(data);
+                        return arr.sort(function(a,b){ return (b.at||'').localeCompare(a.at||''); });
+                    }
+                }
+            } catch (e) {}
+            try {
+                return JSON.parse(localStorage.getItem('swordcity_news') || '[]');
+            } catch (e2) { return []; }
+        }
+
+        function saveNewsList(list) {
+            try { localStorage.setItem('swordcity_news', JSON.stringify(list)); } catch (e) {}
+            if (firebaseReady) fbSet('news', list);
+        }
+
+        async function openNews() {
+            const me = getCurrentUser();
+            const list = await loadNewsList();
+            let html = '';
+            if (!list.length) {
+                html = '<p style="color:var(--text-muted);text-align:center;padding:16px;">Henüz haber yok.</p>';
+            } else {
+                html = list.map(function(n) {
+                    return `<div class="info-card" style="margin-bottom:10px;">
+                        <div style="font-weight:700;color:var(--accent-soft);">${escapeHtml(n.title || 'Haber')}</div>
+                        <div style="font-size:12px;color:var(--text-muted);margin:4px 0 8px;">${escapeHtml((n.at || '').slice(0,19).replace('T',' '))} · ${escapeHtml(n.by || '')}</div>
+                        <div style="font-size:14px;line-height:1.45;white-space:pre-wrap;">${escapeHtml(n.body || '')}</div>
+                    </div>`;
+                }).join('');
+            }
+            let admin = '';
+            if (isModerator(me)) {
+                admin = `
+                <div class="info-card" style="margin-top:14px;border-color:var(--accent);">
+                    <h4 style="color:var(--accent);margin-bottom:8px;">✍️ Yeni Haber Yaz (sadece sen)</h4>
+                    <div class="form-group"><label>Başlık</label><input type="text" id="news-title" placeholder="Haber başlığı"></div>
+                    <div class="form-group"><label>İçerik</label><textarea id="news-body" rows="4" placeholder="Haber metni..." style="width:100%;padding:10px;border-radius:10px;background:rgba(0,0,0,0.35);border:1px solid var(--border);color:var(--text);font-family:inherit;"></textarea></div>
+                    <button class="primary-btn" onclick="postNews()">Yayınla</button>
+                </div>`;
+            }
+            openModal('📰 Haberler', html + admin + `<button class="back-btn" onclick="closeModal()">← Kapat</button>`);
+        }
+
+        async function postNews() {
+            const me = getCurrentUser();
+            if (!isModerator(me)) {
+                toast('Sadece moderatör haber yazabilir.', 'error');
+                return;
+            }
+            const title = (document.getElementById('news-title') || {}).value || '';
+            const body = (document.getElementById('news-body') || {}).value || '';
+            if (!title.trim() || !body.trim()) {
+                toast('Başlık ve içerik gerekli.', 'error');
+                return;
+            }
+            const list = await loadNewsList();
+            list.unshift({
+                id: 'news_' + Date.now(),
+                title: title.trim(),
+                body: body.trim(),
+                by: me,
+                at: new Date().toISOString()
+            });
+            if (list.length > 50) list.length = 50;
+            saveNewsList(list);
+            toast('Haber yayınlandı!');
+            openNews();
+        }
 
         // Karakterleri ardakilic5534 (mod) envanterine bir kez ekle
         function seedArdaInventory() {
