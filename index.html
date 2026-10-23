@@ -1013,35 +1013,35 @@
         #music-player {
             position: fixed;
             left: 12px;
-            bottom: 12px;
+            bottom: 76px;
             z-index: 90;
             background: rgba(22,0,34,0.92);
             border: 1px solid var(--border);
             border-radius: 14px;
-            padding: 10px 12px;
+            padding: 7px 8px;
             box-shadow: 0 0 24px rgba(255,0,204,0.2);
             backdrop-filter: blur(10px);
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 6px;
             flex-wrap: wrap;
             width: fit-content;
-            max-width: min(320px, calc(100vw - 24px));
+            max-width: min(250px, calc(100vw - 20px));
             min-width: 0;
             box-sizing: border-box;
         }
         #music-player #mp-youtube-wrap {
             display: none;
-            flex: 0 1 200px;
-            width: 200px;
+            flex: 0 1 144px;
+            width: 144px;
             max-width: 100%;
             box-sizing: border-box;
         }
         #music-player #mp-youtube-frame {
             display: block;
-            width: 200px;
+            width: 144px;
             max-width: 100%;
-            height: 113px;
+            height: 81px;
             border: 0;
             border-radius: 8px;
         }
@@ -1058,8 +1058,8 @@
             border: 1px solid var(--border);
             color: var(--text);
             border-radius: 8px;
-            width: 34px;
-            height: 34px;
+            width: 30px;
+            height: 30px;
             cursor: pointer;
             font-size: 14px;
             display: flex;
@@ -1071,10 +1071,10 @@
         }
         #music-player button:active { background: rgba(255,0,204,0.4); }
         @media (max-width: 480px) {
-            #music-player { left: 8px; bottom: 8px; padding: 8px 10px; max-width: calc(100vw - 16px); }
-            #music-player #mp-youtube-wrap { width: min(200px, calc(100vw - 40px)); }
+            #music-player { left: 8px; bottom: 72px; padding: 6px 7px; max-width: calc(100vw - 16px); }
+            #music-player #mp-youtube-wrap { width: min(144px, calc(100vw - 36px)); }
             #music-player #mp-youtube-frame { width: 100%; height: auto; aspect-ratio: 16 / 9; }
-            #music-player .mp-title { max-width: 80px; font-size: 10px; }
+            #music-player .mp-title { max-width: 70px; font-size: 10px; }
         }
 
     </style>
@@ -1390,6 +1390,56 @@
             });
         }
 
+        // ---------- VERI KORUMA / YEDEKLEME ----------
+        // Her localStorage güncellemesinden önce eski değerin tek kopyasını tutar.
+        // Bu tarayıcıdaki yerel yedektir; Firebase için moderatör panelinden JSON dışa aktarımı gerekir.
+        const BACKUP_LOCAL_KEYS = [
+            'swordcity_users_v3','swordcity_market_v1','swordcity_trades_v1',
+            'swordcity_cases_v1','swordcity_notifs_v1','swordcity_clans_v1',
+            'swordcity_shop_orders_v1','swordcity_market_reports_v1',
+            'swordcity_support_v1','swordcity_sticker_req'
+        ];
+        function safeLocalSet(key, value) {
+            try {
+                const previous = localStorage.getItem(key);
+                if (previous !== null && previous !== value) {
+                    localStorage.setItem('swordcity_backup_before_' + key, previous);
+                    localStorage.setItem('swordcity_backup_meta_v1', JSON.stringify({at:new Date().toISOString(), key:key}));
+                }
+                localStorage.setItem(key, value);
+                return true;
+            } catch (e) { console.warn('Yerel yedek oluşturulamadı:', key, e); return false; }
+        }
+        async function downloadDataBackup() {
+            if (!isModerator(getCurrentUser())) { toast('Yedekleme sadece moderatöre açık.', 'error'); return; }
+            const btn = document.getElementById('data-backup-btn');
+            if (btn) { btn.disabled = true; btn.textContent = '⏳ Yedek hazırlanıyor…'; }
+            try {
+                const backup = {format:'banana-cs2-backup-v1', createdAt:new Date().toISOString(), source:firebaseReady?'firebase+local':'local-only', data:{}, local:{}};
+                const paths = ['users','market','trades','cases','notifs','clans','shop_orders','reports','support_tickets','sticker_requests','chats','messages'];
+                if (firebaseReady && db) {
+                    // Tüm Firebase ağacını tek seferde okumayı dene; kurallar izin vermezse bilinen yolları tek tek dene.
+                    try {
+                        const snap = await db.ref('/').once('value');
+                        const root = snap.val();
+                        if (root && typeof root === 'object') backup.data = root;
+                    } catch (rootErr) {
+                        for (const path of paths) {
+                            try { const val = await fbGet(path); if (val !== null) backup.data[path] = val; } catch (e) {}
+                        }
+                    }
+                }
+                BACKUP_LOCAL_KEYS.forEach(key => { try { const val=localStorage.getItem(key); if(val!==null) backup.local[key]=JSON.parse(val); } catch(e) {} });
+                if (!Object.keys(backup.data).length && !Object.keys(backup.local).length) throw new Error('Yedeklenecek veri bulunamadı.');
+                const blob = new Blob([JSON.stringify(backup, null, 2)], {type:'application/json'});
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a'); a.href=url; a.download='banana-cs2-yedek-'+new Date().toISOString().slice(0,10)+'.json';
+                document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url), 1500);
+                toast('Yedek indirildi. Dosyayı güvenli bir yerde sakla.');
+            } catch (e) { console.error(e); toast('Yedek alınamadı: '+(e.message||'erişim hatası'), 'error'); }
+            finally { if (btn) { btn.disabled=false; btn.textContent='🛡️ Verileri yedekle (JSON indir)'; } }
+        }
+
         // ---------- USERS ----------
         function loadUsers() {
             // Senkron cache döndür (eski kod bozulmasın)
@@ -1483,7 +1533,7 @@
                 _usersCache = local && Object.keys(local).length ? local : (_usersCache || {});
             }
             // Her zaman local'e yedekle
-            try { localStorage.setItem('swordcity_users_v3', JSON.stringify(_usersCache || {})); } catch (e) {}
+            try { safeLocalSet('swordcity_users_v3', JSON.stringify(_usersCache || {})); } catch (e) {}
             // Local'de olup Firebase'de olmayan hesapları yükle (kaybolmasın)
             if (firebaseReady && _usersCache && Object.keys(_usersCache).length > 0) {
                 // Tek tek yaz — tüm ağacı silmeden
@@ -1502,7 +1552,7 @@
                     _usersCache[uname].updatedAt = now;
                 }
             });
-            try { localStorage.setItem('swordcity_users_v3', JSON.stringify(_usersCache)); } catch (e) {}
+            try { safeLocalSet('swordcity_users_v3', JSON.stringify(_usersCache)); } catch (e) {}
             if (firebaseReady) {
                 Object.keys(_usersCache).forEach(function(uname) {
                     if (_usersCache[uname]) fbSet('users/' + uname, _usersCache[uname]);
@@ -1518,7 +1568,7 @@
             try {
                 const all = readLocalUsers();
                 all[username] = userObj;
-                localStorage.setItem('swordcity_users_v3', JSON.stringify(all));
+                safeLocalSet('swordcity_users_v3', JSON.stringify(all));
             } catch (e) {}
             if (firebaseReady) {
                 fbSet('users/' + username, userObj);
@@ -1542,7 +1592,7 @@
         }
         function saveMarket(list) {
             _marketCache = list || [];
-            try { localStorage.setItem('swordcity_market_v1', JSON.stringify(_marketCache)); } catch (e) {}
+            try { safeLocalSet('swordcity_market_v1', JSON.stringify(_marketCache)); } catch (e) {}
             if (firebaseReady) fbSet('market', _marketCache);
         }
 
@@ -1563,7 +1613,7 @@
         function saveTrades(list) {
             _tradesCache = list || [];
             if (firebaseReady) fbSet('trades', _tradesCache);
-            else localStorage.setItem('swordcity_trades_v1', JSON.stringify(_tradesCache));
+            else safeLocalSet('swordcity_trades_v1', JSON.stringify(_tradesCache));
         }
 
         // ---------- CASES ----------
@@ -1583,7 +1633,7 @@
         function saveCases(list) {
             _casesCache = list || [];
             if (firebaseReady) fbSet('cases', _casesCache);
-            else localStorage.setItem('swordcity_cases_v1', JSON.stringify(_casesCache));
+            else safeLocalSet('swordcity_cases_v1', JSON.stringify(_casesCache));
         }
 
         // ---------- NOTIFICATIONS ----------
@@ -1603,7 +1653,7 @@
         function saveAllNotifs(obj) {
             _notifsCache = obj || {};
             if (firebaseReady) fbSet('notifs', _notifsCache);
-            else localStorage.setItem('swordcity_notifs_v1', JSON.stringify(_notifsCache));
+            else safeLocalSet('swordcity_notifs_v1', JSON.stringify(_notifsCache));
         }
 
         // ---------- CLANS ----------
@@ -1623,7 +1673,7 @@
         function saveClans(clans) {
             _clansCache = clans || [];
             if (firebaseReady) fbSet('clans', _clansCache);
-            else localStorage.setItem('swordcity_clans_v1', JSON.stringify(_clansCache));
+            else safeLocalSet('swordcity_clans_v1', JSON.stringify(_clansCache));
         }
 
         // ---------- SHOP ORDERS ----------
@@ -1643,7 +1693,7 @@
         function saveShopOrders(list) {
             _shopOrdersCache = list || [];
             if (firebaseReady) fbSet('shop_orders', _shopOrdersCache);
-            else localStorage.setItem('swordcity_shop_orders_v1', JSON.stringify(_shopOrdersCache));
+            else safeLocalSet('swordcity_shop_orders_v1', JSON.stringify(_shopOrdersCache));
         }
 
         // ---------- REPORTS ----------
@@ -1663,7 +1713,7 @@
         function saveReports(list) {
             _reportsCache = list || [];
             if (firebaseReady) fbSet('reports', _reportsCache);
-            else localStorage.setItem('swordcity_market_reports_v1', JSON.stringify(_reportsCache));
+            else safeLocalSet('swordcity_market_reports_v1', JSON.stringify(_reportsCache));
         }
 
         // ---------- SUPPORT TICKETS ----------
@@ -1741,7 +1791,7 @@
                 // Firebase null/boş ise mevcut hesapları SİLME
                 if (remote && typeof remote === 'object' && Object.keys(remote).length > 0) {
                     _usersCache = mergeUsers(remote, prev);
-                    try { localStorage.setItem('swordcity_users_v3', JSON.stringify(_usersCache)); } catch (e) {}
+                    try { safeLocalSet('swordcity_users_v3', JSON.stringify(_usersCache)); } catch (e) {}
                 }
                 // Açık profil: envanter gizlilik / içerik değişince yenile (atılma olmasın)
                 if (window._viewingProfile) {
@@ -2705,7 +2755,7 @@
                             ${imgBlock}
                             <div style="font-size:13px;line-height:1.4;">${textHtml}</div>
                             ${emojiReaction}
-                            <div style="font-size:10px;color:var(--text-muted);margin-top:4px;text-align:right;">${m.at ? new Date(m.at).toLocaleTimeString('tr-TR', {hour:'2-digit',minute:'2-digit'}) : ''}</div>
+                            <div style="font-size:10px;color:var(--text-muted);margin-top:4px;text-align:right;">${m.at ? new Date(m.at).toLocaleTimeString('tr-TR', {hour:'2-digit',minute:'2-digit'}) : ''}${mine ? (m.seenAt ? ' · <span style="color:var(--success);">✓✓ Görüldü</span>' : ' · ✓ Gönderildi') : ''}</div>
                             ${actions}
                         </div>
                     </div>
@@ -2805,8 +2855,13 @@
             const chats = loadChats();
             if (!chats[cid]) chats[cid] = { messages: [] };
             // Eski mesajlara id ekle
+            let _chatSeenChanged = false;
             (chats[cid].messages || []).forEach(function(m, i) {
                 if (!m.id) m.id = 'msg_' + (m.at || Date.now()) + '_' + i;
+                if (m.from === other && !m.seenAt) {
+                    m.seenAt = new Date().toISOString();
+                    _chatSeenChanged = true;
+                }
             });
             saveChats(chats);
             const msgs = chats[cid].messages || [];
@@ -5599,6 +5654,11 @@
             const reportCount = loadReports().filter(function(r) { return !r.resolved; }).length;
 
             openModal('🛡️ Kayıtlı Hesaplar (' + names.length + ')', `
+                <div class="info-card" style="margin-bottom:10px;">
+                    <div style="font-weight:700;margin-bottom:5px;">🛡️ Veri koruma</div>
+                    <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">Yedek dosyası oyuncu bilgileri içerebilir; kimseyle paylaşma. Güncellemeden önce indir.</div>
+                    <button class="mod-btn" id="data-backup-btn" onclick="downloadDataBackup()" style="margin-bottom:0;">🛡️ Verileri yedekle (JSON indir)</button>
+                </div>
                 <button class="mod-btn" onclick="showSupportTickets()" style="margin-bottom:8px;">
                     <span style="font-size:20px;">📩</span> Destek Talepleri
                 </button>
@@ -6611,7 +6671,11 @@
                         <option value="Bel">Bel</option>
                         <option value="Diğer">Diğer</option>
                     </select>
-                    <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Seçilen bölge moderatöre gösterilir; onay veya ret moderatör tarafından verilir.</div>
+                    <div id="sticker-other-region-wrap" style="display:none;margin-top:10px;">
+                        <label for="sticker-other-region">Nereye eklenmesini istiyorsun?</label>
+                        <textarea id="sticker-other-region" rows="2" maxlength="200" placeholder="Örn. karakterin şapkasının üstüne..." style="width:100%;padding:10px;border-radius:10px;background:rgba(0,0,0,0.35);border:1px solid var(--border);color:var(--text);font-family:inherit;resize:vertical;"></textarea>
+                    </div>
+                    <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Seçilen bölge veya yazdığın özel konum moderatöre gösterilir.</div>
                 </div>
                 <div class="info-card" style="border-left:3px solid var(--warning);margin:12px 0;">
                     <p style="font-size:13px;line-height:1.45;">⏳ <b>Çıkartma talebin moderatör tarafından incelenecek.</b></p>
@@ -6620,6 +6684,13 @@
                 <button class="primary-btn" onclick="submitStickerRequest(${invIndex})">Talebi Gönder</button>
                 <button class="back-btn" onclick="showInventory()">← Envanter</button>
             `);
+            const regionSelect = document.getElementById('sticker-region-select');
+            const otherWrap = document.getElementById('sticker-other-region-wrap');
+            if (regionSelect && otherWrap) {
+                regionSelect.addEventListener('change', function() {
+                    otherWrap.style.display = this.value === 'Diğer' ? 'block' : 'none';
+                });
+            }
         }
 
         function submitStickerRequest(stickerIndex) {
@@ -6628,8 +6699,14 @@
             if (!sel) return;
             const charIndex = parseInt(sel.value, 10);
             const regionSelect = document.getElementById('sticker-region-select');
-            const region = regionSelect ? regionSelect.value : '';
+            let region = regionSelect ? regionSelect.value : '';
             if (!region) { toast('Lütfen çıkartma bölgesi seç.', 'error'); return; }
+            if (region === 'Diğer') {
+                const otherInput = document.getElementById('sticker-other-region');
+                const customRegion = otherInput ? otherInput.value.trim() : '';
+                if (!customRegion) { toast('Lütfen çıkartmanın nereye eklenmesini istediğini yaz.', 'error'); if (otherInput) otherInput.focus(); return; }
+                region = 'Diğer: ' + customRegion;
+            }
             const users = loadUsers();
             const user = users[me];
             if (!user || !user.inventory) return;
