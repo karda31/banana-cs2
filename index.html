@@ -3206,6 +3206,11 @@
         }
 
         function doLogout() {
+            // Sadece oturumu kapat — bakiye, level, envanter, tema, dil, müzik ayarları kalır
+            const lastUser = getCurrentUser();
+            if (lastUser) {
+                try { localStorage.setItem('swordcity_last_user', lastUser); } catch (e) {}
+            }
             setSession(null);
             document.getElementById('main-app').classList.add('hidden');
             document.getElementById('auth-screen').classList.remove('hidden');
@@ -3216,10 +3221,16 @@
             toggleShop(false);
             const modFolder = document.getElementById('mod-folder');
             if (modFolder) modFolder.style.display = 'none';
-            document.getElementById('login-user').value = '';
+            try {
+                const remembered = localStorage.getItem('swordcity_last_user') || '';
+                document.getElementById('login-user').value = remembered;
+            } catch (e) {
+                document.getElementById('login-user').value = '';
+            }
             document.getElementById('login-pass').value = '';
             closeModal();
-            toast('Çıkış yapıldı.');
+            // Tema / dil / müzik localStorage'da duruyor — çık-gir sonrası aynı kalır
+            toast('Çıkış yapıldı. Verilerin ve ayarların kaydedildi.');
         }
 
         function enterApp(username) {
@@ -3231,6 +3242,17 @@
             document.getElementById('notif-btn').classList.add('show');
             document.getElementById('shop-tab').classList.add('show');
             updateNotifBadge();
+            try { localStorage.setItem('swordcity_last_user', username); } catch (e) {}
+
+            // Girişte tema / ayarlar korunsun — global kilit varsa onu uygula
+            try {
+                if (typeof _globalThemeLock !== 'undefined' && _globalThemeLock.locked && _globalThemeLock.theme) {
+                    applyTheme(_globalThemeLock.theme, { force: true, skipSave: true });
+                } else {
+                    const saved = localStorage.getItem('swordcity_theme_personal') || localStorage.getItem('swordcity_theme');
+                    if (saved) applyTheme(saved, { force: true });
+                }
+            } catch (e) {}
 
             // Kurucu hesabı otomatik prime kaydet
             if (isModerator(username)) {
@@ -7446,30 +7468,10 @@
             }, 50);
         }
 
-        function runConsoleCmd() {
-            const inp = document.getElementById('console-input');
-            const out = document.getElementById('console-out');
-            if (!inp) return;
-            const raw = (inp.value || '').trim();
-            if (!raw) return;
-            const cmd = raw.replace(/\(\)\s*$/, '').toLowerCase().replace(/\s+/g, '');
-            let msg = '';
-            if (cmd.indexOf('theme') === 0) {
-                const name = cmd.replace(/^theme_?/, '') || 'orig';
-                applyTheme(name);
-                msg = 'ok';
-            } else {
-                msg = 'unknown';
-            }
-            if (out) {
-                out.textContent = (out.textContent ? out.textContent + '\n' : '') + '> ' + raw + '\n' + msg;
-            }
-            inp.value = '';
-            inp.focus();
-        }
+        // Global tema kilidi (Firebase + local yedek) — herkese zorunlu tema
+        let _globalThemeLock = { locked: false, theme: 'orig', by: '', at: '' };
 
-        function applyTheme(name) {
-            const root = document.documentElement;
+        function getThemeCatalog() {
             const themes = {
                 green: {
                     key: 'green',
@@ -7582,9 +7584,53 @@
                     authLogo: 'linear-gradient(145deg, #eeeeee, #e0e0e0)',
                     headerGlow: 'radial-gradient(circle, rgba(0,0,0,0.06) 0%, transparent 70%)',
                     panelA: 'rgba(255, 255, 255, 0.95)'
+                },
+                // Cadılar Bayramı
+                halloween: {
+                    key: 'halloween',
+                    bgDeep: '#0a0500', bgPanel: '#1a0a00', bgCard: '#2a1208',
+                    accent: '#ff6b00', accentSoft: '#ffb347',
+                    accentGlow: 'rgba(255, 107, 0, 0.5)', rgb: '255, 107, 0',
+                    border: 'rgba(255, 107, 0, 0.4)', shadow: '0 0 40px rgba(255, 107, 0, 0.3)',
+                    text: '#fff5e6', textMuted: '#c9a882',
+                    bodyGrad: 'radial-gradient(ellipse at top, #2a1000 0%, #0a0500 50%, #1a0008 100%)',
+                    titleBar: 'linear-gradient(90deg, #120800, #1a0a00, #120800)',
+                    shopGrad: 'linear-gradient(180deg, #ff6b00, #8b0000)', shopText: '#1a0800',
+                    authLogo: 'linear-gradient(145deg, #3a1800, #1a0a00)',
+                    headerGlow: 'radial-gradient(circle, rgba(255,107,0,0.15) 0%, transparent 70%)',
+                    panelA: 'rgba(26, 10, 0, 0.94)'
+                },
+                // Noel
+                xmas: {
+                    key: 'xmas',
+                    bgDeep: '#050a08', bgPanel: '#0a1a12', bgCard: '#102818',
+                    accent: '#e53935', accentSoft: '#81c784',
+                    accentGlow: 'rgba(229, 57, 53, 0.45)', rgb: '229, 57, 53',
+                    border: 'rgba(129, 199, 132, 0.4)', shadow: '0 0 40px rgba(229, 57, 53, 0.25)',
+                    text: '#e8f5e9', textMuted: '#a5d6a7',
+                    bodyGrad: 'radial-gradient(ellipse at top, #1a3020 0%, #050a08 45%, #1a0508 100%)',
+                    titleBar: 'linear-gradient(90deg, #0a120c, #0a1a12, #12080a)',
+                    shopGrad: 'linear-gradient(180deg, #e53935, #2e7d32)', shopText: '#ffffff',
+                    authLogo: 'linear-gradient(145deg, #1b5e20, #0a1a12)',
+                    headerGlow: 'radial-gradient(circle, rgba(229,57,53,0.12) 0%, transparent 70%)',
+                    panelA: 'rgba(10, 26, 18, 0.94)'
+                },
+                // Türkiye — 19 Mayıs / 15 Temmuz
+                turkey: {
+                    key: 'turkey',
+                    bgDeep: '#0a0010', bgPanel: '#1a0020', bgCard: '#2a0030',
+                    accent: '#e30a17', accentSoft: '#ffffff',
+                    accentGlow: 'rgba(227, 10, 23, 0.5)', rgb: '227, 10, 23',
+                    border: 'rgba(227, 10, 23, 0.45)', shadow: '0 0 40px rgba(227, 10, 23, 0.3)',
+                    text: '#ffffff', textMuted: '#e8b4b8',
+                    bodyGrad: 'radial-gradient(ellipse at top, #3a0018 0%, #0a0010 50%, #120008 100%)',
+                    titleBar: 'linear-gradient(90deg, #120008, #1a0020, #120008)',
+                    shopGrad: 'linear-gradient(180deg, #e30a17, #8b0000)', shopText: '#ffffff',
+                    authLogo: 'linear-gradient(145deg, #4a0018, #1a0020)',
+                    headerGlow: 'radial-gradient(circle, rgba(227,10,23,0.18) 0%, transparent 70%)',
+                    panelA: 'rgba(26, 0, 32, 0.94)'
                 }
             };
-            // aliases
             themes.orig = themes.purple;
             themes.mor = themes.purple;
             themes.default = themes.purple;
@@ -7595,8 +7641,168 @@
             themes.beyaz = themes.white;
             themes.yesil = themes.green;
             themes.pembe = themes.pink;
+            themes.cadilar = themes.halloween;
+            themes.noel = themes.xmas;
+            themes.tr = themes.turkey;
+            themes.turkiye = themes.turkey;
+            return themes;
+        }
+
+        function isThemeLocked() {
+            return !!(!_globalThemeLock || _globalThemeLock.locked);
+        }
+
+        function persistGlobalThemeLock(state) {
+            _globalThemeLock = state || { locked: false, theme: 'orig', by: '', at: '' };
+            try {
+                localStorage.setItem('swordcity_global_theme', JSON.stringify(_globalThemeLock));
+            } catch (e) {}
+            if (firebaseReady && db) {
+                try {
+                    db.ref('settings/globalTheme').set(_globalThemeLock);
+                } catch (e) {}
+            }
+        }
+
+        function loadGlobalThemeLockLocal() {
+            try {
+                const raw = localStorage.getItem('swordcity_global_theme');
+                if (raw) {
+                    const p = JSON.parse(raw);
+                    if (p && typeof p === 'object') _globalThemeLock = p;
+                }
+            } catch (e) {}
+        }
+
+        function startGlobalThemeListener() {
+            loadGlobalThemeLockLocal();
+            if (_globalThemeLock.locked && _globalThemeLock.theme) {
+                applyTheme(_globalThemeLock.theme, { force: true, skipSave: true });
+            }
+            if (!firebaseReady || !db) return;
+            try {
+                db.ref('settings/globalTheme').on('value', function(snap) {
+                    const val = snap.val();
+                    if (!val || typeof val !== 'object') return;
+                    _globalThemeLock = {
+                        locked: !!val.locked,
+                        theme: val.theme || 'orig',
+                        by: val.by || '',
+                        at: val.at || ''
+                    };
+                    try {
+                        localStorage.setItem('swordcity_global_theme', JSON.stringify(_globalThemeLock));
+                    } catch (e) {}
+                    if (_globalThemeLock.locked) {
+                        applyTheme(_globalThemeLock.theme, { force: true, skipSave: true });
+                    }
+                });
+            } catch (e) {}
+        }
+
+        function setGlobalThemeLock(themeKey, locked) {
+            const me = getCurrentUser();
+            if (!isModerator(me)) {
+                toast('Sadece moderatör global tema kilitleyebilir.', 'error');
+                return false;
+            }
+            const state = {
+                locked: !!locked,
+                theme: locked ? (themeKey || 'orig') : 'orig',
+                by: me || MOD_USER,
+                at: new Date().toISOString()
+            };
+            persistGlobalThemeLock(state);
+            if (locked) {
+                applyTheme(themeKey, { force: true, skipSave: true });
+            } else {
+                // kilit kalkınca herkes kendi temasını kullanabilir
+                try {
+                    const personal = localStorage.getItem('swordcity_theme_personal') || localStorage.getItem('swordcity_theme') || 'orig';
+                    applyTheme(personal, { force: true });
+                } catch (e) {
+                    applyTheme('orig', { force: true });
+                }
+            }
+            return true;
+        }
+
+        function runConsoleCmd() {
+            const inp = document.getElementById('console-input');
+            const out = document.getElementById('console-out');
+            if (!inp) return;
+            const raw = (inp.value || '').trim();
+            if (!raw) return;
+            const cmd = raw.replace(/\(\)\s*$/, '').toLowerCase().replace(/\s+/g, '');
+            let msg = '';
+
+            if (cmd === 'theme_halloween_all' || cmd === 'themehalloweenall') {
+                if (setGlobalThemeLock('halloween', true)) {
+                    msg = 'ok · Cadılar Bayramı teması HERKESE kilitlendi (kimse değiştiremez)';
+                    toast('🎃 Cadılar Bayramı teması herkese uygulandı (kilitli)');
+                } else msg = 'denied · sadece moderatör';
+            } else if (cmd === 'theme_xmas_all' || cmd === 'themexmasall' || cmd === 'theme_noel_all') {
+                if (setGlobalThemeLock('xmas', true)) {
+                    msg = 'ok · Noel teması HERKESE kilitlendi';
+                    toast('🎄 Noel teması herkese uygulandı (kilitli)');
+                } else msg = 'denied · sadece moderatör';
+            } else if (cmd === 'theme_turkey_all' || cmd === 'themeturkeyall' || cmd === 'theme_tr_all') {
+                if (setGlobalThemeLock('turkey', true)) {
+                    msg = 'ok · Türkiye teması HERKESE kilitlendi (19 Mayıs / 15 Temmuz)';
+                    toast('🇹🇷 Türkiye teması herkese uygulandı (kilitli)');
+                } else msg = 'denied · sadece moderatör';
+            } else if (cmd === 'theme_all_orig' || cmd === 'themeallorig' || cmd === 'theme_unlock_all') {
+                if (setGlobalThemeLock('orig', false)) {
+                    msg = 'ok · Global kilit kalktı, herkes kendi temasını seçebilir';
+                    toast('Tema kilidi kaldırıldı — herkes değiştirebilir');
+                } else msg = 'denied · sadece moderatör';
+            } else if (cmd.indexOf('theme') === 0) {
+                const name = cmd.replace(/^theme_?/, '') || 'orig';
+                // kilitliyken sadece mod değiştirebilir (kişisel)
+                if (_globalThemeLock.locked && !isModerator(getCurrentUser())) {
+                    msg = 'locked · Global tema kilitli: ' + (_globalThemeLock.theme || '?') + ' (moderatör açana kadar değişmez)';
+                    toast('Tema kilitli: ' + (_globalThemeLock.theme || ''), 'error');
+                } else if (_globalThemeLock.locked && isModerator(getCurrentUser()) && name !== 'all_orig') {
+                    // mod kişisel denese de global kilit baskın; all komutları yukarıda
+                    applyTheme(name, { force: true });
+                    msg = 'ok · tema uygulandı (global kilit hâlâ aktif: ' + _globalThemeLock.theme + ')';
+                } else {
+                    applyTheme(name);
+                    msg = 'ok';
+                }
+            } else if (cmd === 'help' || cmd === '?') {
+                msg = [
+                    'theme_<ad> — kişisel tema (green/blue/red/yellow/pink/purple/black/white/halloween/xmas/turkey)',
+                    'theme_halloween_all — herkese Cadılar Bayramı + kilit (mod)',
+                    'theme_xmas_all — herkese Noel + kilit (mod)',
+                    'theme_turkey_all — herkese TR teması + kilit (mod) [19 Mayıs / 15 Temmuz]',
+                    'theme_all_orig — kilidi kaldır, herkes değiştirebilir (mod)'
+                ].join('\n');
+            } else {
+                msg = 'unknown · help yaz';
+            }
+            if (out) {
+                out.textContent = (out.textContent ? out.textContent + '\n' : '') + '> ' + raw + '\n' + msg;
+            }
+            inp.value = '';
+            inp.focus();
+        }
+
+        function applyTheme(name, opts) {
+            opts = opts || {};
+            // Global kilit varken normal kullanıcı değiştiremez
+            if (!opts.force && _globalThemeLock && _globalThemeLock.locked && !isModerator(getCurrentUser())) {
+                toast('Tema kilitli: ' + (_globalThemeLock.theme || 'global') + ' — moderatör açana kadar değişmez.', 'error');
+                return;
+            }
+            const root = document.documentElement;
+            const themes = getThemeCatalog();
 
             let key = String(name || 'orig').toLowerCase().replace(/^theme_/, '');
+            // all_* komutları applyTheme'e düşmesin
+            if (key.indexOf('all') === 0 || key === 'halloween_all' || key === 'xmas_all' || key === 'turkey_all') {
+                key = key.replace(/_?all$/, '') || 'orig';
+            }
             let t = themes[key] || themes.orig;
 
             root.style.setProperty('--bg-deep', t.bgDeep);
@@ -7660,7 +7866,15 @@
                 '#maintenance-overlay h2{color:' + t.accent + '!important;}' +
                 '#maintenance-overlay p{color:' + t.textMuted + '!important;}';
 
-            try { localStorage.setItem('swordcity_theme', t.key); } catch (e) {}
+            if (!opts.skipSave) {
+                try {
+                    localStorage.setItem('swordcity_theme', t.key);
+                    // kişisel tercih (kilit kalkınca geri dönülsün diye)
+                    if (!_globalThemeLock.locked) {
+                        localStorage.setItem('swordcity_theme_personal', t.key);
+                    }
+                } catch (e) {}
+            }
         }
         function theme_green() { applyTheme('green'); }
         function theme_blue() { applyTheme('blue'); }
@@ -7672,6 +7886,13 @@
         function theme_black() { applyTheme('black'); }
         function theme_white() { applyTheme('white'); }
         function theme_default() { applyTheme('orig'); }
+        function theme_halloween() { applyTheme('halloween'); }
+        function theme_xmas() { applyTheme('xmas'); }
+        function theme_turkey() { applyTheme('turkey'); }
+        function theme_halloween_all() { setGlobalThemeLock('halloween', true); }
+        function theme_xmas_all() { setGlobalThemeLock('xmas', true); }
+        function theme_turkey_all() { setGlobalThemeLock('turkey', true); }
+        function theme_all_orig() { setGlobalThemeLock('orig', false); }
         window.theme_green = theme_green;
         window.theme_blue = theme_blue;
         window.theme_red = theme_red;
@@ -7682,11 +7903,25 @@
         window.theme_black = theme_black;
         window.theme_white = theme_white;
         window.theme_default = theme_default;
+        window.theme_halloween = theme_halloween;
+        window.theme_xmas = theme_xmas;
+        window.theme_turkey = theme_turkey;
+        window.theme_halloween_all = theme_halloween_all;
+        window.theme_xmas_all = theme_xmas_all;
+        window.theme_turkey_all = theme_turkey_all;
+        window.theme_all_orig = theme_all_orig;
         (function () {
             try {
-                const saved = localStorage.getItem('swordcity_theme');
-                if (saved) applyTheme(saved);
+                loadGlobalThemeLockLocal();
+                if (_globalThemeLock.locked && _globalThemeLock.theme) {
+                    applyTheme(_globalThemeLock.theme, { force: true, skipSave: true });
+                } else {
+                    const saved = localStorage.getItem('swordcity_theme_personal') || localStorage.getItem('swordcity_theme');
+                    if (saved) applyTheme(saved, { force: true });
+                }
             } catch (e) {}
+            // Firebase hazır olunca canlı dinle
+            setTimeout(startGlobalThemeListener, 600);
         })();
 
         // ========== MÜZİK AÇ / KAPA ==========
