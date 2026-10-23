@@ -7866,6 +7866,8 @@
                 '#maintenance-overlay h2{color:' + t.accent + '!important;}' +
                 '#maintenance-overlay p{color:' + t.textMuted + '!important;}';
 
+            applyThemeFx(t.key);
+
             if (!opts.skipSave) {
                 try {
                     localStorage.setItem('swordcity_theme', t.key);
@@ -7876,6 +7878,152 @@
                 } catch (e) {}
             }
         }
+
+        // Noel kar / ağaç · Cadılar balkabağı / turuncu-siyah atmosfer
+        function applyThemeFx(themeKey) {
+            const key = String(themeKey || '').toLowerCase();
+            let layer = document.getElementById('theme-fx-layer');
+            if (layer) layer.remove();
+            let styleFx = document.getElementById('theme-fx-style');
+            if (styleFx) styleFx.remove();
+
+            if (key !== 'xmas' && key !== 'noel' && key !== 'halloween' && key !== 'cadilar') {
+                return;
+            }
+
+            styleFx = document.createElement('style');
+            styleFx.id = 'theme-fx-style';
+            layer = document.createElement('div');
+            layer.id = 'theme-fx-layer';
+            layer.setAttribute('aria-hidden', 'true');
+
+            if (key === 'xmas' || key === 'noel') {
+                styleFx.textContent = `
+                    #theme-fx-layer{pointer-events:none;position:fixed;inset:0;z-index:90;overflow:hidden;}
+                    #theme-fx-layer .snowflake{
+                        position:absolute;top:-12px;color:#fff;text-shadow:0 0 6px rgba(255,255,255,0.9);
+                        animation:sc-snow linear infinite;opacity:0.85;user-select:none;
+                    }
+                    @keyframes sc-snow{
+                        0%{transform:translateY(-10px) translateX(0) rotate(0deg);opacity:0;}
+                        10%{opacity:0.9;}
+                        100%{transform:translateY(105vh) translateX(40px) rotate(360deg);opacity:0.3;}
+                    }
+                    #theme-fx-layer .xmas-tree{
+                        position:fixed;bottom:8px;font-size:42px;filter:drop-shadow(0 0 10px rgba(46,125,50,0.7));
+                        animation:sc-tree-sway 3.5s ease-in-out infinite;z-index:91;
+                    }
+                    #theme-fx-layer .xmas-tree.left{left:6px;}
+                    #theme-fx-layer .xmas-tree.right{right:6px;animation-delay:0.8s;}
+                    @keyframes sc-tree-sway{
+                        0%,100%{transform:rotate(-4deg);}
+                        50%{transform:rotate(4deg);}
+                    }
+                    #theme-fx-layer .xmas-star{
+                        position:fixed;top:8px;right:14px;font-size:28px;
+                        animation:sc-star-twinkle 1.6s ease-in-out infinite;z-index:91;
+                    }
+                    @keyframes sc-star-twinkle{
+                        0%,100%{opacity:0.55;transform:scale(0.9);}
+                        50%{opacity:1;transform:scale(1.15);}
+                    }
+                    #theme-fx-layer .xmas-lights{
+                        position:fixed;top:0;left:0;right:0;height:6px;z-index:91;
+                        background:repeating-linear-gradient(90deg,
+                            #e53935 0 12px,#2e7d32 12px 24px,#ffd54f 24px 36px,#e53935 36px 48px);
+                        opacity:0.85;box-shadow:0 0 12px rgba(229,57,53,0.5);
+                    }
+                `;
+                let snowHtml = '';
+                const flakes = ['❄', '❅', '❆', '•', '✦'];
+                for (let i = 0; i < 48; i++) {
+                    const left = (Math.random() * 100).toFixed(1);
+                    const size = (10 + Math.random() * 16).toFixed(0);
+                    const dur = (6 + Math.random() * 10).toFixed(1);
+                    const delay = (-Math.random() * 12).toFixed(1);
+                    const flake = flakes[i % flakes.length];
+                    snowHtml += '<span class="snowflake" style="left:' + left + '%;font-size:' + size +
+                        'px;animation-duration:' + dur + 's;animation-delay:' + delay + 's;">' + flake + '</span>';
+                }
+                layer.innerHTML =
+                    '<div class="xmas-lights"></div>' +
+                    '<div class="xmas-tree left">🎄</div>' +
+                    '<div class="xmas-tree right">🎄</div>' +
+                    '<div class="xmas-star">⭐</div>' +
+                    snowHtml;
+            } else if (key === 'halloween' || key === 'cadilar') {
+                styleFx.textContent = `
+                    #theme-fx-layer{pointer-events:none;position:fixed;inset:0;z-index:90;overflow:hidden;}
+                    #theme-fx-layer .hw-fog{
+                        position:absolute;inset:0;
+                        background:
+                            radial-gradient(ellipse at 20% 80%, rgba(255,107,0,0.12) 0%, transparent 45%),
+                            radial-gradient(ellipse at 80% 70%, rgba(80,0,0,0.25) 0%, transparent 50%),
+                            radial-gradient(ellipse at 50% 100%, rgba(0,0,0,0.45) 0%, transparent 55%);
+                        animation:sc-fog-pulse 8s ease-in-out infinite;
+                    }
+                    @keyframes sc-fog-pulse{
+                        0%,100%{opacity:0.7;}
+                        50%{opacity:1;}
+                    }
+                    #theme-fx-layer .pumpkin{
+                        position:fixed;bottom:4px;font-size:36px;
+                        filter:drop-shadow(0 0 12px rgba(255,107,0,0.65));
+                        animation:sc-pump-bob 2.8s ease-in-out infinite;z-index:91;
+                    }
+                    #theme-fx-layer .pumpkin.p1{left:8px;}
+                    #theme-fx-layer .pumpkin.p2{left:18%;animation-delay:0.4s;font-size:28px;}
+                    #theme-fx-layer .pumpkin.p3{right:12%;animation-delay:0.9s;font-size:32px;}
+                    #theme-fx-layer .pumpkin.p4{right:6px;animation-delay:1.3s;}
+                    @keyframes sc-pump-bob{
+                        0%,100%{transform:translateY(0) rotate(-3deg);}
+                        50%{transform:translateY(-8px) rotate(3deg);}
+                    }
+                    #theme-fx-layer .bat{
+                        position:absolute;font-size:22px;opacity:0.75;
+                        animation:sc-bat-fly linear infinite;z-index:91;
+                    }
+                    @keyframes sc-bat-fly{
+                        0%{transform:translate(-10vw, 20vh) scaleX(1);}
+                        50%{transform:translate(50vw, 8vh) scaleX(-1);}
+                        100%{transform:translate(110vw, 25vh) scaleX(1);}
+                    }
+                    #theme-fx-layer .spider{
+                        position:fixed;top:0;font-size:20px;z-index:91;
+                        animation:sc-spider-drop 4s ease-in-out infinite;
+                    }
+                    #theme-fx-layer .spider.s1{left:22%;}
+                    #theme-fx-layer .spider.s2{left:72%;animation-delay:1.2s;}
+                    @keyframes sc-spider-drop{
+                        0%,100%{transform:translateY(0);}
+                        50%{transform:translateY(28px);}
+                    }
+                    #theme-fx-layer .hw-corner{
+                        position:fixed;top:6px;font-size:26px;z-index:91;opacity:0.9;
+                        filter:drop-shadow(0 0 8px rgba(255,107,0,0.5));
+                    }
+                    #theme-fx-layer .hw-corner.left{left:8px;}
+                    #theme-fx-layer .hw-corner.right{right:8px;}
+                `;
+                layer.innerHTML =
+                    '<div class="hw-fog"></div>' +
+                    '<div class="hw-corner left">🎃</div>' +
+                    '<div class="hw-corner right">🦇</div>' +
+                    '<div class="pumpkin p1">🎃</div>' +
+                    '<div class="pumpkin p2">🎃</div>' +
+                    '<div class="pumpkin p3">🎃</div>' +
+                    '<div class="pumpkin p4">🎃</div>' +
+                    '<div class="spider s1">🕷</div>' +
+                    '<div class="spider s2">🕷</div>' +
+                    '<span class="bat" style="animation-duration:14s;top:12%;">🦇</span>' +
+                    '<span class="bat" style="animation-duration:18s;top:28%;animation-delay:-4s;font-size:18px;">🦇</span>' +
+                    '<span class="bat" style="animation-duration:12s;top:45%;animation-delay:-7s;font-size:26px;">🦇</span>';
+            }
+
+            document.head.appendChild(styleFx);
+            document.body.appendChild(layer);
+        }
+
         function theme_green() { applyTheme('green'); }
         function theme_blue() { applyTheme('blue'); }
         function theme_red() { applyTheme('red'); }
