@@ -7096,46 +7096,123 @@
 
         function applyTheme(name) {
             const root = document.documentElement;
+            let p;
             if (name === 'green' || name === 'theme_green') {
-                root.style.setProperty('--bg-deep', '#00140a');
-                root.style.setProperty('--bg-panel', '#002216');
-                root.style.setProperty('--bg-card', '#00301f');
-                root.style.setProperty('--accent', '#00e676');
-                root.style.setProperty('--accent-soft', '#69f0ae');
-                root.style.setProperty('--accent-glow', 'rgba(0, 230, 118, 0.45)');
-                root.style.setProperty('--border', 'rgba(0, 230, 118, 0.35)');
-                root.style.setProperty('--shadow', '0 0 40px rgba(0, 230, 118, 0.25)');
-                root.style.setProperty('--text', '#e6fff0');
-                root.style.setProperty('--text-muted', '#9cc9b0');
-                try { localStorage.setItem('swordcity_theme', 'green'); } catch (e) {}
-                return;
+                p = {
+                    key: 'green',
+                    bgDeep: '#00140a', bgPanel: '#002216', bgCard: '#00301f',
+                    accent: '#00e676', accentSoft: '#69f0ae',
+                    accentGlow: 'rgba(0, 230, 118, 0.45)', rgb: '0, 230, 118',
+                    border: 'rgba(0, 230, 118, 0.35)',
+                    shadow: '0 0 40px rgba(0, 230, 118, 0.25)',
+                    text: '#e6fff0', textMuted: '#9cc9b0',
+                    bodyGrad: 'radial-gradient(ellipse at top, #00301a 0%, #00140a 55%, #000805 100%)',
+                    titleBar: 'linear-gradient(90deg, #001208, #002216, #001208)',
+                    shopGrad: 'linear-gradient(180deg, #00e676, #00a854)',
+                    shopText: '#00140a',
+                    authLogo: 'linear-gradient(145deg, #004020, #002216)',
+                    headerGlow: 'radial-gradient(circle, rgba(0,230,118,0.12) 0%, transparent 70%)',
+                    panelA: 'rgba(0, 34, 22, 0.92)'
+                };
+            } else if (name === 'pink' || name === 'theme_pink') {
+                p = {
+                    key: 'pink',
+                    bgDeep: '#14000a', bgPanel: '#220016', bgCard: '#30001f',
+                    accent: '#ff4da6', accentSoft: '#ff8fc7',
+                    accentGlow: 'rgba(255, 77, 166, 0.45)', rgb: '255, 77, 166',
+                    border: 'rgba(255, 77, 166, 0.35)',
+                    shadow: '0 0 40px rgba(255, 77, 166, 0.25)',
+                    text: '#ffe6f4', textMuted: '#c99cb8',
+                    bodyGrad: 'radial-gradient(ellipse at top, #30001a 0%, #14000a 55%, #0a0005 100%)',
+                    titleBar: 'linear-gradient(90deg, #12000c, #220016, #12000c)',
+                    shopGrad: 'linear-gradient(180deg, #ff4da6, #c2185b)',
+                    shopText: '#1a0010',
+                    authLogo: 'linear-gradient(145deg, #400028, #220016)',
+                    headerGlow: 'radial-gradient(circle, rgba(255,77,166,0.12) 0%, transparent 70%)',
+                    panelA: 'rgba(34, 0, 22, 0.92)'
+                };
+            } else {
+                p = {
+                    key: 'orig',
+                    bgDeep: '#0a0014', bgPanel: '#160022', bgCard: '#1f0030',
+                    accent: '#ff00cc', accentSoft: '#ff66e0',
+                    accentGlow: 'rgba(255, 0, 204, 0.45)', rgb: '255, 0, 204',
+                    border: 'rgba(255, 0, 204, 0.35)',
+                    shadow: '0 0 40px rgba(255, 0, 204, 0.25)',
+                    text: '#f0e6ff', textMuted: '#b89cc9',
+                    bodyGrad: 'radial-gradient(ellipse at top, #1a0030 0%, #0a0014 55%, #05000c 100%)',
+                    titleBar: 'linear-gradient(90deg, #12001c, #1a0028, #12001c)',
+                    shopGrad: 'linear-gradient(180deg, #ff00cc, #aa00ff)',
+                    shopText: '#1a001f',
+                    authLogo: 'linear-gradient(145deg, #2a0040, #1a0028)',
+                    headerGlow: 'radial-gradient(circle, rgba(255,0,204,0.1) 0%, transparent 70%)',
+                    panelA: 'rgba(22, 0, 34, 0.92)'
+                };
             }
-            if (name === 'pink' || name === 'theme_pink') {
-                root.style.setProperty('--bg-deep', '#14000a');
-                root.style.setProperty('--bg-panel', '#220016');
-                root.style.setProperty('--bg-card', '#30001f');
-                root.style.setProperty('--accent', '#ff4da6');
-                root.style.setProperty('--accent-soft', '#ff8fc7');
-                root.style.setProperty('--accent-glow', 'rgba(255, 77, 166, 0.45)');
-                root.style.setProperty('--border', 'rgba(255, 77, 166, 0.35)');
-                root.style.setProperty('--shadow', '0 0 40px rgba(255, 77, 166, 0.25)');
-                root.style.setProperty('--text', '#ffe6f4');
-                root.style.setProperty('--text-muted', '#c99cb8');
-                try { localStorage.setItem('swordcity_theme', 'pink'); } catch (e) {}
-                return;
+
+            root.style.setProperty('--bg-deep', p.bgDeep);
+            root.style.setProperty('--bg-panel', p.bgPanel);
+            root.style.setProperty('--bg-card', p.bgCard);
+            root.style.setProperty('--accent', p.accent);
+            root.style.setProperty('--accent-soft', p.accentSoft);
+            root.style.setProperty('--accent-glow', p.accentGlow);
+            root.style.setProperty('--border', p.border);
+            root.style.setProperty('--shadow', p.shadow);
+            root.style.setProperty('--text', p.text);
+            root.style.setProperty('--text-muted', p.textMuted);
+
+            let styleEl = document.getElementById('theme-full-override');
+            if (!styleEl) {
+                styleEl = document.createElement('style');
+                styleEl.id = 'theme-full-override';
+                document.head.appendChild(styleEl);
             }
-            // orig / original
-            root.style.setProperty('--bg-deep', '#0a0014');
-            root.style.setProperty('--bg-panel', '#160022');
-            root.style.setProperty('--bg-card', '#1f0030');
-            root.style.setProperty('--accent', '#ff00cc');
-            root.style.setProperty('--accent-soft', '#ff66e0');
-            root.style.setProperty('--accent-glow', 'rgba(255, 0, 204, 0.45)');
-            root.style.setProperty('--border', 'rgba(255, 0, 204, 0.35)');
-            root.style.setProperty('--shadow', '0 0 40px rgba(255, 0, 204, 0.25)');
-            root.style.setProperty('--text', '#f0e6ff');
-            root.style.setProperty('--text-muted', '#b89cc9');
-            try { localStorage.setItem('swordcity_theme', 'orig'); } catch (e) {}
+            const r = p.rgb;
+            styleEl.textContent =
+                'body{background:' + p.bodyGrad + '!important;color:' + p.text + '!important;}' +
+                '.title-bar{background:' + p.titleBar + '!important;border-bottom-color:' + p.border + '!important;}' +
+                '.shop-tab{background:' + p.shopGrad + '!important;color:' + p.shopText + '!important;box-shadow:4px 0 24px rgba(' + r + ',0.35)!important;}' +
+                '.auth-logo,.logo-wrapper{background:' + p.authLogo + '!important;border-color:' + p.accent + '!important;box-shadow:0 0 30px ' + p.accentGlow + '!important;}' +
+                '.header::before{background:' + p.headerGlow + '!important;}' +
+                '.game-title,.auth-title,.modal-title{color:' + p.accent + '!important;text-shadow:0 0 28px ' + p.accentGlow + '!important;}' +
+                '.folder:hover{border-color:' + p.accent + '!important;box-shadow:0 12px 40px rgba(' + r + ',0.2)!important;}' +
+                '.folder::before{background:linear-gradient(180deg,rgba(' + r + ',0.08),transparent)!important;}' +
+                '.folder-icon{filter:drop-shadow(0 0 12px rgba(' + r + ',0.4))!important;}' +
+                '.primary-btn,.auth-tab.active{background:' + p.accent + '!important;color:' + p.shopText + '!important;box-shadow:0 4px 20px rgba(' + r + ',0.35)!important;}' +
+                '.primary-btn:hover{background:' + p.accentSoft + '!important;}' +
+                '.mod-btn:hover,.action-btn:hover{background:' + p.accent + '!important;color:' + p.shopText + '!important;border-color:' + p.accent + '!important;}' +
+                '.user-badge{color:' + p.accentSoft + '!important;background:rgba(' + r + ',0.12)!important;border-color:' + p.border + '!important;}' +
+                '.notif-btn{background:rgba(' + r + ',0.1)!important;border-color:' + p.border + '!important;}' +
+                '.notif-btn:hover{background:rgba(' + r + ',0.25)!important;border-color:' + p.accent + '!important;}' +
+                '.toast{border-color:' + p.accent + '!important;}' +
+                '.modal-content,.auth-box,.shop-drawer{background:' + p.bgPanel + '!important;border-color:' + p.border + '!important;box-shadow:' + p.shadow + '!important;}' +
+                '.folder,.info-card,.shop-card,.achievement-item{border-color:' + p.border + '!important;}' +
+                '.folder,.shop-card{background:' + p.bgCard + '!important;}' +
+                '.info-card{background:rgba(0,0,0,0.3)!important;border-color:' + p.border + '!important;}' +
+                '#music-player{background:' + p.panelA + '!important;border-color:' + p.border + '!important;box-shadow:0 0 24px rgba(' + r + ',0.2)!important;}' +
+                '#music-player button,#music-player #mp-collapse-btn{background:rgba(' + r + ',0.2)!important;border-color:' + p.border + '!important;color:' + p.text + '!important;}' +
+                '#music-player button:active{background:rgba(' + r + ',0.4)!important;}' +
+                'input,select,textarea{border-color:' + p.border + '!important;color:' + p.text + '!important;}' +
+                'input:focus,select:focus,textarea:focus{border-color:' + p.accent + '!important;box-shadow:0 0 0 3px rgba(' + r + ',0.15)!important;}' +
+                '.section-label::after{background:linear-gradient(90deg,' + p.border + ',transparent)!important;}' +
+                '.auth-box::before{background:linear-gradient(90deg,transparent,' + p.accent + ',transparent)!important;}' +
+                '.case-pointer{background:' + p.accent + '!important;box-shadow:0 0 12px ' + p.accentGlow + '!important;}' +
+                '.case-slot.win{border-color:' + p.accent + '!important;box-shadow:0 0 18px ' + p.accentGlow + '!important;}' +
+                '.case-slot,.case-roulette-wrap{border-color:' + p.border + '!important;}' +
+                '.shop-drawer-header{background:linear-gradient(90deg,rgba(' + r + ',0.12),transparent)!important;border-bottom-color:' + p.border + '!important;}' +
+                '.mod-btn,.action-btn,.back-btn{border-color:' + p.border + '!important;}' +
+                '.close-x{border-color:rgba(255,61,113,0.4)!important;}' +
+                '.balance-big{color:var(--success)!important;}' +
+                '.info-row .label,.folder-desc,.auth-sub,.section-label,.mp-title{color:' + p.textMuted + '!important;}' +
+                '.info-card h4,.shop-card h4{color:' + p.accentSoft + '!important;}' +
+                '::-webkit-scrollbar-thumb{background:' + p.border + '!important;}' +
+                '.user-list-item:hover{border-color:' + p.border + '!important;background:rgba(' + r + ',0.08)!important;}' +
+                '.achievement-item.unlocked{border-color:rgba(0,230,118,0.3)!important;}' +
+                '.link-preview-card,.chat-reaction{border-color:' + p.border + '!important;}' +
+                '#maintenance-overlay .maint-box{background:' + p.bgPanel + '!important;border-color:' + p.border + '!important;box-shadow:' + p.shadow + '!important;}' +
+                '#maintenance-overlay h2{color:' + p.accent + '!important;}';
+
+            try { localStorage.setItem('swordcity_theme', p.key); } catch (e) {}
         }
         function theme_green() { applyTheme('green'); }
         function theme_pink() { applyTheme('pink'); }
