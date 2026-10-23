@@ -1188,7 +1188,7 @@
         let _supportCache = [];
 
         const SESSION_KEY = 'swordcity_session_v3';
-        const TRADE_MIN_LEVEL = 10;
+        const TRADE_MIN_LEVEL = 3;
         const MOD_USER = 'ardakilic5534';
         const MOD_PASSWORD = 'mod123';
 
@@ -2527,7 +2527,9 @@
                 const mine = m.from === me;
                 const mid = m.id || ('idx_' + idx);
                 const replyBlock = m.replyTo ? `<div style="font-size:11px;color:var(--text-muted);border-left:2px solid var(--accent);padding-left:8px;margin-bottom:4px;opacity:0.85;">↩️ ${escapeHtml((m.replyTo.text || '').slice(0, 60))}</div>` : '';
-                const emojiReaction = m.emoji ? `<span style="margin-left:6px;">${escapeHtml(m.emoji)}</span>` : '';
+                const emojiReaction = m.emoji ? `<div style="position:absolute;bottom:-10px;${mine ? 'right:8px;' : 'left:8px;'}background:rgba(30,0,40,0.95);border:1px solid var(--border);border-radius:12px;padding:2px 6px;font-size:14px;box-shadow:0 2px 8px rgba(0,0,0,0.4);">${escapeHtml(m.emoji)}</div>` : '';
+                const imgBlock = m.image ? `<div style="margin-bottom:6px;"><img src="${escapeHtml(m.image)}" alt="" style="max-width:100%;max-height:180px;border-radius:10px;display:block;" onerror="this.style.display='none'"></div>` : '';
+                const textHtml = formatChatText(m.text || '');
                 const actions = `
                     <div style="display:flex;gap:6px;margin-top:6px;justify-content:${mine ? 'flex-end' : 'flex-start'};flex-wrap:wrap;">
                         <button onclick="setReplyToMessage('${escapeHtml(mid)}')" style="background:none;border:none;color:var(--text-muted);font-size:11px;cursor:pointer;padding:0;">↩️ Yanıtla</button>
@@ -2535,17 +2537,73 @@
                         ${mine ? `<button onclick="deleteChatMessage('${escapeHtml(mid)}')" style="background:none;border:none;color:var(--danger);font-size:11px;cursor:pointer;padding:0;">🗑️ Sil</button>` : ''}
                     </div>`;
                 msgHtml += `
-                    <div style="display:flex;justify-content:${mine ? 'flex-end' : 'flex-start'};margin-bottom:8px;" data-msg-id="${escapeHtml(mid)}">
-                        <div style="max-width:80%;padding:10px 14px;border-radius:14px;background:${mine ? 'rgba(255,0,204,0.25)' : 'rgba(0,0,0,0.35)'};border:1px solid var(--border);">
+                    <div style="display:flex;justify-content:${mine ? 'flex-end' : 'flex-start'};margin-bottom:${m.emoji ? '18px' : '8px'};" data-msg-id="${escapeHtml(mid)}">
+                        <div style="max-width:80%;padding:10px 14px;border-radius:14px;background:${mine ? 'rgba(255,0,204,0.25)' : 'rgba(0,0,0,0.35)'};border:1px solid var(--border);position:relative;">
                             ${replyBlock}
-                            <div style="font-size:13px;line-height:1.4;">${escapeHtml(m.text || '')}${emojiReaction}</div>
+                            ${imgBlock}
+                            <div style="font-size:13px;line-height:1.4;">${textHtml}</div>
                             <div style="font-size:10px;color:var(--text-muted);margin-top:4px;text-align:right;">${m.at ? new Date(m.at).toLocaleTimeString('tr-TR', {hour:'2-digit',minute:'2-digit'}) : ''}</div>
+                            ${emojiReaction}
                             ${actions}
                         </div>
                     </div>
                 `;
             });
             return msgHtml;
+        }
+
+        function formatChatText(text) {
+            if (!text) return '';
+            const urlRe = /(https?:\/\/[^\s]+)/g;
+            const parts = String(text).split(urlRe);
+            let out = '';
+            parts.forEach(function(part) {
+                if (urlRe.test(part)) {
+                    urlRe.lastIndex = 0;
+                    const safe = escapeHtml(part);
+                    const preview = getLinkPreviewHtml(part);
+                    out += preview || `<a href="#" onclick="confirmExternalLink('${safe.replace(/'/g, "\\'")}');return false;" style="color:var(--accent-soft);word-break:break-all;">${safe}</a>`;
+                } else {
+                    out += escapeHtml(part);
+                }
+            });
+            return out;
+        }
+
+        function getLinkPreviewHtml(url) {
+            try {
+                const u = new URL(url);
+                const host = (u.hostname || '').replace(/^www\./, '').toLowerCase();
+                const known = {
+                    'youtube.com': { name: 'YouTube', color: '#ff0000', icon: '▶️' },
+                    'youtu.be': { name: 'YouTube', color: '#ff0000', icon: '▶️' },
+                    'facebook.com': { name: 'Facebook', color: '#1877f2', icon: '📘' },
+                    'fb.com': { name: 'Facebook', color: '#1877f2', icon: '📘' },
+                    'instagram.com': { name: 'Instagram', color: '#e1306c', icon: '📷' },
+                    'twitter.com': { name: 'X / Twitter', color: '#1da1f2', icon: '🐦' },
+                    'x.com': { name: 'X', color: '#fff', icon: '𝕏' },
+                    'tiktok.com': { name: 'TikTok', color: '#69c9d0', icon: '🎵' },
+                    'discord.com': { name: 'Discord', color: '#5865f2', icon: '💬' },
+                    'discord.gg': { name: 'Discord', color: '#5865f2', icon: '💬' }
+                };
+                const info = known[host] || (host.endsWith('.youtube.com') ? known['youtube.com'] : null);
+                if (!info) return null;
+                const safe = escapeHtml(url);
+                return `<a href="#" onclick="confirmExternalLink('${safe.replace(/'/g, "\\'")}');return false;" style="display:block;text-decoration:none;margin:6px 0;border-radius:12px;overflow:hidden;border:1px solid var(--border);background:rgba(0,0,0,0.35);">
+                    <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;">
+                        <div style="width:44px;height:44px;border-radius:10px;background:#fff;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;">${info.icon}</div>
+                        <div style="min-width:0;flex:1;">
+                            <div style="font-weight:700;color:${info.color};font-size:14px;">${info.name}</div>
+                            <div style="font-size:11px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(host.toUpperCase())}</div>
+                        </div>
+                    </div>
+                </a>`;
+            } catch (e) { return null; }
+        }
+
+        function confirmExternalLink(url) {
+            const ok = confirm('⚠️ Bu site bizim sitemiz değildir.\n\nŞüpheli bir site olabilir. Yine de açmak istiyor musun?\n\n' + url);
+            if (ok) window.open(url, '_blank', 'noopener,noreferrer');
         }
 
         function refreshOpenChatMessages(other) {
@@ -3472,7 +3530,47 @@
                     </div>
                 </div>
                 <button class="primary-btn" onclick="toggleInventoryPrivacy()">${user.inventoryPrivate ? '🔓 Envanteri Herkese Aç' : '🔒 Envanteri Gizle'}</button>
+                <button class="back-btn" onclick="openChangePassword()" style="margin-top:8px;">🔑 Şifre Değiştir</button>
             `);
+        }
+
+        function openChangePassword() {
+            openModal('🔑 Şifre Değiştir', `
+                <div class="form-group">
+                    <label>Mevcut şifre</label>
+                    <input type="password" id="cp-old" placeholder="Mevcut şifren">
+                </div>
+                <div class="form-group">
+                    <label>Yeni şifre</label>
+                    <input type="password" id="cp-new" placeholder="En az 4 karakter">
+                </div>
+                <div class="form-group">
+                    <label>Yeni şifre (tekrar)</label>
+                    <input type="password" id="cp-new2" placeholder="Tekrar gir">
+                </div>
+                <button class="primary-btn" onclick="doChangePassword()">Kaydet</button>
+                <button class="back-btn" onclick="showProfile()">← Profil</button>
+            `);
+        }
+
+        function doChangePassword() {
+            const me = getCurrentUser();
+            if (!me) return;
+            const oldP = (document.getElementById('cp-old') && document.getElementById('cp-old').value) || '';
+            const newP = (document.getElementById('cp-new') && document.getElementById('cp-new').value) || '';
+            const newP2 = (document.getElementById('cp-new2') && document.getElementById('cp-new2').value) || '';
+            const users = loadUsers();
+            if (!users[me]) { toast('Hesap bulunamadı.', 'error'); return; }
+            if (users[me].password !== oldP) { toast('Mevcut şifre yanlış.', 'error'); return; }
+            if (newP.length < 4) { toast('Yeni şifre en az 4 karakter olmalı.', 'error'); return; }
+            if (newP !== newP2) { toast('Yeni şifreler eşleşmiyor.', 'error'); return; }
+            users[me].password = newP;
+            // createdAt asla ezilmesin
+            if (!users[me].createdAt) users[me].createdAt = new Date().toISOString();
+            saveUser(me, users[me]);
+            if (firebaseReady) fbSet('users/' + me, users[me]);
+            toast('Şifre güncellendi.');
+            showProfile();
         }
 
         function showAchievements() {
@@ -3667,12 +3765,13 @@
         }
 
         function normalizeItem(item) {
-            if (typeof item === 'string') return { name: item, image: '', rarity: 'siradan', category: 'karakter' };
+            if (typeof item === 'string') return { name: item, image: '', rarity: 'siradan', category: 'karakter', marketValue: 0 };
             return {
                 name: (item && item.name) ? item.name : 'İsimsiz',
                 image: (item && item.image) ? item.image : '',
                 rarity: normalizeRarity(item && item.rarity),
-                category: normalizeCategory(item && item.category)
+                category: normalizeCategory(item && item.category),
+                marketValue: (item && typeof item.marketValue === 'number') ? item.marketValue : (item && item.marketValue ? Number(item.marketValue) || 0 : 0)
             };
         }
 
@@ -3704,37 +3803,62 @@
         }
 
         function shareCharacterEmoji(index) {
+            shareCharacterToChat(index);
+        }
+
+        function shareCharacterToChat(index) {
             const me = getCurrentUser();
             const users = loadUsers();
             if (!users[me] || !users[me].inventory || !users[me].inventory[index]) {
-                toast('Karakter bulunamadı.', 'error');
+                toast('Eşya bulunamadı.', 'error');
                 return;
             }
             const it = normalizeItem(users[me].inventory[index]);
-            // Karakter adından basit emoji üret / veya isim + ✨
-            const name = it.name || 'Karakter';
-            const shareText = '✨ ' + name + ' ✨ (Sword City karakterim)';
-            // Panoya kopyala
-            if (navigator.clipboard && navigator.clipboard.writeText) {
-                navigator.clipboard.writeText(shareText).then(function() {
-                    toast('Karakter emojisi panoya kopyalandı! Sohbette yapıştır.');
-                }).catch(function() {
-                    prompt('Kopyala:', shareText);
-                });
-            } else {
-                prompt('Kopyala:', shareText);
+            const friends = (users[me].friends || []).slice();
+            if (!friends.length) {
+                toast('Paylaşmak için önce arkadaş ekle.', 'error');
+                return;
             }
-            // Sosyal sohbet listesine yönlendir (isterse paylaşsın)
-            openModal('✨ Karakter Emojisi', `
+            let opts = friends.map(function(f) {
+                return `<button class="primary-btn" style="margin-bottom:8px;" onclick="sendItemShareTo('${escapeHtml(f)}', ${index})">${formatDisplayName(f)}</button>`;
+            }).join('');
+            openModal('✨ DM ile Paylaş', `
                 <div class="info-card" style="text-align:center;margin-bottom:14px;">
-                    <div style="font-size:42px;margin-bottom:8px;">⚔️</div>
-                    <div style="font-size:18px;font-weight:700;color:var(--accent-soft);">${escapeHtml(name)}</div>
-                    <div style="margin-top:10px;padding:10px;background:rgba(0,0,0,0.3);border-radius:10px;font-size:14px;word-break:break-word;">${escapeHtml(shareText)}</div>
+                    ${it.image ? `<img src="${escapeHtml(it.image)}" style="width:100px;height:100px;object-fit:cover;border-radius:14px;margin-bottom:8px;" onerror="this.style.display='none'">` : '<div style="font-size:42px;margin-bottom:8px;">⚔️</div>'}
+                    <div style="font-size:16px;font-weight:700;color:var(--accent-soft);">${escapeHtml(it.name)}</div>
+                    ${it.marketValue > 0 ? `<div style="color:#ffd54f;font-size:12px;margin-top:4px;">💰 $${Number(it.marketValue).toLocaleString('tr-TR')}</div>` : ''}
                 </div>
-                <p style="color:var(--text-muted);font-size:13px;text-align:center;margin-bottom:12px;">Metin panoya kopyalandı. Arkadaşına sohbette yapıştırabilirsin.</p>
-                <button class="primary-btn" onclick="showChatList()">💬 Sohbete Git & Yapıştır</button>
+                <p style="color:var(--text-muted);font-size:13px;text-align:center;margin-bottom:12px;">Kime göndermek istiyorsun?</p>
+                ${opts}
                 <button class="back-btn" onclick="showInventory()">← Envantere Dön</button>
             `);
+        }
+
+        function sendItemShareTo(other, index) {
+            const me = getCurrentUser();
+            const users = loadUsers();
+            if (!users[me] || !users[me].inventory || !users[me].inventory[index]) {
+                toast('Eşya bulunamadı.', 'error');
+                return;
+            }
+            const it = normalizeItem(users[me].inventory[index]);
+            const cid = getChatId(me, other);
+            const chats = loadChats();
+            if (!chats[cid]) chats[cid] = { messages: [] };
+            const msg = {
+                id: 'm_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
+                from: me,
+                text: '✨ ' + it.name + (it.marketValue > 0 ? ' · 💰 $' + Number(it.marketValue).toLocaleString('tr-TR') : ''),
+                image: it.image || '',
+                itemShare: true,
+                at: new Date().toISOString()
+            };
+            chats[cid].messages = chats[cid].messages || [];
+            chats[cid].messages.push(msg);
+            saveChats(chats);
+            pushNotif(other, '✨ ' + me + ' sana bir eşya paylaştı: ' + it.name, 'info');
+            toast('Paylaşıldı → ' + other);
+            openPrivateChat(other);
         }
 
         function showInventory(filterCat) {
@@ -3796,13 +3920,15 @@
                     const imgBlock = it.image
                         ? `<img src="${escapeHtml(it.image)}" alt="${escapeHtml(it.name)}" onclick="openImagePreview('${escapeHtml(it.image).replace(/'/g, "\\'")}', '${escapeHtml(it.name).replace(/'/g, "\\'")}', 'inv')" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:14px;${bStyle}cursor:pointer;background:#0a0014;" onerror="this.style.display='none'">`
                         : `<div style="width:100%;aspect-ratio:1;border-radius:14px;background:rgba(255,0,204,0.1);${bStyle}display:flex;align-items:center;justify-content:center;font-size:42px;">${it.category === 'kart' ? '🃏' : '📦'}</div>`;
+                    const mvTxt = (it.marketValue > 0) ? `<div style="margin-top:4px;color:#ffd54f;font-size:12px;font-weight:600;">💰 Piyasa: $${Number(it.marketValue).toLocaleString('tr-TR')}</div>` : `<div style="margin-top:4px;color:var(--text-muted);font-size:11px;">💰 Piyasa: —</div>`;
                     list += `
                         <div style="background:rgba(0,0,0,0.28);${bStyle}border-radius:16px;padding:10px;text-align:center;">
                             ${imgBlock}
                             <div style="margin-top:10px;font-weight:600;font-size:14px;line-height:1.3;word-break:break-word;color:${nameColor};">${escapeHtml(it.name)}</div>
                             <div style="margin-top:6px;">${rarityBadgeHtml(it.rarity)}</div>
                             <div style="margin-top:4px;">${categoryBadgeHtml(it.category)}</div>
-                            <button onclick="shareCharacterEmoji(${i})" style="margin-top:8px;width:100%;padding:6px;background:rgba(255,0,204,0.15);border:1px solid var(--border);color:var(--accent-soft);border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;">✨ Paylaş</button>
+                            ${mvTxt}
+                            <button onclick="shareCharacterToChat(${i})" style="margin-top:8px;width:100%;padding:6px;background:rgba(255,0,204,0.15);border:1px solid var(--border);color:var(--accent-soft);border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;">✨ Paylaş (DM)</button>
                             <button onclick="deleteInventoryItem(${i})" style="margin-top:6px;width:100%;padding:6px;background:rgba(255,61,113,0.2);border:1px solid rgba(255,61,113,0.4);color:#ff3d71;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;">🗑 Sil</button>
                         </div>
                     `;
@@ -5843,7 +5969,7 @@
             const it = normalizeItem(inv[index]);
             const img = prompt('Yeni fotoğraf URL\'si\n\nMevcut: ' + (it.image || '(yok)') + '\n\nBoş bırakırsan foto silinir.');
             if (img === null) return;
-            inv[index] = { name: it.name, image: (img || '').trim(), rarity: it.rarity || 'siradan', category: it.category || 'karakter' };
+            inv[index] = { name: it.name, image: (img || '').trim(), rarity: it.rarity || 'siradan', category: it.category || 'karakter', marketValue: it.marketValue || 0 };
             users[username].inventory = inv;
             saveUsers(users);
             toast('Foto güncellendi.');
@@ -5885,7 +6011,7 @@
             const sel = document.getElementById('mod-item-rarity');
             const rarity = normalizeRarity(sel ? sel.value : 'siradan');
             const it = normalizeItem(users[username].inventory[index]);
-            users[username].inventory[index] = { name: it.name, image: it.image, rarity: rarity, category: it.category || 'karakter' };
+            users[username].inventory[index] = { name: it.name, image: it.image, rarity: rarity, category: it.category || 'karakter', marketValue: it.marketValue || 0 };
             saveUsers(users);
             toast('💎 Enderlik: ' + rarityStyle(rarity).label);
             modViewInventory(username);
@@ -5923,10 +6049,47 @@
             const cat = normalizeCategory(sel ? sel.value : 'karakter');
             const it = normalizeItem(users[username].inventory[index]);
             users[username].inventory = users[username].inventory.slice();
-            users[username].inventory[index] = { name: it.name, image: it.image, rarity: it.rarity, category: cat };
+            users[username].inventory[index] = { name: it.name, image: it.image, rarity: it.rarity, category: cat, marketValue: it.marketValue || 0 };
             bumpInvVersion(users[username]);
             saveUser(username, users[username]);
             toast('📁 Kategori: ' + cat);
+            modViewInventory(username);
+        }
+
+        function modSetItemMarketValue(username, index) {
+            if (!isModerator()) {
+                toast('Sadece moderatör.', 'error');
+                return;
+            }
+            const users = loadUsers();
+            if (!users[username] || !users[username].inventory || !users[username].inventory[index]) return;
+            const item = normalizeItem(users[username].inventory[index]);
+            openModal('💰 Piyasa Değeri — ' + escapeHtml(item.name), `
+                <div class="info-card" style="margin-bottom:12px;text-align:center;">
+                    <div style="font-weight:700;margin-bottom:8px;">${escapeHtml(item.name)}</div>
+                    <div style="color:#ffd54f;">Mevcut: $${Number(item.marketValue || 0).toLocaleString('tr-TR')}</div>
+                </div>
+                <div class="form-group">
+                    <label>Yeni piyasa değeri ($)</label>
+                    <input type="number" id="mod-item-mv" min="0" step="1" value="${item.marketValue || 0}" placeholder="0">
+                </div>
+                <button class="primary-btn" onclick="modConfirmSetItemMarketValue('${username}', ${index})">KAYDET</button>
+                <button class="back-btn" onclick="modViewInventory('${username}')">← Geri</button>
+            `);
+        }
+
+        function modConfirmSetItemMarketValue(username, index) {
+            if (!isModerator()) return;
+            const users = loadUsers();
+            if (!users[username] || !users[username].inventory || !users[username].inventory[index]) return;
+            const inp = document.getElementById('mod-item-mv');
+            const val = Math.max(0, Math.floor(Number(inp && inp.value) || 0));
+            const it = normalizeItem(users[username].inventory[index]);
+            users[username].inventory = users[username].inventory.slice();
+            users[username].inventory[index] = { name: it.name, image: it.image, rarity: it.rarity, category: it.category, marketValue: val };
+            bumpInvVersion(users[username]);
+            saveUser(username, users[username]);
+            toast('💰 Piyasa değeri: $' + val.toLocaleString('tr-TR'));
             modViewInventory(username);
         }
 
@@ -5949,17 +6112,20 @@
                     const imgBlock = it.image
                         ? `<img src="${escapeHtml(it.image)}" alt="${escapeHtml(it.name)}" onclick="openImagePreview('${escapeHtml(it.image).replace(/'/g, "\\'")}', '${escapeHtml(it.name).replace(/'/g, "\\'")}', 'mod:${username}')" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:14px;${bStyle}cursor:pointer;background:#0a0014;" onerror="this.style.display='none'">`
                         : `<div style="width:100%;aspect-ratio:1;border-radius:14px;background:rgba(255,0,204,0.1);${bStyle}display:flex;align-items:center;justify-content:center;font-size:42px;">📦</div>`;
+                    const mvLabel = (it.marketValue > 0) ? ('$' + Number(it.marketValue).toLocaleString('tr-TR')) : '—';
                     invHtml += `
                         <div style="background:rgba(0,0,0,0.28);${bStyle}border-radius:16px;padding:10px;text-align:center;">
                             ${imgBlock}
                             <div style="margin-top:10px;font-weight:600;font-size:14px;line-height:1.3;word-break:break-word;color:${nameColor};">${escapeHtml(it.name)}</div>
                             <div style="margin-top:6px;">${rarityBadgeHtml(it.rarity)}</div>
                             <div style="margin-top:4px;">${categoryBadgeHtml(it.category)}</div>
+                            <div style="margin-top:4px;color:#ffd54f;font-size:12px;font-weight:600;">💰 Piyasa: ${mvLabel}</div>
                             <div style="display:flex;gap:6px;justify-content:center;margin-top:10px;flex-wrap:wrap;">
                                 <button onclick="modRenameInventoryItem('${username}', ${i})" style="background:rgba(40,200,120,0.14);border:1px solid rgba(40,200,120,.35);color:var(--success);border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;">✏️ İsim</button>
                                 <button onclick="modEditItemImage('${username}', ${i})" style="background:rgba(255,0,204,0.15);border:1px solid var(--border);color:var(--accent-soft);border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;">📷 Foto</button>
                                 <button onclick="modSetItemRarity('${username}', ${i})" style="background:rgba(255,213,79,0.15);border:1px solid rgba(255,213,79,0.4);color:#ffd54f;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;">💎 Enderlik</button>
                                 <button onclick="modSetItemCategory('${username}', ${i})" style="background:rgba(74,163,255,0.15);border:1px solid rgba(74,163,255,0.4);color:#4aa3ff;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;">📁 Kategori</button>
+                                <button onclick="modSetItemMarketValue('${username}', ${i})" style="background:rgba(255,213,79,0.2);border:1px solid rgba(255,213,79,0.45);color:#ffd54f;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;">💰 Piyasa</button>
                                 <button onclick="modRemoveInventory('${username}', ${i})" style="background:rgba(255,61,113,0.2);border:1px solid rgba(255,61,113,0.4);color:#ff3d71;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;">Sil</button>
                             </div>
                         </div>
