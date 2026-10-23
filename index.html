@@ -1335,6 +1335,11 @@
                     <div class="folder-name">Kasalar</div>
                     <div class="folder-desc">Aç & Kazan</div>
                 </div>
+                <div class="folder" onclick="openFreeGames()">
+                    <div class="folder-icon">🎲</div>
+                    <div class="folder-name">Şans Oyunları</div>
+                    <div class="folder-desc">Ücretsiz kazan</div>
+                </div>
                 <div class="folder" onclick="openSupport()">
                     <div class="folder-icon">📩</div>
                     <div class="folder-name">SWOR Destek</div>
@@ -5018,6 +5023,86 @@
             openTrade();
         }
 
+        // ========== ÜCRETSİZ ŞANS OYUNLARI ==========
+        function openFreeGames() {
+            const me = getCurrentUser();
+            if (!me) { toast('Önce giriş yap.', 'error'); return; }
+            const user = getUser(me) || {};
+            ensureUserFields(user);
+            const today = new Date().toDateString();
+            const lastSpin = user.lastFreeSpin || '';
+            const canSpin = lastSpin !== today;
+            const lastDice = user.lastFreeDice || '';
+            const canDice = lastDice !== today;
+
+            openModal('🎲 Ücretsiz Şans Oyunları', `
+                <div class="info-card" style="margin-bottom:12px;">
+                    <div class="info-row"><span class="label">Bakiyen</span><span class="value" style="color:var(--success);">$${(user.balance || 0).toLocaleString('tr-TR')}</span></div>
+                    <p style="font-size:12px;color:var(--text-muted);margin-top:8px;line-height:1.5;">Her gün ücretsiz 1 çark + 1 zar hakkı. Kazandığın para hesabına eklenir ve kaydedilir.</p>
+                </div>
+                <div class="info-card">
+                    <h4 style="color:var(--accent-soft);margin:0 0 8px;">🎰 Şans Çarkı</h4>
+                    <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">0 / 50 / 100 / 250 / 500 / 1.000 $</p>
+                    <button class="primary-btn" style="width:100%;" ${canSpin ? '' : 'disabled'} onclick="doFreeSpin()">
+                        ${canSpin ? '🎰 Çevir' : 'Bugün hakkın bitti'}
+                    </button>
+                </div>
+                <div class="info-card" style="margin-top:12px;">
+                    <h4 style="color:var(--accent-soft);margin:0 0 8px;">🎲 Zar At</h4>
+                    <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">1–6 × 50 $ (50–300 $)</p>
+                    <button class="primary-btn" style="width:100%;" ${canDice ? '' : 'disabled'} onclick="doFreeDice()">
+                        ${canDice ? '🎲 Zar at' : 'Bugün hakkın bitti'}
+                    </button>
+                </div>
+            `);
+        }
+
+        function doFreeSpin() {
+            const me = getCurrentUser();
+            if (!me) return;
+            const users = loadUsers();
+            if (!users[me]) return;
+            ensureUserFields(users[me]);
+            const today = new Date().toDateString();
+            if (users[me].lastFreeSpin === today) {
+                toast('Bugün zaten çark çevirdin.', 'error');
+                return;
+            }
+            const prizes = [0, 50, 100, 250, 500, 1000];
+            const win = prizes[Math.floor(Math.random() * prizes.length)];
+            users[me].lastFreeSpin = today;
+            users[me].balance = (users[me].balance || 0) + win;
+            saveUsers(users);
+            if (win > 0) {
+                pushNotif(me, '🎰 Şans çarkından +$' + win.toLocaleString('tr-TR'), 'success');
+                toast('🎉 Çark: +$' + win.toLocaleString('tr-TR'));
+            } else {
+                toast('Bu sefer boş geldi. Yarın tekrar dene.');
+            }
+            openFreeGames();
+        }
+
+        function doFreeDice() {
+            const me = getCurrentUser();
+            if (!me) return;
+            const users = loadUsers();
+            if (!users[me]) return;
+            ensureUserFields(users[me]);
+            const today = new Date().toDateString();
+            if (users[me].lastFreeDice === today) {
+                toast('Bugün zaten zar attın.', 'error');
+                return;
+            }
+            const roll = 1 + Math.floor(Math.random() * 6);
+            const win = roll * 50;
+            users[me].lastFreeDice = today;
+            users[me].balance = (users[me].balance || 0) + win;
+            saveUsers(users);
+            pushNotif(me, '🎲 Zar ' + roll + ' geldi → +$' + win.toLocaleString('tr-TR'), 'success');
+            toast('🎲 ' + roll + ' geldi! +$' + win.toLocaleString('tr-TR'));
+            openFreeGames();
+        }
+
         // ========== KASALAR ==========
         function openCases() {
             const cases = loadCases();
@@ -5102,6 +5187,22 @@
             return items[items.length - 1];
         }
 
+        // Eşya herhangi bir oyuncunun envanterinde mi?
+        function findItemOwner(itemName) {
+            if (!itemName) return null;
+            const needle = String(itemName).toLowerCase().trim();
+            const users = loadUsers();
+            for (const uname in users) {
+                const inv = (users[uname] && users[uname].inventory) ? users[uname].inventory : [];
+                for (let i = 0; i < inv.length; i++) {
+                    if (String(inv[i].name || '').toLowerCase().trim() === needle) {
+                        return { username: uname, index: i };
+                    }
+                }
+            }
+            return null;
+        }
+
         function buyAndOpenCase(caseId) {
             const me = getCurrentUser();
             const cases = loadCases();
@@ -5112,6 +5213,15 @@
             }
             if (!c.items || !c.items.length) {
                 toast('Bu kasanın içinde ödül yok.', 'error');
+                return;
+            }
+
+            // Sadece henüz kimsenin envanterinde olmayan ödüller
+            const available = (c.items || []).filter(function(it) {
+                return !findItemOwner(it.name);
+            });
+            if (!available.length) {
+                toast('İçerik yok, daha sonra deneyin.', 'error');
                 return;
             }
 
@@ -5132,11 +5242,21 @@
             users[me].balance -= price;
             saveUsers(users);
 
-            const winner = pickWeightedItem(c.items);
+            const winner = pickWeightedItem(available);
             playCaseOpenAnimation(c, winner, function() {
                 const users2 = loadUsers();
                 ensureUserFields(users2[me]);
                 if (!users2[me].inventory) users2[me].inventory = [];
+
+                // Animasyon sırasında başka biri almış olabilir → para iade, eşya gitmesin
+                const stillOwned = findItemOwner(winner.name);
+                if (stillOwned) {
+                    users2[me].balance = (users2[me].balance || 0) + price;
+                    saveUsers(users2);
+                    toast('Bu eşya zaten sahipli. Paran iade edildi. Daha sonra dene.', 'error');
+                    return;
+                }
+
                 users2[me].inventory.push({ name: winner.name, image: winner.image || '', rarity: normalizeRarity(winner.rarity) });
                 saveUsers(users2);
                 pushNotif(me, '📦 "' + c.name + '" kasasından çıktı: ' + winner.name, 'success');
