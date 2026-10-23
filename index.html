@@ -1338,7 +1338,12 @@
                 <div class="folder" onclick="openFreeGames()">
                     <div class="folder-icon">🎲</div>
                     <div class="folder-name">Şans Oyunları</div>
-                    <div class="folder-desc">Ücretsiz kazan</div>
+                    <div class="folder-desc">Ücretsiz + Jackpot</div>
+                </div>
+                <div class="folder" onclick="openSettings()">
+                    <div class="folder-icon">⚙️</div>
+                    <div class="folder-name">Ayarlar</div>
+                    <div class="folder-desc">Dil & müzik</div>
                 </div>
                 <div class="folder" onclick="openSupport()">
                     <div class="folder-icon">📩</div>
@@ -4674,6 +4679,7 @@
             _usersCache = users2;
 
             pushNotif(me, '🛒 "' + boughtItem.name + '" ' + (serverSale ? 'SERVER mağazasından ' : '') + 'alındı −$' + price.toLocaleString('tr-TR'), 'success');
+            if (me !== MOD_USER) notifyAdminsPurchase(me, boughtItem.name, price, serverSale ? 'SERVER' : 'Pazar');
             toast('✅ Satın alındı! −$' + price.toLocaleString('tr-TR') + (serverSale ? ' (SERVER)' : ''));
             openMarket();
         }
@@ -5023,7 +5029,114 @@
             openTrade();
         }
 
-        // ========== ÜCRETSİZ ŞANS OYUNLARI ==========
+        // ========== AYARLAR (DİL + MÜZİK) ==========
+        const SITE_LANG = {
+            tr: {
+                settings: 'Ayarlar', language: 'Dil', music: 'Müzik',
+                langTr: 'Türkçe', langEn: 'English', saved: 'Ayarlar kaydedildi.',
+                bgMusic: 'Arka plan müziği', autoPlay: 'Otomatik çal',
+                volume: 'Ses seviyesi'
+            },
+            en: {
+                settings: 'Settings', language: 'Language', music: 'Music',
+                langTr: 'Turkish', langEn: 'English', saved: 'Settings saved.',
+                bgMusic: 'Background music', autoPlay: 'Auto-play',
+                volume: 'Volume'
+            }
+        };
+        function getSiteLang() {
+            try { return localStorage.getItem('swordcity_lang') || 'tr'; } catch (e) { return 'tr'; }
+        }
+        function setSiteLang(code) {
+            try { localStorage.setItem('swordcity_lang', code); } catch (e) {}
+            document.documentElement.lang = code === 'en' ? 'en' : 'tr';
+        }
+        function t(key) {
+            const L = SITE_LANG[getSiteLang()] || SITE_LANG.tr;
+            return L[key] || key;
+        }
+        function openSettings() {
+            const lang = getSiteLang();
+            let vol = 0.35;
+            try { const v = localStorage.getItem('swordcity_music_vol'); if (v != null) vol = Math.max(0, Math.min(1, parseFloat(v) || 0.35)); } catch (e) {}
+            let auto = true;
+            try { auto = localStorage.getItem('swordcity_music_auto') !== '0'; } catch (e) {}
+            openModal('⚙️ ' + t('settings'), `
+                <div class="info-card" style="margin-bottom:12px;">
+                    <h4 style="color:var(--accent-soft);margin:0 0 10px;">🌐 ${t('language')}</h4>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                        <button class="primary-btn" style="flex:1;opacity:${lang==='tr'?1:0.55}" onclick="setSiteLang('tr');toast('${SITE_LANG.tr.saved}');openSettings();">🇹🇷 ${t('langTr')}</button>
+                        <button class="primary-btn" style="flex:1;opacity:${lang==='en'?1:0.55}" onclick="setSiteLang('en');toast('${SITE_LANG.en.saved}');openSettings();">🇬🇧 ${t('langEn')}</button>
+                    </div>
+                </div>
+                <div class="info-card">
+                    <h4 style="color:var(--accent-soft);margin:0 0 10px;">🎵 ${t('music')}</h4>
+                    <p style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">${t('bgMusic')}: Jeff Syndicate – Hip Hop</p>
+                    <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:10px;cursor:pointer;">
+                        <input type="checkbox" id="set-music-auto" ${auto ? 'checked' : ''} onchange="saveMusicAuto(this.checked)">
+                        ${t('autoPlay')}
+                    </label>
+                    <label style="font-size:12px;color:var(--text-muted);">${t('volume')}: <span id="vol-label">${Math.round(vol*100)}%</span></label>
+                    <input type="range" min="0" max="100" value="${Math.round(vol*100)}" style="width:100%;margin-top:6px;"
+                        oninput="document.getElementById('vol-label').textContent=this.value+'%';setMusicVolume(this.value/100)">
+                    <button class="primary-btn" style="width:100%;margin-top:12px;" onclick="loadMusicTrack(0,true);toast('🎵 Şarkı başlatıldı');">▶ Şarkıyı çal</button>
+                </div>
+                <button class="back-btn" style="margin-top:12px;" onclick="closeModal()">← Kapat</button>
+            `);
+        }
+        function saveMusicAuto(on) {
+            try { localStorage.setItem('swordcity_music_auto', on ? '1' : '0'); } catch (e) {}
+        }
+        function setMusicVolume(v) {
+            v = Math.max(0, Math.min(1, Number(v) || 0));
+            try { localStorage.setItem('swordcity_music_vol', String(v)); } catch (e) {}
+            const audio = document.getElementById('site-audio');
+            if (audio) audio.volume = v;
+        }
+
+        // ========== BAKİYE / İFLAS / BORÇ / KARAKTER BORCU ==========
+        // delta: pozitif veya negatif. İflas: bakiye < 0 → 0.
+        // Karakter borcu: para yetmezse rastgele karakter silinir; yoksa -50000 borç.
+        function applyBalanceDelta(username, delta, opts) {
+            opts = opts || {};
+            const users = loadUsers();
+            if (!users[username]) return { ok: false };
+            ensureUserFields(users[username]);
+            let bal = Number(users[username].balance) || 0;
+            bal += Number(delta) || 0;
+            let removedChar = null;
+            let charDebt = false;
+
+            if (opts.characterDebt && bal < 0) {
+                const inv = Array.isArray(users[username].inventory) ? users[username].inventory : [];
+                const chars = inv.map(function(it, i) { return { it: it, i: i }; }).filter(function(x) {
+                    const cat = (x.it.category || '').toLowerCase();
+                    return cat === 'karakter' || cat === 'character' || (!cat && x.it.rarity);
+                });
+                if (chars.length) {
+                    const pick = chars[Math.floor(Math.random() * chars.length)];
+                    removedChar = pick.it;
+                    inv.splice(pick.i, 1);
+                    users[username].inventory = inv;
+                    bumpInvVersion(users[username]);
+                    bal = 0;
+                    charDebt = true;
+                } else {
+                    bal = -50000;
+                    charDebt = true;
+                }
+            }
+
+            if (opts.bankruptToZero && bal < 0) {
+                bal = 0;
+            }
+
+            users[username].balance = bal;
+            saveUsers(users);
+            return { ok: true, balance: bal, removedChar: removedChar, charDebt: charDebt };
+        }
+
+        // ========== ÜCRETSİZ ŞANS OYUNLARI + JACKPOT ==========
         function openFreeGames() {
             const me = getCurrentUser();
             if (!me) { toast('Önce giriş yap.', 'error'); return; }
@@ -5034,11 +5147,15 @@
             const canSpin = lastSpin !== today;
             const lastDice = user.lastFreeDice || '';
             const canDice = lastDice !== today;
+            const bal = Number(user.balance) || 0;
+            const balHtml = bal < 0
+                ? '<span style="color:var(--danger)">-$' + Math.abs(bal).toLocaleString('tr-TR') + ' (borç)</span>'
+                : '$' + bal.toLocaleString('tr-TR');
 
-            openModal('🎲 Ücretsiz Şans Oyunları', `
+            openModal('🎲 Şans Oyunları', `
                 <div class="info-card" style="margin-bottom:12px;">
-                    <div class="info-row"><span class="label">Bakiyen</span><span class="value" style="color:var(--success);">$${(user.balance || 0).toLocaleString('tr-TR')}</span></div>
-                    <p style="font-size:12px;color:var(--text-muted);margin-top:8px;line-height:1.5;">Her gün ücretsiz 1 çark + 1 zar hakkı. Kazandığın para hesabına eklenir ve kaydedilir.</p>
+                    <div class="info-row"><span class="label">Bakiyen</span><span class="value" style="color:var(--success);">${balHtml}</span></div>
+                    <p style="font-size:12px;color:var(--text-muted);margin-top:8px;line-height:1.5;">Her gün ücretsiz 1 çark + 1 zar. Jackpot istediğin zaman oynanır (1 – 1.000.000.000).</p>
                 </div>
                 <div class="info-card">
                     <h4 style="color:var(--accent-soft);margin:0 0 8px;">🎰 Şans Çarkı</h4>
@@ -5053,6 +5170,18 @@
                     <button class="primary-btn" style="width:100%;" ${canDice ? '' : 'disabled'} onclick="doFreeDice()">
                         ${canDice ? '🎲 Zar at' : 'Bugün hakkın bitti'}
                     </button>
+                </div>
+                <div class="info-card" style="margin-top:12px;border-color:rgba(255,215,0,0.45);">
+                    <h4 style="color:#ffd54f;margin:0 0 8px;">💎 JACKPOT</h4>
+                    <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px;line-height:1.5;">
+                        Bahis: <b>$1 – $1.000.000.000</b><br>
+                        Sonuç: +bahis … −bahis arası rastgele.<br>
+                        İflas (bakiye &lt; 0): otomatik <b>$0</b>.<br>
+                        Karakter borcu: rastgele karakter silinir; yoksa <b>−$50.000 borç</b>.
+                    </p>
+                    <input type="number" id="jackpot-bet" min="1" max="1000000000" value="1000" placeholder="Bahis miktarı"
+                        style="width:100%;padding:10px 12px;margin-bottom:8px;background:rgba(0,0,0,0.45);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:14px;outline:none;">
+                    <button class="primary-btn" style="width:100%;background:linear-gradient(90deg,#ffd54f,#ff8c00);color:#1a001f;" onclick="doJackpot()">💎 Jackpot oyna</button>
                 </div>
             `);
         }
@@ -5101,6 +5230,86 @@
             pushNotif(me, '🎲 Zar ' + roll + ' geldi → +$' + win.toLocaleString('tr-TR'), 'success');
             toast('🎲 ' + roll + ' geldi! +$' + win.toLocaleString('tr-TR'));
             openFreeGames();
+        }
+
+        function doJackpot() {
+            const me = getCurrentUser();
+            if (!me) { toast('Önce giriş yap.', 'error'); return; }
+            const inp = document.getElementById('jackpot-bet');
+            let bet = Math.floor(Number(inp && inp.value) || 0);
+            if (bet < 1 || bet > 1000000000) {
+                toast('Bahis $1 ile $1.000.000.000 arasında olmalı.', 'error');
+                return;
+            }
+            const users = loadUsers();
+            if (!users[me]) return;
+            ensureUserFields(users[me]);
+            const bal = Number(users[me].balance) || 0;
+            // Bakiye yetersizse sadece karakter borcu riskiyle oynayabilir (kayıp → karakter veya -50k)
+            if (bal < bet) {
+                const inv = Array.isArray(users[me].inventory) ? users[me].inventory : [];
+                const hasChar = inv.some(function(it) {
+                    const cat = (it.category || '').toLowerCase();
+                    return cat === 'karakter' || cat === 'character' || (!cat && it.rarity && it.name);
+                });
+                if (!hasChar && bal >= 0) {
+                    toast('Yetersiz bakiye! Bahis en fazla $' + bal.toLocaleString('tr-TR'), 'error');
+                    return;
+                }
+                if (!confirm('Bakiyen yetersiz. Kaybedersen karakterin silinebilir veya −$50.000 borç oluşur. Devam?')) return;
+            }
+            // Sonuç: -bet … +bet (dahil)
+            const outcome = Math.floor(Math.random() * (2 * bet + 1)) - bet;
+            let msg = '';
+            if (outcome >= 0) {
+                users[me].balance = bal + outcome;
+                saveUsers(users);
+                msg = '💎 JACKPOT +$' + outcome.toLocaleString('tr-TR');
+                pushNotif(me, msg, 'success');
+                toast(msg);
+            } else {
+                // kayıp
+                let newBal = bal + outcome;
+                let removed = null;
+                if (newBal < 0) {
+                    // önce iflas → 0, ama karakter borcu açıksa karakter düş
+                    const inv = Array.isArray(users[me].inventory) ? users[me].inventory.slice() : [];
+                    const charIdx = [];
+                    inv.forEach(function(it, i) {
+                        const cat = (it.category || '').toLowerCase();
+                        if (cat === 'karakter' || cat === 'character' || (!cat && it.rarity && it.name)) charIdx.push(i);
+                    });
+                    if (charIdx.length) {
+                        const ri = charIdx[Math.floor(Math.random() * charIdx.length)];
+                        removed = inv[ri];
+                        inv.splice(ri, 1);
+                        users[me].inventory = inv;
+                        bumpInvVersion(users[me]);
+                        newBal = 0;
+                        msg = '💀 İflas! Karakter gitti: ' + (removed.name || '?') + ' · Bakiye $0';
+                    } else {
+                        newBal = -50000;
+                        msg = '💀 İflas! Karakter yok → −$50.000 borç';
+                    }
+                } else {
+                    msg = '💎 JACKPOT −$' + Math.abs(outcome).toLocaleString('tr-TR');
+                }
+                users[me].balance = newBal;
+                saveUsers(users);
+                pushNotif(me, msg, newBal < 0 || removed ? 'danger' : 'info');
+                toast(msg, newBal < 0 || removed ? 'error' : 'info');
+                if (isModerator(MOD_USER) || true) {
+                    try { pushNotif(MOD_USER, '🎰 ' + me + ' jackpot: ' + msg + ' (bahis $' + bet.toLocaleString('tr-TR') + ')', 'info'); } catch (e) {}
+                }
+            }
+            openFreeGames();
+        }
+
+        function notifyAdminsPurchase(buyer, itemName, price, source) {
+            try {
+                const text = '🛒 ' + buyer + ' "' + itemName + '" aldı −$' + Number(price).toLocaleString('tr-TR') + (source ? ' · ' + source : '');
+                pushNotif(MOD_USER, text, 'info');
+            } catch (e) {}
         }
 
         // ========== KASALAR ==========
@@ -5260,6 +5469,7 @@
                 users2[me].inventory.push({ name: winner.name, image: winner.image || '', rarity: normalizeRarity(winner.rarity) });
                 saveUsers(users2);
                 pushNotif(me, '📦 "' + c.name + '" kasasından çıktı: ' + winner.name, 'success');
+                if (me !== MOD_USER) notifyAdminsPurchase(me, winner.name + ' (kasa: ' + (c.name || '') + ')', price, 'Kasa');
                 toast('🎉 Kazandın: ' + winner.name);
             });
         }
@@ -7098,7 +7308,7 @@
 
         // ========== MÜZİK ÇALAR ==========
         const MUSIC_TRACKS = [
-            { title: 'YouTube Track', url: 'https://www.youtube.com/watch?v=t1pz3TO3NJY', youtube: 't1pz3TO3NJY' },
+            { title: 'Jeff Syndicate – Hip Hop', url: 'https://www.youtube.com/watch?v=t1pz3TO3NJY', youtube: 't1pz3TO3NJY' },
             { title: 'Ambient Chill 1', url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3' },
             { title: 'Ambient Chill 2', url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3' },
             { title: 'Ambient Chill 3', url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3' },
@@ -7112,13 +7322,27 @@
         function musicInit() {
             const audio = document.getElementById('site-audio');
             if (!audio) return;
-            audio.volume = 0.35;
+            let vol = 0.35;
+            try {
+                const v = localStorage.getItem('swordcity_music_vol');
+                if (v != null) vol = Math.max(0, Math.min(1, parseFloat(v) || 0.35));
+            } catch (e) {}
+            audio.volume = vol;
             audio.addEventListener('ended', function() { musicNext(true); });
             try {
                 const saved = localStorage.getItem('swordcity_music_idx');
                 if (saved != null) _musicIndex = Math.max(0, Math.min(MUSIC_TRACKS.length - 1, parseInt(saved, 10) || 0));
+                else _musicIndex = 0; // varsayılan: Jeff Syndicate
             } catch (e) {}
+            let auto = true;
+            try { auto = localStorage.getItem('swordcity_music_auto') !== '0'; } catch (e) {}
             loadMusicTrack(_musicIndex, false);
+            // Tarayıcılar kullanıcı etkileşimi olmadan autoplay'i engelleyebilir; Ayarlar'dan veya ▶ ile başlat
+            if (auto) {
+                setTimeout(function() {
+                    try { loadMusicTrack(_musicIndex, true); } catch (e) {}
+                }, 800);
+            }
         }
 
         function postYouTubeCommand(func) {
