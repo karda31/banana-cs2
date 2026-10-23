@@ -1336,7 +1336,7 @@
                 <div class="folder" onclick="openConsole()">
                     <div class="folder-icon">💻</div>
                     <div class="folder-name">Console</div>
-                    <div class="folder-desc">Komutlar (yakında)</div>
+                    <div class="folder-desc">Komut yaz</div>
                 </div>
                 <div class="folder" id="mod-folder" onclick="openModerator()" style="display:none;">
                     <div class="folder-icon">🛡️</div>
@@ -7053,16 +7053,45 @@
         function openConsole() {
             openModal('💻 Console', `
                 <div class="info-card">
-                    <p style="color:var(--text-muted);font-size:14px;line-height:1.5;margin-bottom:12px;">Komutlar (konsolda da çalışır):</p>
-                    <pre style="padding:12px;background:rgba(0,0,0,0.4);border-radius:10px;border:1px solid var(--border);color:var(--accent-soft);font-size:13px;line-height:1.7;">theme_green()
-theme_default()</pre>
-                    <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">
-                        <button class="primary-btn" style="width:auto;margin:0;flex:1;" onclick="theme_green()">🟢 theme_green</button>
-                        <button class="back-btn" style="width:auto;margin:0;flex:1;" onclick="theme_default()">💜 Varsayılan</button>
+                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+                        <span style="color:var(--accent-soft);font-family:monospace;">&gt;</span>
+                        <input type="text" id="console-input" placeholder="" autocomplete="off" spellcheck="false"
+                            style="flex:1;padding:10px 12px;background:rgba(0,0,0,0.45);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:monospace;font-size:14px;outline:none;"
+                            onkeydown="if(event.key==='Enter'){runConsoleCmd();}">
                     </div>
+                    <pre id="console-out" style="min-height:48px;padding:12px;background:rgba(0,0,0,0.4);border-radius:10px;border:1px solid var(--border);color:var(--text-muted);font-size:12px;font-family:monospace;white-space:pre-wrap;"></pre>
                 </div>
                 <button class="back-btn" onclick="closeModal()">← Kapat</button>
             `);
+            setTimeout(function() {
+                const inp = document.getElementById('console-input');
+                if (inp) inp.focus();
+            }, 50);
+        }
+
+        function runConsoleCmd() {
+            const inp = document.getElementById('console-input');
+            const out = document.getElementById('console-out');
+            if (!inp) return;
+            const raw = (inp.value || '').trim();
+            if (!raw) return;
+            const cmd = raw.replace(/\(\)\s*$/, '').toLowerCase().replace(/\s+/g, '');
+            let msg = '';
+            if (cmd === 'theme_green') {
+                theme_green();
+                msg = 'ok';
+            } else if (cmd === 'theme_pink') {
+                theme_pink();
+                msg = 'ok';
+            } else if (cmd === 'theme_orig' || cmd === 'theme_original' || cmd === 'theme_default') {
+                theme_orig();
+                msg = 'ok';
+            } else {
+                msg = 'unknown';
+            }
+            if (out) out.textContent = (out.textContent ? out.textContent + '\n' : '') + '> ' + raw + '\n' + msg;
+            inp.value = '';
+            inp.focus();
         }
 
         function applyTheme(name) {
@@ -7079,9 +7108,23 @@ theme_default()</pre>
                 root.style.setProperty('--text', '#e6fff0');
                 root.style.setProperty('--text-muted', '#9cc9b0');
                 try { localStorage.setItem('swordcity_theme', 'green'); } catch (e) {}
-                toast('Tema: Yeşil 🟢');
                 return;
             }
+            if (name === 'pink' || name === 'theme_pink') {
+                root.style.setProperty('--bg-deep', '#14000a');
+                root.style.setProperty('--bg-panel', '#220016');
+                root.style.setProperty('--bg-card', '#30001f');
+                root.style.setProperty('--accent', '#ff4da6');
+                root.style.setProperty('--accent-soft', '#ff8fc7');
+                root.style.setProperty('--accent-glow', 'rgba(255, 77, 166, 0.45)');
+                root.style.setProperty('--border', 'rgba(255, 77, 166, 0.35)');
+                root.style.setProperty('--shadow', '0 0 40px rgba(255, 77, 166, 0.25)');
+                root.style.setProperty('--text', '#ffe6f4');
+                root.style.setProperty('--text-muted', '#c99cb8');
+                try { localStorage.setItem('swordcity_theme', 'pink'); } catch (e) {}
+                return;
+            }
+            // orig / original
             root.style.setProperty('--bg-deep', '#0a0014');
             root.style.setProperty('--bg-panel', '#160022');
             root.style.setProperty('--bg-card', '#1f0030');
@@ -7092,16 +7135,21 @@ theme_default()</pre>
             root.style.setProperty('--shadow', '0 0 40px rgba(255, 0, 204, 0.25)');
             root.style.setProperty('--text', '#f0e6ff');
             root.style.setProperty('--text-muted', '#b89cc9');
-            try { localStorage.setItem('swordcity_theme', 'default'); } catch (e) {}
-            toast('Tema: Varsayılan');
+            try { localStorage.setItem('swordcity_theme', 'orig'); } catch (e) {}
         }
         function theme_green() { applyTheme('green'); }
-        function theme_default() { applyTheme('default'); }
+        function theme_pink() { applyTheme('pink'); }
+        function theme_orig() { applyTheme('orig'); }
+        function theme_default() { applyTheme('orig'); }
         window.theme_green = theme_green;
+        window.theme_pink = theme_pink;
+        window.theme_orig = theme_orig;
         window.theme_default = theme_default;
         (function () {
             try {
-                if (localStorage.getItem('swordcity_theme') === 'green') applyTheme('green');
+                const t = localStorage.getItem('swordcity_theme');
+                if (t === 'green') applyTheme('green');
+                else if (t === 'pink') applyTheme('pink');
             } catch (e) {}
         })();
 
