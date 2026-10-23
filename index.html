@@ -1024,6 +1024,7 @@
             display: flex;
             align-items: center;
             gap: 10px;
+            flex-wrap: wrap;
             max-width: calc(100vw - 24px);
             min-width: 200px;
         }
@@ -1275,6 +1276,11 @@
         <div>
             <div style="font-size:12px;font-weight:600;color:var(--accent-soft);">🎵 Müzik</div>
             <div class="mp-title" id="mp-title">Hazır</div>
+        </div>
+        <div id="mp-youtube-wrap" style="display:none;flex-basis:100%;width:100%;">
+            <iframe id="mp-youtube-frame" title="YouTube müzik oynatıcı" width="200" height="113"
+                style="display:block;max-width:100%;border:0;border-radius:8px;"
+                allow="autoplay; encrypted-media; picture-in-picture" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
         </div>
     </div>
     <audio id="site-audio" preload="none"></audio>
@@ -5428,9 +5434,11 @@
                             <div style="font-weight:600;">${escapeHtml(r.user || '?')}</div>
                             <div style="font-size:13px;margin-top:6px;">🎨 Çıkartma: <b>${escapeHtml(r.stickerName || '')}</b></div>
                             <div style="font-size:13px;">⚔️ Karakter: <b>${escapeHtml(r.characterName || '')}</b></div>
+                            <div style="font-size:13px;">📍 İstenen bölge: <b>${escapeHtml(r.region || 'Belirtilmedi')}</b></div>
                             <div style="font-size:11px;color:var(--text-muted);margin-top:6px;">${when}</div>
-                            <p style="font-size:12px;color:var(--warning);margin-top:8px;">Karakter görselini sen güncelle (envanterden resim ekle). Sonra talebi tamamla.</p>
-                            <button class="primary-btn" style="margin-top:8px;" onclick="completeStickerRequest('${escapeHtml(r.id)}')">✓ Tamamlandı işaretle</button>
+                            <p style="font-size:12px;color:var(--warning);margin-top:8px;">Uygun bulursan kabul et; uygun değilse reddet. Kabulde çıkartma envanterden düşer.</p>
+                            <button class="primary-btn" style="margin-top:8px;" onclick="completeStickerRequest('${escapeHtml(r.id)}')">✓ Bölge uygun — Kabul et</button>
+                            <button class="back-btn" style="margin-top:8px;" onclick="rejectStickerRequest('${escapeHtml(r.id)}')">✕ Yer uygun değil — Reddet</button>
                         </div>
                     `;
                 });
@@ -5483,10 +5491,43 @@
                 if (firebaseReady) fbSet('sticker_requests', all);
                 try { localStorage.setItem('swordcity_sticker_req', JSON.stringify(all)); } catch (e) {}
                 if (req.user) {
-                    pushNotif(req.user, '🎨 Çıkartman eklendi ve envanterden düşüldü: ' + (req.stickerName || '') + ' → ' + (req.characterName || ''), 'success');
+                    pushNotif(req.user, '🎨 Çıkartma talebin kabul edildi: ' + (req.stickerName || '') + ' → ' + (req.characterName || '') + ' · Bölge: ' + (req.region || 'Belirtilmedi'), 'success');
                 }
                 toast('Talep tamamlandı, çıkartma silindi.');
             }
+            showStickerRequests();
+        }
+
+        async function rejectStickerRequest(id) {
+            if (!isModerator()) { toast('Sadece moderatör.', 'error'); return; }
+            let all = {};
+            try {
+                if (firebaseReady) all = (await fbGet('sticker_requests')) || {};
+                else all = JSON.parse(localStorage.getItem('swordcity_sticker_req') || '{}');
+            } catch (e) {
+                try { all = JSON.parse(localStorage.getItem('swordcity_sticker_req') || '{}'); } catch (e2) { all = {}; }
+            }
+            const req = all[id];
+            if (!req || req.status !== 'pending') { toast('Bekleyen talep bulunamadı.', 'error'); showStickerRequests(); return; }
+            req.status = 'rejected';
+            req.reviewedAt = new Date().toISOString();
+            req.reviewedBy = getCurrentUser();
+            req.reviewNote = 'Yer uygun değil';
+            try {
+                const users = loadUsers();
+                const inv = users[req.user] && users[req.user].inventory;
+                if (Array.isArray(inv)) {
+                    const sticker = inv.find(function(it) { return it && typeof it === 'object' && it.pendingStickerRequest === id; });
+                    if (sticker) delete sticker.pendingStickerRequest;
+                    users[req.user].invVersion = (users[req.user].invVersion || 0) + 1;
+                    users[req.user].updatedAt = new Date().toISOString();
+                    saveUsers(users);
+                }
+            } catch (e) { console.warn('sticker unlock', e); }
+            try { localStorage.setItem('swordcity_sticker_req', JSON.stringify(all)); } catch (e) {}
+            if (firebaseReady) { try { await fbSet('sticker_requests', all); } catch (e) {} }
+            pushNotif(req.user, '🎨 Çıkartma talebin reddedildi: ' + (req.stickerName || '') + ' → ' + (req.characterName || '') + ' (' + (req.region || 'bölge belirtilmedi') + '). Yer uygun değil; başka bir bölge seçip tekrar talep gönderebilirsin.', 'danger');
+            toast('Talep reddedildi; çıkartma oyuncunun envanterinde kaldı.');
             showStickerRequests();
         }
 
@@ -6537,8 +6578,24 @@
                         ${opts}
                     </select>
                 </div>
+                <div class="form-group">
+                    <label>Çıkartma hangi bölgeye eklensin?</label>
+                    <select id="sticker-region-select" style="width:100%;padding:10px;border-radius:10px;background:rgba(0,0,0,0.35);border:1px solid var(--border);color:var(--text);font-family:inherit;">
+                        <option value="Baş">Baş</option>
+                        <option value="Yüz">Yüz</option>
+                        <option value="Göğüs">Göğüs</option>
+                        <option value="Sırt">Sırt</option>
+                        <option value="Sol kol">Sol kol</option>
+                        <option value="Sağ kol">Sağ kol</option>
+                        <option value="Sol bacak">Sol bacak</option>
+                        <option value="Sağ bacak">Sağ bacak</option>
+                        <option value="Bel">Bel</option>
+                        <option value="Diğer">Diğer</option>
+                    </select>
+                    <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Seçilen bölge moderatöre gösterilir; onay veya ret moderatör tarafından verilir.</div>
+                </div>
                 <div class="info-card" style="border-left:3px solid var(--warning);margin:12px 0;">
-                    <p style="font-size:13px;line-height:1.45;">⏳ <b>Çıkartmanız moderatör tarafından 24 saat içinde eklenecek.</b></p>
+                    <p style="font-size:13px;line-height:1.45;">⏳ <b>Çıkartma talebin moderatör tarafından incelenecek.</b></p>
                     <p style="font-size:12px;color:var(--text-muted);margin-top:6px;">Moderatör onayladıktan sonra karakter görseli güncellenir.</p>
                 </div>
                 <button class="primary-btn" onclick="submitStickerRequest(${invIndex})">Talebi Gönder</button>
@@ -6551,6 +6608,9 @@
             const sel = document.getElementById('sticker-char-select');
             if (!sel) return;
             const charIndex = parseInt(sel.value, 10);
+            const regionSelect = document.getElementById('sticker-region-select');
+            const region = regionSelect ? regionSelect.value : '';
+            if (!region) { toast('Lütfen çıkartma bölgesi seç.', 'error'); return; }
             const users = loadUsers();
             const user = users[me];
             if (!user || !user.inventory) return;
@@ -6569,6 +6629,7 @@
                 characterImage: character.image || '',
                 stickerInvIndex: stickerIndex,
                 characterInvIndex: charIndex,
+                region: region,
                 status: 'pending',
                 createdAt: new Date().toISOString()
             };
@@ -6601,8 +6662,8 @@
                 saveUsers(users);
             } catch (eLock) { console.warn(eLock); }
 
-            pushNotif(MOD_USER, '🎨 Çıkartma talebi: ' + me + ' · "' + sticker.name + '" → karakter "' + character.name + '"', 'info');
-            pushNotif(me, '🎨 Çıkartma talebin alındı. Moderatör 24 saat içinde ekleyecek: ' + sticker.name + ' → ' + character.name, 'success');
+            pushNotif(MOD_USER, '🎨 Çıkartma talebi: ' + me + ' · "' + sticker.name + '" → karakter "' + character.name + '" · Bölge: ' + region, 'info');
+            pushNotif(me, '🎨 Çıkartma talebin alındı: ' + sticker.name + ' → ' + character.name + ' · İstenen bölge: ' + region + '. Moderatör uygunluğunu inceleyecek.', 'success');
             toast('Talep gönderildi! Onaylanana kadar bu çıkartma kullanılamaz.');
             closeModal();
             showInventory();
@@ -6707,6 +6768,7 @@
         ];
         let _musicIndex = 0;
         let _musicPlaying = false;
+        let _youtubeReady = false;
 
         function musicInit() {
             const audio = document.getElementById('site-audio');
@@ -6720,37 +6782,44 @@
             loadMusicTrack(_musicIndex, false);
         }
 
+        function postYouTubeCommand(func) {
+            const frame = document.getElementById('mp-youtube-frame');
+            if (!frame || !frame.contentWindow) return;
+            frame.contentWindow.postMessage(JSON.stringify({event:'command',func:func,args:[]}), '*');
+        }
+
         function loadMusicTrack(idx, autoplay) {
             const audio = document.getElementById('site-audio');
             const title = document.getElementById('mp-title');
+            const wrap = document.getElementById('mp-youtube-wrap');
+            const frame = document.getElementById('mp-youtube-frame');
             if (!audio || !MUSIC_TRACKS.length) return;
             _musicIndex = ((idx % MUSIC_TRACKS.length) + MUSIC_TRACKS.length) % MUSIC_TRACKS.length;
             const t = MUSIC_TRACKS[_musicIndex];
-            // YouTube şarkısı: yeni sekmede aç / embed notu
+            try { localStorage.setItem('swordcity_music_idx', String(_musicIndex)); } catch (e) {}
             if (t.youtube) {
+                audio.pause();
                 audio.removeAttribute('src');
                 audio.load();
-                if (title) title.textContent = t.title + ' (YT)';
-                try { localStorage.setItem('swordcity_music_idx', String(_musicIndex)); } catch (e) {}
-                if (autoplay) {
-                    window.open('https://www.youtube.com/watch?v=' + t.youtube, '_blank', 'noopener');
-                    _musicPlaying = false;
-                    updateMusicBtn();
-                    toast('YouTube şarkısı yeni sekmede açıldı 🎵');
-                }
+                if (wrap) wrap.style.display = 'block';
+                if (title) title.textContent = t.title + ' · YouTube';
+                const desiredSrc = 'https://www.youtube-nocookie.com/embed/' + encodeURIComponent(t.youtube) + '?enablejsapi=1&playsinline=1&controls=1&rel=0&autoplay=' + (autoplay ? '1' : '0') + '&origin=' + encodeURIComponent(location.origin);
+                if (frame && frame.src !== desiredSrc) frame.src = desiredSrc;
+                _musicPlaying = !!autoplay;
+                updateMusicBtn();
                 return;
             }
+            if (wrap) wrap.style.display = 'none';
+            if (frame) frame.src = 'about:blank';
             audio.src = t.url;
             if (title) title.textContent = t.title;
-            try { localStorage.setItem('swordcity_music_idx', String(_musicIndex)); } catch (e) {}
             if (autoplay) {
-                audio.play().then(function() {
-                    _musicPlaying = true;
-                    updateMusicBtn();
-                }).catch(function() {
-                    _musicPlaying = false;
-                    updateMusicBtn();
+                audio.play().then(function() { _musicPlaying = true; updateMusicBtn(); }).catch(function() {
+                    _musicPlaying = false; updateMusicBtn(); toast('Müzik başlatılamadı. Tekrar dene.', 'error');
                 });
+            } else {
+                _musicPlaying = false;
+                updateMusicBtn();
             }
         }
 
@@ -6760,37 +6829,38 @@
         }
 
         function musicToggle() {
+            const t = MUSIC_TRACKS[_musicIndex];
             const audio = document.getElementById('site-audio');
+            if (t && t.youtube) {
+                const frame = document.getElementById('mp-youtube-frame');
+                if (!frame || !frame.src || frame.src === 'about:blank') {
+                    loadMusicTrack(_musicIndex, true);
+                } else {
+                    postYouTubeCommand(_musicPlaying ? 'pauseVideo' : 'playVideo');
+                    _musicPlaying = !_musicPlaying;
+                    updateMusicBtn();
+                }
+                return;
+            }
             if (!audio) return;
             if (_musicPlaying) {
-                audio.pause();
-                _musicPlaying = false;
+                audio.pause(); _musicPlaying = false; updateMusicBtn();
             } else {
                 if (!audio.src) loadMusicTrack(_musicIndex, false);
-                audio.play().then(function() {
-                    _musicPlaying = true;
-                    updateMusicBtn();
-                }).catch(function() {
+                audio.play().then(function() { _musicPlaying = true; updateMusicBtn(); }).catch(function() {
                     toast('Müzik başlatılamadı. Tekrar dene.', 'error');
                 });
             }
-            updateMusicBtn();
         }
 
-        function musicNext(fromEnded) {
-            loadMusicTrack(_musicIndex + 1, true);
-        }
-
-        function musicPrev() {
-            loadMusicTrack(_musicIndex - 1, true);
-        }
+        function musicNext(fromEnded) { loadMusicTrack(_musicIndex + 1, true); }
+        function musicPrev() { loadMusicTrack(_musicIndex - 1, true); }
 
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', musicInit);
         } else {
             setTimeout(musicInit, 100);
         }
-
 
 
         // ========== CONSOLE (şimdilik komut yok) ==========
