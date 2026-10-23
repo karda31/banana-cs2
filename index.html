@@ -1124,29 +1124,46 @@
             letter-spacing: 2px;
         }
 
-        /* ===== MÜZİK AÇ/KAPA ===== */
+
+        /* ===== MÜZİK AÇ/KAPA (arkaplanda, gizli) ===== */
+        #music-player {
+            transition: opacity 0.2s, transform 0.2s;
+        }
         #music-player.collapsed {
-            max-width: 48px !important;
-            min-width: 48px;
-            padding: 6px !important;
-            overflow: hidden;
+            background: transparent !important;
+            border: none !important;
+            box-shadow: none !important;
+            backdrop-filter: none !important;
+            padding: 0 !important;
+            max-width: none !important;
+            min-width: 0 !important;
+            gap: 0 !important;
         }
         #music-player.collapsed > *:not(#mp-collapse-btn) {
             display: none !important;
         }
         #music-player #mp-collapse-btn {
-            background: rgba(255,0,204,0.25);
+            background: rgba(22, 0, 34, 0.92);
             border: 1px solid var(--border);
             color: var(--text);
-            border-radius: 8px;
-            width: 30px;
-            height: 30px;
+            border-radius: 12px;
+            width: 42px;
+            height: 42px;
             cursor: pointer;
-            font-size: 14px;
+            font-size: 18px;
             display: flex;
             align-items: center;
             justify-content: center;
             flex-shrink: 0;
+            box-shadow: 0 0 16px rgba(255, 0, 204, 0.25);
+            backdrop-filter: blur(10px);
+        }
+        #music-player:not(.collapsed) #mp-collapse-btn {
+            width: 30px;
+            height: 30px;
+            border-radius: 8px;
+            font-size: 14px;
+            box-shadow: none;
         }
 
     </style>
@@ -1374,7 +1391,7 @@
     <div id="toast" class="toast"></div>
 
     <!-- Müzik çalar sol alt -->
-    <div id="music-player">
+    <div id="music-player" class="collapsed">
         <button type="button" id="mp-prev" title="Önceki" onclick="musicPrev()">⏮</button>
         <button type="button" id="mp-toggle" title="Oynat/Durdur" onclick="musicToggle()">▶</button>
         <button type="button" id="mp-next" title="Sonraki" onclick="musicNext()">⏭</button>
@@ -7077,89 +7094,161 @@
             if (!raw) return;
             const cmd = raw.replace(/\(\)\s*$/, '').toLowerCase().replace(/\s+/g, '');
             let msg = '';
-            if (cmd === 'theme_green') {
-                theme_green();
-                msg = 'ok';
-            } else if (cmd === 'theme_pink') {
-                theme_pink();
-                msg = 'ok';
-            } else if (cmd === 'theme_orig' || cmd === 'theme_original' || cmd === 'theme_default') {
-                theme_orig();
+            if (cmd.indexOf('theme') === 0) {
+                const name = cmd.replace(/^theme_?/, '') || 'orig';
+                applyTheme(name);
                 msg = 'ok';
             } else {
                 msg = 'unknown';
             }
-            if (out) out.textContent = (out.textContent ? out.textContent + '\n' : '') + '> ' + raw + '\n' + msg;
+            if (out) {
+                out.textContent = (out.textContent ? out.textContent + '\n' : '') + '> ' + raw + '\n' + msg;
+            }
             inp.value = '';
             inp.focus();
         }
 
         function applyTheme(name) {
             const root = document.documentElement;
-            let p;
-            if (name === 'green' || name === 'theme_green') {
-                p = {
+            const themes = {
+                green: {
                     key: 'green',
                     bgDeep: '#00140a', bgPanel: '#002216', bgCard: '#00301f',
                     accent: '#00e676', accentSoft: '#69f0ae',
                     accentGlow: 'rgba(0, 230, 118, 0.45)', rgb: '0, 230, 118',
-                    border: 'rgba(0, 230, 118, 0.35)',
-                    shadow: '0 0 40px rgba(0, 230, 118, 0.25)',
+                    border: 'rgba(0, 230, 118, 0.35)', shadow: '0 0 40px rgba(0, 230, 118, 0.25)',
                     text: '#e6fff0', textMuted: '#9cc9b0',
                     bodyGrad: 'radial-gradient(ellipse at top, #00301a 0%, #00140a 55%, #000805 100%)',
                     titleBar: 'linear-gradient(90deg, #001208, #002216, #001208)',
-                    shopGrad: 'linear-gradient(180deg, #00e676, #00a854)',
-                    shopText: '#00140a',
+                    shopGrad: 'linear-gradient(180deg, #00e676, #00a854)', shopText: '#00140a',
                     authLogo: 'linear-gradient(145deg, #004020, #002216)',
                     headerGlow: 'radial-gradient(circle, rgba(0,230,118,0.12) 0%, transparent 70%)',
                     panelA: 'rgba(0, 34, 22, 0.92)'
-                };
-            } else if (name === 'pink' || name === 'theme_pink') {
-                p = {
+                },
+                blue: {
+                    key: 'blue',
+                    bgDeep: '#000a14', bgPanel: '#001628', bgCard: '#002240',
+                    accent: '#2196f3', accentSoft: '#64b5f6',
+                    accentGlow: 'rgba(33, 150, 243, 0.45)', rgb: '33, 150, 243',
+                    border: 'rgba(33, 150, 243, 0.35)', shadow: '0 0 40px rgba(33, 150, 243, 0.25)',
+                    text: '#e3f2fd', textMuted: '#90caf9',
+                    bodyGrad: 'radial-gradient(ellipse at top, #002040 0%, #000a14 55%, #000508 100%)',
+                    titleBar: 'linear-gradient(90deg, #000c18, #001628, #000c18)',
+                    shopGrad: 'linear-gradient(180deg, #2196f3, #1565c0)', shopText: '#001018',
+                    authLogo: 'linear-gradient(145deg, #003060, #001628)',
+                    headerGlow: 'radial-gradient(circle, rgba(33,150,243,0.12) 0%, transparent 70%)',
+                    panelA: 'rgba(0, 22, 40, 0.92)'
+                },
+                red: {
+                    key: 'red',
+                    bgDeep: '#140000', bgPanel: '#220008', bgCard: '#300010',
+                    accent: '#ff1744', accentSoft: '#ff5252',
+                    accentGlow: 'rgba(255, 23, 68, 0.45)', rgb: '255, 23, 68',
+                    border: 'rgba(255, 23, 68, 0.35)', shadow: '0 0 40px rgba(255, 23, 68, 0.25)',
+                    text: '#ffebee', textMuted: '#ef9a9a',
+                    bodyGrad: 'radial-gradient(ellipse at top, #300010 0%, #140000 55%, #0a0000 100%)',
+                    titleBar: 'linear-gradient(90deg, #120004, #220008, #120004)',
+                    shopGrad: 'linear-gradient(180deg, #ff1744, #c62828)', shopText: '#1a0004',
+                    authLogo: 'linear-gradient(145deg, #400018, #220008)',
+                    headerGlow: 'radial-gradient(circle, rgba(255,23,68,0.12) 0%, transparent 70%)',
+                    panelA: 'rgba(34, 0, 8, 0.92)'
+                },
+                yellow: {
+                    key: 'yellow',
+                    bgDeep: '#141000', bgPanel: '#221c00', bgCard: '#302800',
+                    accent: '#ffc107', accentSoft: '#ffe082',
+                    accentGlow: 'rgba(255, 193, 7, 0.45)', rgb: '255, 193, 7',
+                    border: 'rgba(255, 193, 7, 0.35)', shadow: '0 0 40px rgba(255, 193, 7, 0.25)',
+                    text: '#fffde7', textMuted: '#fff59d',
+                    bodyGrad: 'radial-gradient(ellipse at top, #302800 0%, #141000 55%, #0a0800 100%)',
+                    titleBar: 'linear-gradient(90deg, #121000, #221c00, #121000)',
+                    shopGrad: 'linear-gradient(180deg, #ffc107, #ff8f00)', shopText: '#1a1400',
+                    authLogo: 'linear-gradient(145deg, #403800, #221c00)',
+                    headerGlow: 'radial-gradient(circle, rgba(255,193,7,0.12) 0%, transparent 70%)',
+                    panelA: 'rgba(34, 28, 0, 0.92)'
+                },
+                pink: {
                     key: 'pink',
                     bgDeep: '#14000a', bgPanel: '#220016', bgCard: '#30001f',
                     accent: '#ff4da6', accentSoft: '#ff8fc7',
                     accentGlow: 'rgba(255, 77, 166, 0.45)', rgb: '255, 77, 166',
-                    border: 'rgba(255, 77, 166, 0.35)',
-                    shadow: '0 0 40px rgba(255, 77, 166, 0.25)',
+                    border: 'rgba(255, 77, 166, 0.35)', shadow: '0 0 40px rgba(255, 77, 166, 0.25)',
                     text: '#ffe6f4', textMuted: '#c99cb8',
                     bodyGrad: 'radial-gradient(ellipse at top, #30001a 0%, #14000a 55%, #0a0005 100%)',
                     titleBar: 'linear-gradient(90deg, #12000c, #220016, #12000c)',
-                    shopGrad: 'linear-gradient(180deg, #ff4da6, #c2185b)',
-                    shopText: '#1a0010',
+                    shopGrad: 'linear-gradient(180deg, #ff4da6, #c2185b)', shopText: '#1a0010',
                     authLogo: 'linear-gradient(145deg, #400028, #220016)',
                     headerGlow: 'radial-gradient(circle, rgba(255,77,166,0.12) 0%, transparent 70%)',
                     panelA: 'rgba(34, 0, 22, 0.92)'
-                };
-            } else {
-                p = {
-                    key: 'orig',
+                },
+                purple: {
+                    key: 'purple',
                     bgDeep: '#0a0014', bgPanel: '#160022', bgCard: '#1f0030',
                     accent: '#ff00cc', accentSoft: '#ff66e0',
                     accentGlow: 'rgba(255, 0, 204, 0.45)', rgb: '255, 0, 204',
-                    border: 'rgba(255, 0, 204, 0.35)',
-                    shadow: '0 0 40px rgba(255, 0, 204, 0.25)',
+                    border: 'rgba(255, 0, 204, 0.35)', shadow: '0 0 40px rgba(255, 0, 204, 0.25)',
                     text: '#f0e6ff', textMuted: '#b89cc9',
                     bodyGrad: 'radial-gradient(ellipse at top, #1a0030 0%, #0a0014 55%, #05000c 100%)',
                     titleBar: 'linear-gradient(90deg, #12001c, #1a0028, #12001c)',
-                    shopGrad: 'linear-gradient(180deg, #ff00cc, #aa00ff)',
-                    shopText: '#1a001f',
+                    shopGrad: 'linear-gradient(180deg, #ff00cc, #aa00ff)', shopText: '#1a001f',
                     authLogo: 'linear-gradient(145deg, #2a0040, #1a0028)',
                     headerGlow: 'radial-gradient(circle, rgba(255,0,204,0.1) 0%, transparent 70%)',
                     panelA: 'rgba(22, 0, 34, 0.92)'
-                };
-            }
+                },
+                black: {
+                    key: 'black',
+                    bgDeep: '#000000', bgPanel: '#0d0d0d', bgCard: '#1a1a1a',
+                    accent: '#e0e0e0', accentSoft: '#f5f5f5',
+                    accentGlow: 'rgba(224, 224, 224, 0.35)', rgb: '224, 224, 224',
+                    border: 'rgba(255, 255, 255, 0.22)', shadow: '0 0 40px rgba(255, 255, 255, 0.12)',
+                    text: '#f5f5f5', textMuted: '#9e9e9e',
+                    bodyGrad: 'radial-gradient(ellipse at top, #1a1a1a 0%, #000000 55%, #000000 100%)',
+                    titleBar: 'linear-gradient(90deg, #050505, #141414, #050505)',
+                    shopGrad: 'linear-gradient(180deg, #e0e0e0, #9e9e9e)', shopText: '#0a0a0a',
+                    authLogo: 'linear-gradient(145deg, #2a2a2a, #0d0d0d)',
+                    headerGlow: 'radial-gradient(circle, rgba(255,255,255,0.08) 0%, transparent 70%)',
+                    panelA: 'rgba(13, 13, 13, 0.94)'
+                },
+                white: {
+                    key: 'white',
+                    bgDeep: '#f0f0f0', bgPanel: '#ffffff', bgCard: '#f5f5f5',
+                    accent: '#212121', accentSoft: '#424242',
+                    accentGlow: 'rgba(33, 33, 33, 0.25)', rgb: '33, 33, 33',
+                    border: 'rgba(0, 0, 0, 0.18)', shadow: '0 0 40px rgba(0, 0, 0, 0.12)',
+                    text: '#212121', textMuted: '#616161',
+                    bodyGrad: 'radial-gradient(ellipse at top, #ffffff 0%, #f0f0f0 55%, #e0e0e0 100%)',
+                    titleBar: 'linear-gradient(90deg, #fafafa, #ffffff, #fafafa)',
+                    shopGrad: 'linear-gradient(180deg, #424242, #212121)', shopText: '#ffffff',
+                    authLogo: 'linear-gradient(145deg, #eeeeee, #e0e0e0)',
+                    headerGlow: 'radial-gradient(circle, rgba(0,0,0,0.06) 0%, transparent 70%)',
+                    panelA: 'rgba(255, 255, 255, 0.95)'
+                }
+            };
+            // aliases
+            themes.orig = themes.purple;
+            themes.mor = themes.purple;
+            themes.default = themes.purple;
+            themes.sari = themes.yellow;
+            themes.mavi = themes.blue;
+            themes.kirmizi = themes.red;
+            themes.siyah = themes.black;
+            themes.beyaz = themes.white;
+            themes.yesil = themes.green;
+            themes.pembe = themes.pink;
 
-            root.style.setProperty('--bg-deep', p.bgDeep);
-            root.style.setProperty('--bg-panel', p.bgPanel);
-            root.style.setProperty('--bg-card', p.bgCard);
-            root.style.setProperty('--accent', p.accent);
-            root.style.setProperty('--accent-soft', p.accentSoft);
-            root.style.setProperty('--accent-glow', p.accentGlow);
-            root.style.setProperty('--border', p.border);
-            root.style.setProperty('--shadow', p.shadow);
-            root.style.setProperty('--text', p.text);
-            root.style.setProperty('--text-muted', p.textMuted);
+            let key = String(name || 'orig').toLowerCase().replace(/^theme_/, '');
+            let t = themes[key] || themes.orig;
+
+            root.style.setProperty('--bg-deep', t.bgDeep);
+            root.style.setProperty('--bg-panel', t.bgPanel);
+            root.style.setProperty('--bg-card', t.bgCard);
+            root.style.setProperty('--accent', t.accent);
+            root.style.setProperty('--accent-soft', t.accentSoft);
+            root.style.setProperty('--accent-glow', t.accentGlow);
+            root.style.setProperty('--border', t.border);
+            root.style.setProperty('--shadow', t.shadow);
+            root.style.setProperty('--text', t.text);
+            root.style.setProperty('--text-muted', t.textMuted);
 
             let styleEl = document.getElementById('theme-full-override');
             if (!styleEl) {
@@ -7167,85 +7256,110 @@
                 styleEl.id = 'theme-full-override';
                 document.head.appendChild(styleEl);
             }
-            const r = p.rgb;
+            const r = t.rgb;
             styleEl.textContent =
-                'body{background:' + p.bodyGrad + '!important;color:' + p.text + '!important;}' +
-                '.title-bar{background:' + p.titleBar + '!important;border-bottom-color:' + p.border + '!important;}' +
-                '.shop-tab{background:' + p.shopGrad + '!important;color:' + p.shopText + '!important;box-shadow:4px 0 24px rgba(' + r + ',0.35)!important;}' +
-                '.auth-logo,.logo-wrapper{background:' + p.authLogo + '!important;border-color:' + p.accent + '!important;box-shadow:0 0 30px ' + p.accentGlow + '!important;}' +
-                '.header::before{background:' + p.headerGlow + '!important;}' +
-                '.game-title,.auth-title,.modal-title{color:' + p.accent + '!important;text-shadow:0 0 28px ' + p.accentGlow + '!important;}' +
-                '.folder:hover{border-color:' + p.accent + '!important;box-shadow:0 12px 40px rgba(' + r + ',0.2)!important;}' +
+                'body{background:' + t.bodyGrad + '!important;color:' + t.text + '!important;}' +
+                '.title-bar{background:' + t.titleBar + '!important;border-bottom-color:' + t.border + '!important;color:' + t.text + '!important;}' +
+                '.shop-tab{background:' + t.shopGrad + '!important;color:' + t.shopText + '!important;box-shadow:4px 0 24px rgba(' + r + ',0.35)!important;}' +
+                '.auth-logo,.logo-wrapper{background:' + t.authLogo + '!important;border-color:' + t.accent + '!important;box-shadow:0 0 30px ' + t.accentGlow + '!important;}' +
+                '.header::before{background:' + t.headerGlow + '!important;}' +
+                '.game-title,.auth-title,.modal-title{color:' + t.accent + '!important;text-shadow:0 0 28px ' + t.accentGlow + '!important;}' +
+                '.folder:hover{border-color:' + t.accent + '!important;box-shadow:0 12px 40px rgba(' + r + ',0.2)!important;}' +
                 '.folder::before{background:linear-gradient(180deg,rgba(' + r + ',0.08),transparent)!important;}' +
                 '.folder-icon{filter:drop-shadow(0 0 12px rgba(' + r + ',0.4))!important;}' +
-                '.primary-btn,.auth-tab.active{background:' + p.accent + '!important;color:' + p.shopText + '!important;box-shadow:0 4px 20px rgba(' + r + ',0.35)!important;}' +
-                '.primary-btn:hover{background:' + p.accentSoft + '!important;}' +
-                '.mod-btn:hover,.action-btn:hover{background:' + p.accent + '!important;color:' + p.shopText + '!important;border-color:' + p.accent + '!important;}' +
-                '.user-badge{color:' + p.accentSoft + '!important;background:rgba(' + r + ',0.12)!important;border-color:' + p.border + '!important;}' +
-                '.notif-btn{background:rgba(' + r + ',0.1)!important;border-color:' + p.border + '!important;}' +
-                '.notif-btn:hover{background:rgba(' + r + ',0.25)!important;border-color:' + p.accent + '!important;}' +
-                '.toast{border-color:' + p.accent + '!important;}' +
-                '.modal-content,.auth-box,.shop-drawer{background:' + p.bgPanel + '!important;border-color:' + p.border + '!important;box-shadow:' + p.shadow + '!important;}' +
-                '.folder,.info-card,.shop-card,.achievement-item{border-color:' + p.border + '!important;}' +
-                '.folder,.shop-card{background:' + p.bgCard + '!important;}' +
-                '.info-card{background:rgba(0,0,0,0.3)!important;border-color:' + p.border + '!important;}' +
-                '#music-player{background:' + p.panelA + '!important;border-color:' + p.border + '!important;box-shadow:0 0 24px rgba(' + r + ',0.2)!important;}' +
-                '#music-player button,#music-player #mp-collapse-btn{background:rgba(' + r + ',0.2)!important;border-color:' + p.border + '!important;color:' + p.text + '!important;}' +
+                '.folder-name,.folder{color:' + t.text + '!important;}' +
+                '.primary-btn,.auth-tab.active{background:' + t.accent + '!important;color:' + t.shopText + '!important;box-shadow:0 4px 20px rgba(' + r + ',0.35)!important;}' +
+                '.primary-btn:hover{background:' + t.accentSoft + '!important;}' +
+                '.mod-btn:hover,.action-btn:hover{background:' + t.accent + '!important;color:' + t.shopText + '!important;border-color:' + t.accent + '!important;}' +
+                '.user-badge{color:' + t.accentSoft + '!important;background:rgba(' + r + ',0.12)!important;border-color:' + t.border + '!important;}' +
+                '.notif-btn{background:rgba(' + r + ',0.1)!important;border-color:' + t.border + '!important;color:' + t.text + '!important;}' +
+                '.notif-btn:hover{background:rgba(' + r + ',0.25)!important;border-color:' + t.accent + '!important;}' +
+                '.toast{border-color:' + t.accent + '!important;color:' + t.text + '!important;background:' + t.bgCard + '!important;}' +
+                '.modal-content,.auth-box,.shop-drawer{background:' + t.bgPanel + '!important;border-color:' + t.border + '!important;box-shadow:' + t.shadow + '!important;color:' + t.text + '!important;}' +
+                '.folder,.info-card,.shop-card,.achievement-item{border-color:' + t.border + '!important;}' +
+                '.folder,.shop-card{background:' + t.bgCard + '!important;}' +
+                '.info-card{background:rgba(0,0,0,0.25)!important;border-color:' + t.border + '!important;}' +
+                '#music-player{background:' + t.panelA + '!important;border-color:' + t.border + '!important;box-shadow:0 0 24px rgba(' + r + ',0.2)!important;}' +
+                '#music-player button,#music-player #mp-collapse-btn{background:rgba(' + r + ',0.2)!important;border-color:' + t.border + '!important;color:' + t.text + '!important;}' +
                 '#music-player button:active{background:rgba(' + r + ',0.4)!important;}' +
-                'input,select,textarea{border-color:' + p.border + '!important;color:' + p.text + '!important;}' +
-                'input:focus,select:focus,textarea:focus{border-color:' + p.accent + '!important;box-shadow:0 0 0 3px rgba(' + r + ',0.15)!important;}' +
-                '.section-label::after{background:linear-gradient(90deg,' + p.border + ',transparent)!important;}' +
-                '.auth-box::before{background:linear-gradient(90deg,transparent,' + p.accent + ',transparent)!important;}' +
-                '.case-pointer{background:' + p.accent + '!important;box-shadow:0 0 12px ' + p.accentGlow + '!important;}' +
-                '.case-slot.win{border-color:' + p.accent + '!important;box-shadow:0 0 18px ' + p.accentGlow + '!important;}' +
-                '.case-slot,.case-roulette-wrap{border-color:' + p.border + '!important;}' +
-                '.shop-drawer-header{background:linear-gradient(90deg,rgba(' + r + ',0.12),transparent)!important;border-bottom-color:' + p.border + '!important;}' +
-                '.mod-btn,.action-btn,.back-btn{border-color:' + p.border + '!important;}' +
-                '.close-x{border-color:rgba(255,61,113,0.4)!important;}' +
-                '.balance-big{color:var(--success)!important;}' +
-                '.info-row .label,.folder-desc,.auth-sub,.section-label,.mp-title{color:' + p.textMuted + '!important;}' +
-                '.info-card h4,.shop-card h4{color:' + p.accentSoft + '!important;}' +
-                '::-webkit-scrollbar-thumb{background:' + p.border + '!important;}' +
-                '.user-list-item:hover{border-color:' + p.border + '!important;background:rgba(' + r + ',0.08)!important;}' +
-                '.achievement-item.unlocked{border-color:rgba(0,230,118,0.3)!important;}' +
-                '.link-preview-card,.chat-reaction{border-color:' + p.border + '!important;}' +
-                '#maintenance-overlay .maint-box{background:' + p.bgPanel + '!important;border-color:' + p.border + '!important;box-shadow:' + p.shadow + '!important;}' +
-                '#maintenance-overlay h2{color:' + p.accent + '!important;}';
+                'input,select,textarea{border-color:' + t.border + '!important;color:' + t.text + '!important;background:rgba(0,0,0,0.25)!important;}' +
+                'input:focus,select:focus,textarea:focus{border-color:' + t.accent + '!important;box-shadow:0 0 0 3px rgba(' + r + ',0.15)!important;}' +
+                '.section-label::after{background:linear-gradient(90deg,' + t.border + ',transparent)!important;}' +
+                '.auth-box::before{background:linear-gradient(90deg,transparent,' + t.accent + ',transparent)!important;}' +
+                '.case-pointer{background:' + t.accent + '!important;box-shadow:0 0 12px ' + t.accentGlow + '!important;}' +
+                '.case-slot.win{border-color:' + t.accent + '!important;box-shadow:0 0 18px ' + t.accentGlow + '!important;}' +
+                '.case-slot,.case-roulette-wrap{border-color:' + t.border + '!important;}' +
+                '.shop-drawer-header{background:linear-gradient(90deg,rgba(' + r + ',0.12),transparent)!important;border-bottom-color:' + t.border + '!important;}' +
+                '.mod-btn,.action-btn,.back-btn{border-color:' + t.border + '!important;color:' + t.text + '!important;}' +
+                '.info-row .label,.folder-desc,.auth-sub,.section-label,.mp-title,.clock{color:' + t.textMuted + '!important;}' +
+                '.info-card h4,.shop-card h4{color:' + t.accentSoft + '!important;}' +
+                '::-webkit-scrollbar-thumb{background:' + t.border + '!important;}' +
+                '.user-list-item:hover{border-color:' + t.border + '!important;background:rgba(' + r + ',0.08)!important;}' +
+                '.link-preview-card,.chat-reaction{border-color:' + t.border + '!important;}' +
+                '#maintenance-overlay .maint-box{background:' + t.bgPanel + '!important;border-color:' + t.border + '!important;box-shadow:' + t.shadow + '!important;}' +
+                '#maintenance-overlay h2{color:' + t.accent + '!important;}' +
+                '#maintenance-overlay p{color:' + t.textMuted + '!important;}';
 
-            try { localStorage.setItem('swordcity_theme', p.key); } catch (e) {}
+            try { localStorage.setItem('swordcity_theme', t.key); } catch (e) {}
         }
         function theme_green() { applyTheme('green'); }
+        function theme_blue() { applyTheme('blue'); }
+        function theme_red() { applyTheme('red'); }
+        function theme_yellow() { applyTheme('yellow'); }
         function theme_pink() { applyTheme('pink'); }
+        function theme_purple() { applyTheme('purple'); }
         function theme_orig() { applyTheme('orig'); }
+        function theme_black() { applyTheme('black'); }
+        function theme_white() { applyTheme('white'); }
         function theme_default() { applyTheme('orig'); }
         window.theme_green = theme_green;
+        window.theme_blue = theme_blue;
+        window.theme_red = theme_red;
+        window.theme_yellow = theme_yellow;
         window.theme_pink = theme_pink;
+        window.theme_purple = theme_purple;
         window.theme_orig = theme_orig;
+        window.theme_black = theme_black;
+        window.theme_white = theme_white;
         window.theme_default = theme_default;
         (function () {
             try {
-                const t = localStorage.getItem('swordcity_theme');
-                if (t === 'green') applyTheme('green');
-                else if (t === 'pink') applyTheme('pink');
+                const saved = localStorage.getItem('swordcity_theme');
+                if (saved) applyTheme(saved);
             } catch (e) {}
         })();
 
         // ========== MÜZİK AÇ / KAPA ==========
         function toggleMusicPlayer() {
             const el = document.getElementById('music-player');
+            const btn = document.getElementById('mp-collapse-btn');
             if (!el) return;
             el.classList.toggle('collapsed');
+            const closed = el.classList.contains('collapsed');
+            if (btn) {
+                btn.textContent = closed ? '🎵' : '✕';
+                btn.title = closed ? 'Müzik aç' : 'Müzik kapa';
+            }
             try {
-                localStorage.setItem('swordcity_music_collapsed', el.classList.contains('collapsed') ? '1' : '0');
+                localStorage.setItem('swordcity_music_collapsed', closed ? '1' : '0');
             } catch (e) {}
         }
         (function () {
+            const el = document.getElementById('music-player');
+            const btn = document.getElementById('mp-collapse-btn');
+            if (!el) return;
+            let closed = true;
             try {
-                if (localStorage.getItem('swordcity_music_collapsed') === '1') {
-                    const el = document.getElementById('music-player');
-                    if (el) el.classList.add('collapsed');
-                }
+                const s = localStorage.getItem('swordcity_music_collapsed');
+                // varsayılan: kapalı (arkaplanda gizli). Sadece açıkça '0' ise açık.
+                closed = (s !== '0');
             } catch (e) {}
+            if (closed) el.classList.add('collapsed');
+            else el.classList.remove('collapsed');
+            if (btn) {
+                btn.textContent = closed ? '🎵' : '✕';
+                btn.title = closed ? 'Müzik aç' : 'Müzik kapa';
+            }
         })();
 
         // ========== NOTLAR (herkes) ==========
