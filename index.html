@@ -1077,6 +1077,78 @@
             #music-player .mp-title { max-width: 70px; font-size: 10px; }
         }
 
+
+        /* ===== BAKIM EKRANI ===== */
+        #maintenance-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 99999;
+            background: rgba(5,0,12,0.94);
+            backdrop-filter: blur(14px);
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            text-align: center;
+            padding: 28px;
+        }
+        #maintenance-overlay.show { display: flex; }
+        #maintenance-overlay .maint-box {
+            background: var(--bg-panel);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 36px 28px;
+            max-width: 420px;
+            width: 100%;
+            box-shadow: var(--shadow);
+        }
+        #maintenance-overlay .maint-icon { font-size: 56px; margin-bottom: 12px; }
+        #maintenance-overlay h2 {
+            font-family: 'Orbitron', sans-serif;
+            color: var(--accent);
+            font-size: 22px;
+            margin-bottom: 10px;
+            letter-spacing: 1px;
+        }
+        #maintenance-overlay p {
+            color: var(--text-muted);
+            font-size: 15px;
+            line-height: 1.6;
+            margin-bottom: 8px;
+        }
+        #maintenance-overlay #maint-countdown {
+            font-family: 'Orbitron', sans-serif;
+            color: var(--warning);
+            font-size: 18px;
+            margin-top: 14px;
+            letter-spacing: 2px;
+        }
+
+        /* ===== MÜZİK AÇ/KAPA ===== */
+        #music-player.collapsed {
+            max-width: 48px !important;
+            min-width: 48px;
+            padding: 6px !important;
+            overflow: hidden;
+        }
+        #music-player.collapsed > *:not(#mp-collapse-btn) {
+            display: none !important;
+        }
+        #music-player #mp-collapse-btn {
+            background: rgba(255,0,204,0.25);
+            border: 1px solid var(--border);
+            color: var(--text);
+            border-radius: 8px;
+            width: 30px;
+            height: 30px;
+            cursor: pointer;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
     </style>
 </head>
 <body>
@@ -1251,6 +1323,11 @@
                     <div class="folder-name">SWOR Destek</div>
                     <div class="folder-desc">Yardım & İletişim</div>
                 </div>
+                <div class="folder" onclick="openNotes()">
+                    <div class="folder-icon">📝</div>
+                    <div class="folder-name">Notlar</div>
+                    <div class="folder-desc">Herkes not tutar</div>
+                </div>
                 <div class="folder" onclick="openNews()">
                     <div class="folder-icon">📰</div>
                     <div class="folder-name">Haberler</div>
@@ -1282,6 +1359,15 @@
                 <button class="close-x" onclick="closeModal()">✕</button>
             </div>
             <div id="modal-body"></div>
+        </div>
+    </div>
+
+    <div id="maintenance-overlay">
+        <div class="maint-box">
+            <div class="maint-icon">🔧</div>
+            <h2>Bakımdayız</h2>
+            <p>Site şu an bakımdadır.<br>Lütfen daha sonra tekrar gelin.</p>
+            <div id="maint-countdown"></div>
         </div>
     </div>
 
@@ -2527,17 +2613,18 @@
                 if (!inv.length) {
                     invHtml = '<p style="color:var(--text-muted);font-size:13px;">Envanter boş.</p>';
                 } else {
-                    invHtml = '<div style="display:flex;flex-wrap:wrap;gap:8px;">';
-                    inv.slice(0, 30).forEach(function(it) {
-                        const name = typeof it === 'string' ? it : (it.name || '?');
-                        const img = (typeof it === 'object' && it.image) ? it.image : '';
+                    invHtml = '<div style="display:flex;flex-wrap:wrap;gap:8px;max-height:320px;overflow-y:auto;">';
+                    inv.forEach(function(it) {
+                        const n = normalizeItem(it);
+                        const name = n.name || '?';
+                        const img = n.image || '';
                         invHtml += `<div style="width:64px;text-align:center;">
-                            ${img ? `<img src="${img}" style="width:56px;height:56px;object-fit:cover;border-radius:10px;border:1px solid var(--border);">` : `<div style="width:56px;height:56px;border-radius:10px;background:rgba(255,0,204,0.1);display:grid;place-items:center;">🎒</div>`}
+                            ${img ? `<img src="${escapeHtml(img)}" alt="" style="width:56px;height:56px;object-fit:cover;border-radius:10px;border:1px solid var(--border);" onerror="this.style.display='none';this.nextElementSibling&&(this.nextElementSibling.style.display='grid');"><div style="width:56px;height:56px;border-radius:10px;background:rgba(255,0,204,0.1);display:none;place-items:center;">🎒</div>` : `<div style="width:56px;height:56px;border-radius:10px;background:rgba(255,0,204,0.1);display:grid;place-items:center;">🎒</div>`}
                             <div style="font-size:10px;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(name)}</div>
                         </div>`;
                     });
                     invHtml += '</div>';
-                    if (inv.length > 30) invHtml += `<p style="font-size:11px;color:var(--text-muted);margin-top:6px;">+${inv.length - 30} daha...</p>`;
+                    invHtml += `<p style="font-size:11px;color:var(--text-muted);margin-top:6px;">Toplam ${inv.length} eşya</p>`;
                 }
             }
 
@@ -5674,8 +5761,11 @@
                 <button class="mod-btn" onclick="modServerShop()" style="margin-bottom:8px;">
                     <span style="font-size:20px;">🖥️</span> SERVER Pazar Satışı
                 </button>
-                <button class="mod-btn" onclick="showStickerRequests()" style="margin-bottom:12px;">
+                <button class="mod-btn" onclick="showStickerRequests()" style="margin-bottom:8px;">
                     <span style="font-size:20px;">🎨</span> Çıkartma Talepleri
+                </button>
+                <button class="mod-btn" onclick="openMaintenancePanel()" style="margin-bottom:12px;">
+                    <span style="font-size:20px;">🔧</span> Bakım Modu
                 </button>
                 <p style="color:var(--text-muted);margin-bottom:14px;font-size:13px;">İşlem yapmak istediğin kişiyi seç:</p>
                 ${list}
@@ -6959,16 +7049,279 @@
         }
 
 
-        // ========== CONSOLE (şimdilik komut yok) ==========
+        // ========== CONSOLE + TEMA ==========
         function openConsole() {
             openModal('💻 Console', `
                 <div class="info-card">
-                    <p style="color:var(--text-muted);font-size:14px;line-height:1.5;">Konsol yakında aktif olacak. Şimdilik komut bulunmuyor.</p>
-                    <pre style="margin-top:12px;padding:12px;background:rgba(0,0,0,0.4);border-radius:10px;border:1px solid var(--border);color:var(--accent-soft);font-size:13px;">&gt; _</pre>
+                    <p style="color:var(--text-muted);font-size:14px;line-height:1.5;margin-bottom:12px;">Komutlar (konsolda da çalışır):</p>
+                    <pre style="padding:12px;background:rgba(0,0,0,0.4);border-radius:10px;border:1px solid var(--border);color:var(--accent-soft);font-size:13px;line-height:1.7;">theme_green()
+theme_default()</pre>
+                    <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">
+                        <button class="primary-btn" style="width:auto;margin:0;flex:1;" onclick="theme_green()">🟢 theme_green</button>
+                        <button class="back-btn" style="width:auto;margin:0;flex:1;" onclick="theme_default()">💜 Varsayılan</button>
+                    </div>
                 </div>
                 <button class="back-btn" onclick="closeModal()">← Kapat</button>
             `);
         }
+
+        function applyTheme(name) {
+            const root = document.documentElement;
+            if (name === 'green' || name === 'theme_green') {
+                root.style.setProperty('--bg-deep', '#00140a');
+                root.style.setProperty('--bg-panel', '#002216');
+                root.style.setProperty('--bg-card', '#00301f');
+                root.style.setProperty('--accent', '#00e676');
+                root.style.setProperty('--accent-soft', '#69f0ae');
+                root.style.setProperty('--accent-glow', 'rgba(0, 230, 118, 0.45)');
+                root.style.setProperty('--border', 'rgba(0, 230, 118, 0.35)');
+                root.style.setProperty('--shadow', '0 0 40px rgba(0, 230, 118, 0.25)');
+                root.style.setProperty('--text', '#e6fff0');
+                root.style.setProperty('--text-muted', '#9cc9b0');
+                try { localStorage.setItem('swordcity_theme', 'green'); } catch (e) {}
+                toast('Tema: Yeşil 🟢');
+                return;
+            }
+            root.style.setProperty('--bg-deep', '#0a0014');
+            root.style.setProperty('--bg-panel', '#160022');
+            root.style.setProperty('--bg-card', '#1f0030');
+            root.style.setProperty('--accent', '#ff00cc');
+            root.style.setProperty('--accent-soft', '#ff66e0');
+            root.style.setProperty('--accent-glow', 'rgba(255, 0, 204, 0.45)');
+            root.style.setProperty('--border', 'rgba(255, 0, 204, 0.35)');
+            root.style.setProperty('--shadow', '0 0 40px rgba(255, 0, 204, 0.25)');
+            root.style.setProperty('--text', '#f0e6ff');
+            root.style.setProperty('--text-muted', '#b89cc9');
+            try { localStorage.setItem('swordcity_theme', 'default'); } catch (e) {}
+            toast('Tema: Varsayılan');
+        }
+        function theme_green() { applyTheme('green'); }
+        function theme_default() { applyTheme('default'); }
+        window.theme_green = theme_green;
+        window.theme_default = theme_default;
+        (function () {
+            try {
+                if (localStorage.getItem('swordcity_theme') === 'green') applyTheme('green');
+            } catch (e) {}
+        })();
+
+        // ========== MÜZİK AÇ / KAPA ==========
+        function toggleMusicPlayer() {
+            const el = document.getElementById('music-player');
+            if (!el) return;
+            el.classList.toggle('collapsed');
+            try {
+                localStorage.setItem('swordcity_music_collapsed', el.classList.contains('collapsed') ? '1' : '0');
+            } catch (e) {}
+        }
+        (function () {
+            try {
+                if (localStorage.getItem('swordcity_music_collapsed') === '1') {
+                    const el = document.getElementById('music-player');
+                    if (el) el.classList.add('collapsed');
+                }
+            } catch (e) {}
+        })();
+
+        // ========== NOTLAR (herkes) ==========
+        function loadNotes() {
+            try {
+                return JSON.parse(localStorage.getItem('swordcity_notes_v1') || '[]');
+            } catch (e) { return []; }
+        }
+        function saveNotes(list) {
+            try { localStorage.setItem('swordcity_notes_v1', JSON.stringify(list || [])); } catch (e) {}
+            if (firebaseReady) fbSet('notes', list || []);
+        }
+        async function loadNotesAsync() {
+            let list = loadNotes();
+            if (firebaseReady) {
+                try {
+                    const data = await fbGet('notes');
+                    if (Array.isArray(data)) list = data;
+                    else if (data && typeof data === 'object') list = Object.values(data);
+                } catch (e) {}
+            }
+            try { localStorage.setItem('swordcity_notes_v1', JSON.stringify(list)); } catch (e) {}
+            return list;
+        }
+        async function openNotes() {
+            const me = getCurrentUser();
+            if (!me) return;
+            const list = await loadNotesAsync();
+            list.sort(function (a, b) { return (b.at || '').localeCompare(a.at || ''); });
+            let html = `
+                <div class="form-group">
+                    <label>Yeni not</label>
+                    <textarea id="note-text" rows="3" placeholder="Notunu yaz..." style="width:100%;padding:12px;background:rgba(0,0,0,0.35);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:inherit;resize:vertical;"></textarea>
+                </div>
+                <button class="primary-btn" onclick="addNote()">📝 Not Ekle</button>
+                <div style="margin-top:16px;">
+            `;
+            if (!list.length) {
+                html += '<p style="color:var(--text-muted);text-align:center;padding:12px;">Henüz not yok.</p>';
+            } else {
+                list.forEach(function (n) {
+                    const when = n.at ? new Date(n.at).toLocaleString('tr-TR') : '';
+                    const canDel = isModerator(me) || n.by === me;
+                    html += `
+                        <div class="info-card">
+                            <div style="font-size:14px;line-height:1.45;white-space:pre-wrap;">${escapeHtml(n.text || '')}</div>
+                            <div style="font-size:11px;color:var(--text-muted);margin-top:8px;">${escapeHtml(n.by || '?')} · ${when}</div>
+                            ${canDel ? `<button class="danger-btn" style="margin-top:8px;" onclick="deleteNote('${escapeHtml(n.id)}')">Sil</button>` : ''}
+                        </div>
+                    `;
+                });
+            }
+            html += '</div><button class="back-btn" onclick="closeModal()">← Kapat</button>';
+            openModal('📝 Notlar', html);
+        }
+        async function addNote() {
+            const me = getCurrentUser();
+            if (!me) return;
+            const ta = document.getElementById('note-text');
+            const text = (ta && ta.value || '').trim();
+            if (!text || text.length < 1) {
+                toast('Not boş olamaz.', 'error');
+                return;
+            }
+            const list = await loadNotesAsync();
+            list.unshift({
+                id: 'note_' + Date.now() + '_' + Math.floor(Math.random() * 999),
+                by: me,
+                text: text.slice(0, 2000),
+                at: new Date().toISOString()
+            });
+            if (list.length > 200) list.length = 200;
+            saveNotes(list);
+            toast('Not eklendi.');
+            openNotes();
+        }
+        async function deleteNote(id) {
+            const me = getCurrentUser();
+            let list = await loadNotesAsync();
+            const n = list.find(function (x) { return x.id === id; });
+            if (!n) return;
+            if (!isModerator(me) && n.by !== me) {
+                toast('Sadece kendi notunu silebilirsin.', 'error');
+                return;
+            }
+            if (!confirm('Not silinsin mi?')) return;
+            list = list.filter(function (x) { return x.id !== id; });
+            saveNotes(list);
+            toast('Not silindi.');
+            openNotes();
+        }
+
+        // ========== BAKIM MODU ==========
+        let _maintTimer = null;
+        let _maintState = { active: false, until: null, message: '' };
+
+        function applyMaintenanceUI(state) {
+            _maintState = state || { active: false, until: null, message: '' };
+            const overlay = document.getElementById('maintenance-overlay');
+            const cd = document.getElementById('maint-countdown');
+            if (!overlay) return;
+            const me = getCurrentUser();
+            const bypass = isModerator(me);
+            if (_maintState.active && !bypass) {
+                overlay.classList.add('show');
+                const msg = overlay.querySelector('p');
+                if (msg) {
+                    msg.innerHTML = escapeHtml(_maintState.message || 'Site şu an bakımdadır.<br>Lütfen daha sonra tekrar gelin.').replace(/\n/g, '<br>');
+                }
+                if (_maintTimer) clearInterval(_maintTimer);
+                function tick() {
+                    if (!_maintState.until) {
+                        if (cd) cd.textContent = '';
+                        return;
+                    }
+                    const left = new Date(_maintState.until).getTime() - Date.now();
+                    if (left <= 0) {
+                        if (cd) cd.textContent = 'Süre doldu — yenileniyor…';
+                        setMaintenance(false);
+                        return;
+                    }
+                    const s = Math.floor(left / 1000);
+                    const h = Math.floor(s / 3600);
+                    const m = Math.floor((s % 3600) / 60);
+                    const sec = s % 60;
+                    if (cd) cd.textContent = (h > 0 ? h + 's ' : '') + m + 'dk ' + sec + 'sn';
+                }
+                tick();
+                _maintTimer = setInterval(tick, 1000);
+            } else {
+                overlay.classList.remove('show');
+                if (_maintTimer) { clearInterval(_maintTimer); _maintTimer = null; }
+            }
+        }
+
+        function setMaintenance(active, minutes, message) {
+            const state = {
+                active: !!active,
+                until: (active && minutes && minutes > 0) ? new Date(Date.now() + minutes * 60 * 1000).toISOString() : null,
+                message: message || 'Site şu an bakımdadır.\nLütfen daha sonra tekrar gelin.',
+                by: getCurrentUser() || '',
+                at: new Date().toISOString()
+            };
+            try { localStorage.setItem('swordcity_maintenance', JSON.stringify(state)); } catch (e) {}
+            if (firebaseReady) fbSet('maintenance', state);
+            applyMaintenanceUI(state);
+            toast(active ? '🔧 Bakım modu AÇIK' : '✅ Bakım modu kapandı');
+        }
+
+        function openMaintenancePanel() {
+            if (!isModerator(getCurrentUser())) {
+                toast('Sadece moderatör.', 'error');
+                return;
+            }
+            const st = _maintState || {};
+            openModal('🔧 Bakım Modu', `
+                <div class="info-card" style="margin-bottom:12px;">
+                    <div class="info-row"><span class="label">Durum</span><span class="value">${st.active ? '🔴 AÇIK' : '🟢 KAPALI'}</span></div>
+                    ${st.until ? `<div class="info-row"><span class="label">Bitiş</span><span class="value">${new Date(st.until).toLocaleString('tr-TR')}</span></div>` : ''}
+                </div>
+                <p style="color:var(--text-muted);font-size:13px;margin-bottom:12px;">Açılınca moderatör hariç herkesin ekranında bakım mesajı görünür.</p>
+                <div class="form-group">
+                    <label>Süre (dakika) — 0 = süresiz</label>
+                    <input type="number" id="maint-mins" value="30" min="0" step="1">
+                </div>
+                <div class="form-group">
+                    <label>Mesaj</label>
+                    <textarea id="maint-msg" rows="3" style="width:100%;padding:12px;background:rgba(0,0,0,0.35);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:inherit;resize:vertical;">Site şu an bakımdadır.
+Lütfen daha sonra tekrar gelin.</textarea>
+                </div>
+                <button class="primary-btn" onclick="modStartMaintenance()">🔧 Bakımı Başlat</button>
+                <button class="danger-btn" onclick="setMaintenance(false);showModUserList();">✅ Bakımı Kapat</button>
+                <button class="back-btn" onclick="showModUserList()">← Geri</button>
+            `);
+        }
+        function modStartMaintenance() {
+            const mins = parseInt((document.getElementById('maint-mins') || {}).value, 10) || 0;
+            const msg = ((document.getElementById('maint-msg') || {}).value || '').trim() || 'Site şu an bakımdadır.\nLütfen daha sonra tekrar gelin.';
+            setMaintenance(true, mins, msg);
+            showModUserList();
+        }
+
+        function startMaintenanceListener() {
+            try {
+                const raw = localStorage.getItem('swordcity_maintenance');
+                if (raw) applyMaintenanceUI(JSON.parse(raw));
+            } catch (e) {}
+            if (firebaseReady && db) {
+                db.ref('maintenance').on('value', function (snap) {
+                    const v = snap.val();
+                    if (v && typeof v === 'object') applyMaintenanceUI(v);
+                    else applyMaintenanceUI({ active: false });
+                });
+            }
+        }
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', startMaintenanceListener);
+        } else {
+            setTimeout(startMaintenanceListener, 200);
+        }
+
 
         // ========== HABERLER (sadece moderatör yazar) ==========
         async function loadNewsList() {
