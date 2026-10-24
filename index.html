@@ -1458,6 +1458,7 @@
         // In-memory cache (hızlı okuma için)
         let _usersCache = {};
         let _marketCache = [];
+        let _charPricesCache = {}; // karakter adı -> orijinal piyasa fiyatı
         let _tradesCache = [];
         let _casesCache = [];
         let _notifsCache = {};
@@ -1617,10 +1618,22 @@
                     merged.inventory = Array.isArray(b.inventory) ? b.inventory.slice() : (Array.isArray(merged.inventory) ? merged.inventory : []);
                     merged.invVersion = vb;
                 }
-                // Bakiye: daha yeni updatedAt
-                if (ta > tb) merged.balance = a.balance;
-                else if (tb > ta) merged.balance = b.balance;
-                else merged.balance = (typeof a.balance === 'number' ? a.balance : b.balance);
+                // Bakiye + level: daha yeni updatedAt kazanır (seed eski değeri geri getirmesin)
+                if (ta > tb) {
+                    merged.balance = a.balance;
+                    if (typeof a.level === 'number') merged.level = a.level;
+                    if (typeof a.tp === 'number') merged.tp = a.tp;
+                } else if (tb > ta) {
+                    merged.balance = b.balance;
+                    if (typeof b.level === 'number') merged.level = b.level;
+                    if (typeof b.tp === 'number') merged.tp = b.tp;
+                } else {
+                    merged.balance = (typeof a.balance === 'number' ? a.balance : b.balance);
+                    if (typeof a.level === 'number') merged.level = a.level;
+                    else if (typeof b.level === 'number') merged.level = b.level;
+                    if (typeof a.tp === 'number') merged.tp = a.tp;
+                    else if (typeof b.tp === 'number') merged.tp = b.tp;
+                }
                 if (!merged.password) merged.password = a.password || b.password || '';
                 out[k] = merged;
             });
@@ -1664,11 +1677,10 @@
 
         function saveUsers(users) {
             _usersCache = users || {};
-            // NOT: tüm kullanıcılara aynı updatedAt basma — bakiye yarışına yol açıyordu
-            // Sadece updatedAt eksik olanlara yaz
+            const now = new Date().toISOString();
             Object.keys(_usersCache).forEach(function(uname) {
-                if (_usersCache[uname] && typeof _usersCache[uname] === 'object' && !_usersCache[uname].updatedAt) {
-                    _usersCache[uname].updatedAt = new Date().toISOString();
+                if (_usersCache[uname] && typeof _usersCache[uname] === 'object') {
+                    _usersCache[uname].updatedAt = now;
                 }
             });
             try { safeLocalSet('swordcity_users_v3', JSON.stringify(_usersCache)); } catch (e) {}
@@ -1713,6 +1725,93 @@
             _marketCache = list || [];
             try { safeLocalSet('swordcity_market_v1', JSON.stringify(_marketCache)); } catch (e) {}
             if (firebaseReady) fbSet('market', _marketCache);
+        }
+
+        // ---------- KARAKTER ORİJİNAL PİYASA FİYATLARI ----------
+        function loadCharPrices() {
+            return _charPricesCache || {};
+        }
+        async function loadCharPricesAsync() {
+            if (firebaseReady) {
+                try {
+                    const data = await fbGet('char_prices');
+                    _charPricesCache = (data && typeof data === 'object') ? data : {};
+                } catch (e) { _charPricesCache = _charPricesCache || {}; }
+                return _charPricesCache;
+            }
+            try {
+                _charPricesCache = JSON.parse(localStorage.getItem('swordcity_char_prices_v1') || '{}');
+            } catch (e) { _charPricesCache = {}; }
+            return _charPricesCache;
+        }
+        function saveCharPrices(map) {
+            _charPricesCache = map || {};
+            try { safeLocalSet('swordcity_char_prices_v1', JSON.stringify(_charPricesCache)); } catch (e) {}
+            if (firebaseReady) fbSet('char_prices', _charPricesCache);
+        }
+        function getCharMarketPrice(itemOrName) {
+            const name = (typeof itemOrName === 'string')
+                ? itemOrName
+                : (itemOrName && itemOrName.name) ? itemOrName.name : '';
+            if (!name) return 0;
+            const prices = loadCharPrices();
+            // 1) global katalog
+            if (prices[name] != null && Number(prices[name]) > 0) return Number(prices[name]);
+            // 2) item üzerindeki marketValue
+            if (itemOrName && typeof itemOrName === 'object') {
+                const mv = Number(itemOrName.marketValue) || 0;
+                if (mv > 0) return mv;
+            }
+            return 0;
+        }
+        // Moderatör fiyat değiştirince: global + tüm pazar ilanları + tüm envanterler
+        function setCharMarketPrice(charName, price) {
+            if (!charName) return;
+            price = Math.max(0, Math.floor(Number(price) || 0));
+            const prices = loadCharPrices();
+            prices[charName] = price;
+            saveCharPrices(prices);
+
+            // Pazardaki aynı isimli ilanları güncelle
+            const market = loadMarket();
+            let mChanged = false;
+            market.forEach(function(listing) {
+                if (!listing || !listing.item) return;
+                const it = normalizeItem(listing.item);
+                if (it.name === charName) {
+                    listing.item = Object.assign({}, listing.item, { marketValue: price });
+                    mChanged = true;
+                }
+            });
+            if (mChanged) saveMarket(market);
+
+            // Tüm kullanıcı envanterlerindeki aynı isimli karakterleri güncelle
+            const users = loadUsers();
+            let uChanged = false;
+            Object.keys(users).forEach(function(uname) {
+                const inv = users[uname] && users[uname].inventory;
+                if (!Array.isArray(inv)) return;
+                let invDirty = false;
+                const next = inv.map(function(raw) {
+                    const it = normalizeItem(raw);
+                    if (it.name === charName) {
+                        invDirty = true;
+                        return { name: it.name, image: it.image, rarity: it.rarity, category: it.category, marketValue: price };
+                    }
+                    return raw;
+                });
+                if (invDirty) {
+                    users[uname].inventory = next;
+                    bumpInvVersion(users[uname]);
+                    uChanged = true;
+                }
+            });
+            if (uChanged) saveUsers(users);
+
+            // Pazar açıksa yenile
+            if (window._marketOpen) {
+                try { openMarket(); } catch (e) {}
+            }
         }
 
         // ---------- TRADES ----------
@@ -1930,6 +2029,13 @@
                     try { openMarket(); } catch (e) {}
                 }
             });
+            db.ref('char_prices').on('value', snap => {
+                const v = snap.val();
+                _charPricesCache = (v && typeof v === 'object') ? v : {};
+                if (window._marketOpen) {
+                    try { openMarket(); } catch (e) {}
+                }
+            });
             db.ref('trades').on('value', snap => {
                 const v = snap.val();
                 _tradesCache = Array.isArray(v) ? v : (v ? Object.values(v) : []);
@@ -1973,6 +2079,7 @@
             await Promise.all([
                 loadUsersAsync(),
                 loadMarketAsync(),
+                loadCharPricesAsync(),
                 loadTradesAsync(),
                 loadCasesAsync(),
                 loadAllNotifsAsync(),
@@ -4405,7 +4512,8 @@
                         <div style="margin-top:10px;font-weight:600;font-size:14px;line-height:1.3;word-break:break-word;color:${nameColor};">${escapeHtml(it.name)}</div>
                         <div style="margin-top:6px;">${rarityBadgeHtml(it.rarity)}</div>
                         <div style="margin-top:4px;">${categoryBadgeHtml(it.category)}</div>
-                        <div style="color:var(--success);font-family:Orbitron,sans-serif;font-size:13px;margin-top:6px;">$${Number(listing.price).toLocaleString('tr-TR')}${isServerSeller(listing.seller) && listing.stock > 1 ? ' · stok ' + listing.stock : ''}</div>
+                        <div style="color:var(--success);font-family:Orbitron,sans-serif;font-size:13px;margin-top:6px;">İlan: $${Number(listing.price).toLocaleString('tr-TR')}${isServerSeller(listing.seller) && listing.stock > 1 ? ' · stok ' + listing.stock : ''}</div>
+                        <div style="color:#ffd54f;font-size:12px;font-weight:700;margin-top:4px;">Orijinal piyasa: $${Number(getCharMarketPrice(it) || it.marketValue || 0).toLocaleString('tr-TR')}</div>
                         <div style="color:var(--text-muted);font-size:11px;margin-top:2px;display:flex;align-items:center;justify-content:center;gap:4px;flex-wrap:wrap;">Satıcı: ${isServerSeller(listing.seller) ? '<span style="color:#00e676;font-weight:700;">🖥️ SERVER</span>' : formatDisplayName(listing.seller)}${isMine ? ' (sen)' : ''}</div>
                         ${actionBtn}
                     </div>
@@ -4622,6 +4730,9 @@
             }
 
             const item = normalizeItem(users[me].inventory[idx]);
+            // İlana güncel orijinal piyasa değerini yaz
+            const livePrice = getCharMarketPrice(item);
+            if (livePrice > 0) item.marketValue = livePrice;
             users[me].inventory = users[me].inventory.slice();
             users[me].inventory.splice(idx, 1);
             bumpInvVersion(users[me]);
@@ -6569,10 +6680,9 @@
             if (!users[username]) return;
             ensureUserFields(users[username]);
             users[username].level = n;
-            saveUsers(users);
-            pushNotif(username, '📊 Levelin ' + n + ' olarak ayarlandı.', 'info');
-            toast('✅ ' + username + ' level: ' + n);
-            modSelectUser(username);
+            saveUser(username, users[username]);
+            toast('📊 ' + username + ' level: ' + n);
+            try { openModPanel(); } catch (e) {}
         }
 
         function modSendNotif(username) {
@@ -6639,10 +6749,10 @@
             if (!users[username]) return;
             ensureUserFields(users[username]);
             users[username].level = (users[username].level || 0) + 1;
-            saveUsers(users);
+            saveUser(username, users[username]);
             pushNotif(username, '⬆️ Level atladın! Yeni level: ' + users[username].level, 'success');
-            toast('⬆️ ' + username + ' level atladı! Yeni level: ' + users[username].level);
-            modSelectUser(username);
+            toast('⬆️ ' + username + ' level: ' + users[username].level);
+            try { openModPanel(); } catch (e) {}
         }
 
         function modBanUser(username) {
@@ -6779,17 +6889,20 @@
                 return;
             }
             const users = loadUsers();
+            if (!users[username]) { toast('Kullanıcı yok.', 'error'); return; }
             ensureUserFields(users[username]);
             users[username].balance = num;
+            if (!users[username].achievements) users[username].achievements = defaultAchievements();
             if (num >= 10000) users[username].achievements.tenK = true;
             if (num >= 100000) users[username].achievements.hundredK = true;
-            saveUsers(users);
+            // Tek kullanıcı kaydı — updatedAt taze, Firebase ezilmesin
+            saveUser(username, users[username]);
             if (num < 0) {
                 toast('📉 ' + username + ' borcu: $' + num.toLocaleString('tr-TR'));
             } else {
-                toast('✅ ' + username + ' bakiyesi $' + num.toLocaleString('tr-TR') + ' olarak ayarlandı.');
+                toast('💰 ' + username + ' bakiyesi: $' + num.toLocaleString('tr-TR'));
             }
-            modSelectUser(username);
+            try { openModPanel(); } catch (e) {}
         }
 
         function modGiveCustomAch(username) {
@@ -7001,12 +7114,10 @@
             const inp = document.getElementById('mod-item-mv');
             const val = Math.max(0, Math.floor(Number(inp && inp.value) || 0));
             const it = normalizeItem(users[username].inventory[index]);
-            users[username].inventory = users[username].inventory.slice();
-            users[username].inventory[index] = { name: it.name, image: it.image, rarity: it.rarity, category: it.category, marketValue: val };
-            bumpInvVersion(users[username]);
-            saveUser(username, users[username]);
-            toast('💰 Piyasa değeri: $' + val.toLocaleString('tr-TR'));
-            modViewInventory(username);
+            // Global orijinal piyasa + tüm ilanlar + tüm envanterler
+            setCharMarketPrice(it.name, val);
+            toast('💰 "' + it.name + '" orijinal piyasası: $' + val.toLocaleString('tr-TR'));
+            try { modViewInventory(username); } catch (e) {}
         }
 
         function modViewInventory(username) {
