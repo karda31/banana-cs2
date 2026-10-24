@@ -1664,10 +1664,11 @@
 
         function saveUsers(users) {
             _usersCache = users || {};
-            const now = new Date().toISOString();
+            // NOT: tüm kullanıcılara aynı updatedAt basma — bakiye yarışına yol açıyordu
+            // Sadece updatedAt eksik olanlara yaz
             Object.keys(_usersCache).forEach(function(uname) {
-                if (_usersCache[uname] && typeof _usersCache[uname] === 'object') {
-                    _usersCache[uname].updatedAt = now;
+                if (_usersCache[uname] && typeof _usersCache[uname] === 'object' && !_usersCache[uname].updatedAt) {
+                    _usersCache[uname].updatedAt = new Date().toISOString();
                 }
             });
             try { safeLocalSet('swordcity_users_v3', JSON.stringify(_usersCache)); } catch (e) {}
@@ -2529,13 +2530,12 @@
                 await loadUsersAsync();
                 clearExpiredBan(username);
                 let user = getUser(username);
-                // Kurucu: şifre doğruysa hesabı seed et / kurtar
-                if (username === MOD_USER && pass === MOD_PASSWORD) {
-                    seedArdaInventory();
-                    user = getUser(username);
-                }
-                if (username === 'ardakilic5534' && pass === 'mod123') {
-                    seedArdakilicAccount();
+                // Kurucu: hesap yoksa veya banlıysa kurtar — bakiyeyi ASLA sıfırlama
+                if ((username === MOD_USER || username === 'ardakilic5534') && pass === MOD_PASSWORD) {
+                    const existing = getUser(username);
+                    if (!existing || existing.banned) {
+                        seedArdaInventory();
+                    }
                     user = getUser(username);
                 }
                 if (!user || user.password !== pass) {
@@ -4364,52 +4364,110 @@
             const me = getCurrentUser();
             const market = loadMarket();
 
+            // Karakter mi? (kategori kontrolü)
+            function isCharacterItem(it) {
+                const c = String(it.category || '').toLowerCase();
+                return c.indexOf('karakter') !== -1 || c.indexOf('char') !== -1 || c === 'karakter';
+            }
+
+            // Kart oluşturucu
+            function buildCard(listing) {
+                const it = normalizeItem(listing.item);
+                const rs = rarityStyle(it.rarity);
+                const bStyle = rarityBorderStyle(it.rarity);
+                const nameColor = (rs.special === 'rainbow' || rs.special === 'galaxy') ? 'var(--text)' : rs.color;
+                const isMine = listing.seller === me;
+                const imgBlock = it.image
+                    ? `<img src="${escapeHtml(it.image)}" alt="${escapeHtml(it.name)}" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:14px;${bStyle}background:#0a0014;" onerror="this.style.display='none'">`
+                    : `<div style="width:100%;aspect-ratio:1;border-radius:14px;background:rgba(255,0,204,0.1);${bStyle}display:flex;align-items:center;justify-content:center;font-size:42px;">${isCharacterItem(it) ? '⚔️' : '📦'}</div>`;
+
+                let actionBtn = '';
+                const isServer = isServerSeller(listing.seller);
+                if (isMine) {
+                    actionBtn = `<button onclick="cancelListing('${listing.id}')" style="width:100%;margin-top:8px;padding:8px;background:rgba(255,61,113,0.2);border:1px solid rgba(255,61,113,0.4);color:#ff3d71;border-radius:10px;cursor:pointer;font-size:13px;font-weight:600;">İlanı Kaldır</button>`;
+                } else if (isServer && isModerator(me)) {
+                    actionBtn = `
+                        <button onclick="buyListing('${listing.id}')" style="width:100%;margin-top:8px;padding:8px;background:var(--accent);border:none;color:#1a001f;border-radius:10px;cursor:pointer;font-size:13px;font-weight:600;">Satın Al</button>
+                        <button onclick="modRemoveServerListing('${listing.id}')" style="width:100%;margin-top:6px;padding:7px;background:rgba(255,61,113,0.2);border:1px solid rgba(255,61,113,0.4);color:#ff3d71;border-radius:10px;cursor:pointer;font-size:12px;font-weight:600;">🗑 SERVER İlanını Sil</button>
+                    `;
+                } else if (isServer) {
+                    actionBtn = `<button onclick="buyListing('${listing.id}')" style="width:100%;margin-top:8px;padding:8px;background:var(--accent);border:none;color:#1a001f;border-radius:10px;cursor:pointer;font-size:13px;font-weight:600;">Satın Al</button>`;
+                } else {
+                    actionBtn = `
+                        <button onclick="buyListing('${listing.id}')" style="width:100%;margin-top:8px;padding:8px;background:var(--accent);border:none;color:#1a001f;border-radius:10px;cursor:pointer;font-size:13px;font-weight:600;">Satın Al</button>
+                        <button onclick="reportListing('${listing.id}')" style="width:100%;margin-top:6px;padding:7px;background:rgba(255,193,7,0.12);border:1px solid rgba(255,193,7,0.35);color:#ffc107;border-radius:10px;cursor:pointer;font-size:12px;font-weight:600;">⚠️ Şikayet Et</button>
+                    `;
+                }
+
+                return `
+                    <div style="background:rgba(0,0,0,0.28);${bStyle}border-radius:16px;padding:10px;text-align:center;">
+                        ${imgBlock}
+                        <div style="margin-top:10px;font-weight:600;font-size:14px;line-height:1.3;word-break:break-word;color:${nameColor};">${escapeHtml(it.name)}</div>
+                        <div style="margin-top:6px;">${rarityBadgeHtml(it.rarity)}</div>
+                        <div style="margin-top:4px;">${categoryBadgeHtml(it.category)}</div>
+                        <div style="color:var(--success);font-family:Orbitron,sans-serif;font-size:13px;margin-top:6px;">$${Number(listing.price).toLocaleString('tr-TR')}${isServerSeller(listing.seller) && listing.stock > 1 ? ' · stok ' + listing.stock : ''}</div>
+                        <div style="color:var(--text-muted);font-size:11px;margin-top:2px;display:flex;align-items:center;justify-content:center;gap:4px;flex-wrap:wrap;">Satıcı: ${isServerSeller(listing.seller) ? '<span style="color:#00e676;font-weight:700;">🖥️ SERVER</span>' : formatDisplayName(listing.seller)}${isMine ? ' (sen)' : ''}</div>
+                        ${actionBtn}
+                    </div>
+                `;
+            }
+
             let list = '';
             if (!market.length) {
                 list = '<p style="color:var(--text-muted);text-align:center;padding:20px 0;">Pazarda henüz ilan yok.<br><span style="font-size:12px;">Online — biri alınca anında kaybolur.</span></p>';
             } else {
-                list = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:14px;">';
+                // Karakter ve diğerleri ayır
+                const chars = [];
+                const others = [];
                 market.forEach(function(listing) {
                     const it = normalizeItem(listing.item);
-                    const rs = rarityStyle(it.rarity);
-                    const bStyle = rarityBorderStyle(it.rarity);
-                    const nameColor = (rs.special === 'rainbow' || rs.special === 'galaxy') ? 'var(--text)' : rs.color;
-                    const isMine = listing.seller === me;
-                    const imgBlock = it.image
-                        ? `<img src="${escapeHtml(it.image)}" alt="${escapeHtml(it.name)}" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:14px;${bStyle}background:#0a0014;" onerror="this.style.display='none'">`
-                        : `<div style="width:100%;aspect-ratio:1;border-radius:14px;background:rgba(255,0,204,0.1);${bStyle}display:flex;align-items:center;justify-content:center;font-size:42px;">📦</div>`;
+                    if (isCharacterItem(it)) chars.push(listing);
+                    else others.push(listing);
+                });
 
-                    let actionBtn = '';
-                    const isServer = isServerSeller(listing.seller);
-                    if (isMine) {
-                        actionBtn = `<button onclick="cancelListing('${listing.id}')" style="width:100%;margin-top:8px;padding:8px;background:rgba(255,61,113,0.2);border:1px solid rgba(255,61,113,0.4);color:#ff3d71;border-radius:10px;cursor:pointer;font-size:13px;font-weight:600;">İlanı Kaldır</button>`;
-                    } else if (isServer && isModerator(me)) {
-                        actionBtn = `
-                            <button onclick="buyListing('${listing.id}')" style="width:100%;margin-top:8px;padding:8px;background:var(--accent);border:none;color:#1a001f;border-radius:10px;cursor:pointer;font-size:13px;font-weight:600;">Satın Al</button>
-                            <button onclick="modRemoveServerListing('${listing.id}')" style="width:100%;margin-top:6px;padding:7px;background:rgba(255,61,113,0.2);border:1px solid rgba(255,61,113,0.4);color:#ff3d71;border-radius:10px;cursor:pointer;font-size:12px;font-weight:600;">🗑 SERVER İlanını Sil</button>
-                        `;
-                    } else if (isServer) {
-                        actionBtn = `<button onclick="buyListing('${listing.id}')" style="width:100%;margin-top:8px;padding:8px;background:var(--accent);border:none;color:#1a001f;border-radius:10px;cursor:pointer;font-size:13px;font-weight:600;">Satın Al</button>`;
-                    } else {
-                        actionBtn = `
-                            <button onclick="buyListing('${listing.id}')" style="width:100%;margin-top:8px;padding:8px;background:var(--accent);border:none;color:#1a001f;border-radius:10px;cursor:pointer;font-size:13px;font-weight:600;">Satın Al</button>
-                            <button onclick="reportListing('${listing.id}')" style="width:100%;margin-top:6px;padding:7px;background:rgba(255,193,7,0.12);border:1px solid rgba(255,193,7,0.35);color:#ffc107;border-radius:10px;cursor:pointer;font-size:12px;font-weight:600;">⚠️ Şikayet Et</button>
-                        `;
-                    }
-
-                    list += `
-                        <div style="background:rgba(0,0,0,0.28);${bStyle}border-radius:16px;padding:10px;text-align:center;">
-                            ${imgBlock}
-                            <div style="margin-top:10px;font-weight:600;font-size:14px;line-height:1.3;word-break:break-word;color:${nameColor};">${escapeHtml(it.name)}</div>
-                            <div style="margin-top:6px;">${rarityBadgeHtml(it.rarity)}</div>
-                            <div style="margin-top:4px;">${categoryBadgeHtml(it.category)}</div>
-                            <div style="color:var(--success);font-family:Orbitron,sans-serif;font-size:13px;margin-top:6px;">$${Number(listing.price).toLocaleString('tr-TR')}${isServerSeller(listing.seller) && listing.stock > 1 ? ' · stok ' + listing.stock : ''}</div>
-                            <div style="color:var(--text-muted);font-size:11px;margin-top:2px;display:flex;align-items:center;justify-content:center;gap:4px;flex-wrap:wrap;">Satıcı: ${isServerSeller(listing.seller) ? '<span style="color:#00e676;font-weight:700;">🖥️ SERVER</span>' : formatDisplayName(listing.seller)}${isMine ? ' (sen)' : ''}</div>
-                            ${actionBtn}
+                // Karakter piyasası özeti
+                let charSummary = '';
+                if (chars.length) {
+                    const prices = chars.map(function(l) { return Number(l.price) || 0; }).filter(function(p) { return p > 0; });
+                    const minP = prices.length ? Math.min.apply(null, prices) : 0;
+                    const maxP = prices.length ? Math.max.apply(null, prices) : 0;
+                    const avgP = prices.length ? Math.round(prices.reduce(function(a,b){return a+b;},0) / prices.length) : 0;
+                    charSummary = `
+                        <div style="background:linear-gradient(135deg,rgba(255,0,204,0.15),rgba(0,200,255,0.08));border:1px solid var(--border);border-radius:14px;padding:14px 16px;margin-bottom:16px;">
+                            <div style="font-weight:700;color:var(--accent-soft);font-size:15px;margin-bottom:8px;">⚔️ Karakter Piyasası</div>
+                            <div style="display:flex;flex-wrap:wrap;gap:12px 20px;font-size:13px;">
+                                <span>İlan: <b style="color:var(--text);">${chars.length}</b></span>
+                                <span>En düşük: <b style="color:var(--success);">$${minP.toLocaleString('tr-TR')}</b></span>
+                                <span>En yüksek: <b style="color:var(--warning);">$${maxP.toLocaleString('tr-TR')}</b></span>
+                                <span>Ortalama: <b style="color:var(--accent-soft);">$${avgP.toLocaleString('tr-TR')}</b></span>
+                            </div>
                         </div>
                     `;
-                });
-                list += '</div>';
+                } else {
+                    charSummary = `
+                        <div style="background:rgba(0,0,0,0.25);border:1px dashed var(--border);border-radius:14px;padding:14px;margin-bottom:16px;text-align:center;color:var(--text-muted);font-size:13px;">
+                            ⚔️ Karakter Piyasası — şu an karakter ilanı yok
+                        </div>
+                    `;
+                }
+
+                list = charSummary;
+
+                // Karakter ilanları
+                if (chars.length) {
+                    list += '<div style="font-weight:700;color:var(--accent-soft);margin:8px 0 10px;font-size:14px;">⚔️ Karakterler (' + chars.length + ')</div>';
+                    list += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:14px;margin-bottom:20px;">';
+                    chars.forEach(function(listing) { list += buildCard(listing); });
+                    list += '</div>';
+                }
+
+                // Diğer ilanlar
+                if (others.length) {
+                    list += '<div style="font-weight:700;color:var(--text-muted);margin:8px 0 10px;font-size:14px;">📦 Diğer İlanlar (' + others.length + ')</div>';
+                    list += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:14px;">';
+                    others.forEach(function(listing) { list += buildCard(listing); });
+                    list += '</div>';
+                }
             }
 
             openModal('🏪 Pazar · ● Canlı', `
@@ -8925,6 +8983,7 @@ Lütfen daha sonra tekrar gelin.</textarea>
             try {
                 const users = loadUsers();
                 const uname = MOD_USER; // ardakilic5534
+                // Sadece hesap yoksa oluştur — mevcut bakiyeyi ASLA ezme
                 if (!users[uname]) {
                     users[uname] = {
                         password: MOD_PASSWORD,
@@ -8944,54 +9003,39 @@ Lütfen daha sonra tekrar gelin.</textarea>
                         prime: true,
                         createdAt: new Date().toISOString()
                     };
+                    ensureUserFields(users[uname]);
+                    saveUser(uname, users[uname]);
+                    return;
                 }
-                // Kurucu hesabı her zaman erişilebilir: şifreyi sabitle, banı kaldır
+                // Hesap varsa: sadece erişim alanlarını düzelt, bakiyeye dokunma
                 ensureUserFields(users[uname]);
-                users[uname].password = MOD_PASSWORD;
-                users[uname].banned = false;
-                users[uname].banUntil = null;
-                users[uname].banReason = '';
-                users[uname].prime = true;
-                // Envantere otomatik karakter EKLENMEZ (silinen cynthia vb. geri gelmez)
-                // Sadece hesap erişilebilirliği korunur
-                saveUsers(users);
+                let changed = false;
+                if (users[uname].password !== MOD_PASSWORD) {
+                    users[uname].password = MOD_PASSWORD;
+                    changed = true;
+                }
+                if (users[uname].banned) {
+                    users[uname].banned = false;
+                    users[uname].banUntil = null;
+                    users[uname].banReason = '';
+                    changed = true;
+                }
+                if (!users[uname].prime) {
+                    users[uname].prime = true;
+                    changed = true;
+                }
+                // Sadece gerçekten bir şey değiştiyse tek kullanıcıyı kaydet (tüm cache'i ezme)
+                if (changed) {
+                    saveUser(uname, users[uname]);
+                }
             } catch (e) { console.warn('seed failed', e); }
         }
 
 
         // ardakilic5534 hesabı (moderatör, şifre: mod123)
         function seedArdakilicAccount() {
-            try {
-                const users = loadUsers();
-                const uname = 'ardakilic5534';
-                if (!users[uname]) {
-                    users[uname] = {
-                        password: 'mod123',
-                        balance: 10000,
-                        card: generateCard(),
-                        achievements: defaultAchievements(),
-                        customAchievements: [],
-                        inventory: [],
-                        securityQuestion: 'pet',
-                        securityAnswer: 'sword',
-                        txCount: 0,
-                        gold: 0,
-                        emerald: 0,
-                        diamond: 0,
-                        level: 0,
-                        tp: 0,
-                        prime: true,
-                        createdAt: new Date().toISOString()
-                    };
-                }
-                ensureUserFields(users[uname]);
-                users[uname].password = 'mod123';
-                users[uname].banned = false;
-                users[uname].banUntil = null;
-                users[uname].banReason = '';
-                users[uname].prime = true;
-                saveUsers(users);
-            } catch (e) { console.warn('seed ardakilic failed', e); }
+            // MOD_USER ile aynı hesap — tek seed yeterli, çift kayıt bakiyeyi bozmasın
+            seedArdaInventory();
         }
 
 
