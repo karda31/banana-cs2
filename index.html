@@ -1581,8 +1581,8 @@
             Object.keys(local).forEach(function(k) { keys[k] = true; });
             Object.keys(remote).forEach(function(k) { keys[k] = true; });
             Object.keys(keys).forEach(function(k) {
-                const a = local[k];
-                const b = remote[k];
+                const a = local[k]; // local
+                const b = remote[k]; // remote
                 if (a && typeof a === 'object' && !(b && typeof b === 'object')) {
                     out[k] = a;
                     return;
@@ -1604,7 +1604,7 @@
                 } else {
                     merged = Object.assign({}, b, a); // local öncelik
                 }
-                // Envanter: daha yüksek invVersion kesin kazanır (silme/satış geri gelmesin)
+                // Envanter: daha yüksek invVersion kesin kazanır
                 if (va > vb) {
                     merged.inventory = Array.isArray(a.inventory) ? a.inventory.slice() : [];
                     merged.invVersion = va;
@@ -1618,25 +1618,68 @@
                     merged.inventory = Array.isArray(b.inventory) ? b.inventory.slice() : (Array.isArray(merged.inventory) ? merged.inventory : []);
                     merged.invVersion = vb;
                 }
-                // Bakiye + level: daha yeni updatedAt kazanır (seed eski değeri geri getirmesin)
-                if (ta > tb) {
-                    merged.balance = a.balance;
-                    if (typeof a.level === 'number') merged.level = a.level;
-                    if (typeof a.tp === 'number') merged.tp = a.tp;
-                } else if (tb > ta) {
-                    merged.balance = b.balance;
-                    if (typeof b.level === 'number') merged.level = b.level;
-                    if (typeof b.tp === 'number') merged.tp = b.tp;
-                } else {
-                    merged.balance = (typeof a.balance === 'number' ? a.balance : b.balance);
-                    if (typeof a.level === 'number') merged.level = a.level;
-                    else if (typeof b.level === 'number') merged.level = b.level;
-                    if (typeof a.tp === 'number') merged.tp = a.tp;
-                    else if (typeof b.tp === 'number') merged.tp = b.tp;
+                // Bakiye / level / tp / currency: daha yeni updatedAt
+                // Eşitlikte local (a) kazanır — menü gezinirken sıfırlanmayı engeller
+                function pickField(field, preferHigherVersion) {
+                    if (ta > tb) {
+                        if (a[field] !== undefined) merged[field] = a[field];
+                    } else if (tb > ta) {
+                        if (b[field] !== undefined) merged[field] = b[field];
+                    } else {
+                        if (a[field] !== undefined) merged[field] = a[field];
+                        else if (b[field] !== undefined) merged[field] = b[field];
+                    }
+                    // invVersion local daha yüksekse progressive alanlarda local'i koru
+                    if (preferHigherVersion && va > vb && a[field] !== undefined) {
+                        merged[field] = a[field];
+                    }
                 }
+                pickField('balance', true);
+                pickField('level', true);
+                pickField('tp', true);
+                pickField('gold', true);
+                pickField('emerald', true);
+                pickField('diamond', true);
+                pickField('prime', true);
+                pickField('createdAt', false);
+                pickField('achievements', true);
+                pickField('customAchievements', true);
+                pickField('friends', true);
+                pickField('card', false);
+                pickField('txCount', true);
                 if (!merged.password) merged.password = a.password || b.password || '';
+                // Şifre: local varsa koru (seed ezmesin)
+                if (a.password) merged.password = a.password;
                 out[k] = merged;
             });
+
+            // Oturumdaki kullanıcıyı ekstra koru: local daha yeni/eşitse remote ezmesin
+            try {
+                const me = (typeof getCurrentUser === 'function') ? getCurrentUser() : null;
+                if (me && local[me] && out[me]) {
+                    const loc = local[me];
+                    const mer = out[me];
+                    const tla = Date.parse(loc.updatedAt || 0) || 0;
+                    const tme = Date.parse(mer.updatedAt || 0) || 0;
+                    const vla = Number(loc.invVersion) || 0;
+                    const vme = Number(mer.invVersion) || 0;
+                    if (tla >= tme || vla >= vme) {
+                        ['balance','level','tp','gold','emerald','diamond','prime','createdAt','txCount','card','password','inventoryPrivate'].forEach(function(f) {
+                            if (loc[f] !== undefined) mer[f] = loc[f];
+                        });
+                        if (Array.isArray(loc.inventory) && vla >= vme) {
+                            mer.inventory = loc.inventory.slice();
+                            mer.invVersion = vla;
+                        }
+                        if (loc.achievements) mer.achievements = loc.achievements;
+                        if (Array.isArray(loc.customAchievements)) mer.customAchievements = loc.customAchievements.slice();
+                        if (Array.isArray(loc.friends)) mer.friends = loc.friends.slice();
+                        // updatedAt local daha yeniyse onu koru
+                        if (tla >= tme && loc.updatedAt) mer.updatedAt = loc.updatedAt;
+                    }
+                }
+            } catch (e) {}
+
             return out;
         }
 
@@ -1663,6 +1706,31 @@
             } else {
                 _usersCache = local && Object.keys(local).length ? local : (_usersCache || {});
             }
+            // Oturum kullanıcısının localStorage kaydı daha yeniyse onu geri koy (sıfırlanmayı engelle)
+            try {
+                const me = (typeof getCurrentUser === 'function') ? getCurrentUser() : (localStorage.getItem(SESSION_KEY) || '');
+                if (me && local[me] && _usersCache[me]) {
+                    const loc = local[me];
+                    const cur = _usersCache[me];
+                    const tla = Date.parse(loc.updatedAt || 0) || 0;
+                    const tcu = Date.parse(cur.updatedAt || 0) || 0;
+                    const vla = Number(loc.invVersion) || 0;
+                    const vcu = Number(cur.invVersion) || 0;
+                    if (tla >= tcu || vla >= vcu) {
+                        ['balance','level','tp','gold','emerald','diamond','prime','createdAt','txCount','card','password','inventoryPrivate','achievements'].forEach(function(f) {
+                            if (loc[f] !== undefined) cur[f] = loc[f];
+                        });
+                        if (Array.isArray(loc.inventory) && vla >= vcu) {
+                            cur.inventory = loc.inventory.slice();
+                            cur.invVersion = vla;
+                        }
+                        if (Array.isArray(loc.customAchievements)) cur.customAchievements = loc.customAchievements.slice();
+                        if (Array.isArray(loc.friends)) cur.friends = loc.friends.slice();
+                        if (tla >= tcu && loc.updatedAt) cur.updatedAt = loc.updatedAt;
+                        _usersCache[me] = cur;
+                    }
+                }
+            } catch (e) {}
             // Her zaman local'e yedekle
             try { safeLocalSet('swordcity_users_v3', JSON.stringify(_usersCache || {})); } catch (e) {}
             // Local'de olup Firebase'de olmayan hesapları yükle (kaybolmasın)
@@ -2008,6 +2076,7 @@
                 const remote = snap.val();
                 // Firebase null/boş ise mevcut hesapları SİLME
                 if (remote && typeof remote === 'object' && Object.keys(remote).length > 0) {
+                    // prev = local öncelikli birleştirme (menüde gezerken profil sıfırlanmasın)
                     _usersCache = mergeUsers(remote, prev);
                     try { safeLocalSet('swordcity_users_v3', JSON.stringify(_usersCache)); } catch (e) {}
                 }
@@ -2039,6 +2108,21 @@
             db.ref('trades').on('value', snap => {
                 const v = snap.val();
                 _tradesCache = Array.isArray(v) ? v : (v ? Object.values(v) : []);
+                // Aktif takas odası açıksa canlı yenile / iptalde kapat
+                if (window._tradeRoomId) {
+                    try {
+                        const t = (_tradesCache || []).find(function(x) { return x && x.id === window._tradeRoomId; });
+                        if (!t || t.status === 'cancelled' || t.status === 'rejected' || t.status === 'done') {
+                            const st = t ? t.status : 'cancelled';
+                            window._tradeRoomId = null;
+                            if (st === 'cancelled' || st === 'rejected') toast('Takas karşı taraftan kapandı.', 'error');
+                            else if (st === 'done') toast('Takas tamamlandı!', 'success');
+                            try { openTrade(); } catch (e) {}
+                        } else if (t.status === 'active') {
+                            try { openTradeRoom(t.id); } catch (e) {}
+                        }
+                    } catch (e) {}
+                }
             });
             db.ref('notifs').on('value', snap => {
                 _notifsCache = snap.val() || {};
@@ -4923,53 +5007,76 @@
                 return;
             }
 
-            const trades = loadTrades().filter(function(t) {
-                return t.status === 'pending' && (t.from === me || t.to === me);
+            // Aktif takas odası varsa direkt oraya
+            const trades = loadTrades();
+            const active = trades.find(function(t) {
+                return t.status === 'active' && (t.from === me || t.to === me);
+            });
+            if (active) {
+                openTradeRoom(active.id);
+                return;
+            }
+
+            const requests = trades.filter(function(t) {
+                return t.status === 'request' && (t.from === me || t.to === me);
             });
 
             let pending = '';
-            if (!trades.length) {
-                pending = '<p style="color:var(--text-muted);font-size:13px;margin-bottom:12px;">Bekleyen takas yok.</p>';
+            if (!requests.length) {
+                pending = '<p style="color:var(--text-muted);font-size:13px;margin-bottom:12px;">Bekleyen takas isteği yok.</p>';
             } else {
-                trades.slice().reverse().forEach(function(t) {
+                requests.slice().reverse().forEach(function(t) {
                     const isFrom = t.from === me;
                     const other = isFrom ? t.to : t.from;
-                    const offerNames = (t.offerItems || []).map(function(i) { return normalizeItem(i).name; }).join(', ') || '—';
                     pending += `
                         <div class="info-card">
-                            <div class="info-row"><span class="label">${isFrom ? 'Sen →' : '← Gelen'}</span><span class="value" style="display:inline-flex;align-items:center;gap:4px;">${formatDisplayName(other)}</span></div>
-                            <div class="info-row"><span class="label">Karakter teklifi</span><span class="value">${escapeHtml(offerNames)}</span></div>
+                            <div class="info-row"><span class="label">${isFrom ? 'Giden istek' : 'Gelen istek'}</span><span class="value" style="display:inline-flex;align-items:center;gap:4px;">${formatDisplayName(other)}</span></div>
+                            <div class="info-row"><span class="label">Durum</span><span class="value">Bekliyor…</span></div>
                             ${isFrom
-                                ? `<button class="danger-btn" style="margin-top:8px;" onclick="cancelTrade('${t.id}')">İptal</button>`
-                                : `<button class="primary-btn" style="margin-top:8px;" onclick="respondTrade('${t.id}')">Karakter Karşılığı Ver</button>
-                                   <button class="danger-btn" onclick="rejectTrade('${t.id}')">Reddet</button>`
+                                ? `<button class="danger-btn" style="margin-top:8px;" onclick="cancelTradeRequest('${t.id}')">İsteği İptal Et</button>`
+                                : `<button class="primary-btn" style="margin-top:8px;" onclick="acceptTradeRequest('${t.id}')">✅ Kabul Et</button>
+                                   <button class="danger-btn" onclick="rejectTradeRequest('${t.id}')">❌ Reddet</button>`
                             }
                         </div>
                     `;
                 });
             }
 
-            openModal('🔄 Takas (Lv.10+)', `
-                <p style="color:var(--text-muted);font-size:12px;margin-bottom:12px;text-align:center;">Sadece karakter ↔ karakter. Para ile takas yok.</p>
-                <button class="primary-btn" onclick="startTrade()" style="margin-bottom:14px;">➕ Yeni Takas Teklifi</button>
-                <div style="font-size:13px;color:var(--text-muted);margin-bottom:8px;">Bekleyenler</div>
+            openModal('🔄 Takas', `
+                <p style="color:var(--text-muted);font-size:12px;margin-bottom:12px;text-align:center;">
+                    İstek gönder → karşı taraf kabul etsin → birlikte eşya (max 3) ve para koyun → ikiniz de onaylayın.
+                </p>
+                <button class="primary-btn" onclick="startTradeRequest()" style="margin-bottom:16px;">📤 Takas İsteği Gönder</button>
+                <div style="font-weight:700;color:var(--accent-soft);margin-bottom:8px;">İstekler</div>
                 ${pending}
             `);
         }
 
-        function startTrade() {
+        function normalizeTrade(t) {
+            if (!t) return t;
+            t.sideA = t.sideA || { items: [], money: 0, confirmed: false };
+            t.sideB = t.sideB || { items: [], money: 0, confirmed: false };
+            t.sideA.items = Array.isArray(t.sideA.items) ? t.sideA.items : [];
+            t.sideB.items = Array.isArray(t.sideB.items) ? t.sideB.items : [];
+            t.sideA.money = Number(t.sideA.money) || 0;
+            t.sideB.money = Number(t.sideB.money) || 0;
+            t.chat = Array.isArray(t.chat) ? t.chat : [];
+            return t;
+        }
+
+        function getMyTradeSide(t, me) {
+            if (t.from === me) return 'sideA';
+            if (t.to === me) return 'sideB';
+            return null;
+        }
+
+        function startTradeRequest() {
             const me = getCurrentUser();
             if (!canTrade(me)) {
                 toast('Takas için Level ' + TRADE_MIN_LEVEL + ' gerekli.', 'error');
                 return;
             }
             const users = loadUsers();
-            const inv = (users[me] && users[me].inventory) || [];
-            if (!inv.length) {
-                toast('Envanterin boş.', 'error');
-                return;
-            }
-
             let userOpts = '';
             Object.keys(users).forEach(function(n) {
                 if (n === me) return;
@@ -4977,37 +5084,20 @@
                 userOpts += `<option value="${escapeHtml(n)}">${escapeHtml(n)} (Lv.${users[n].level || 0})</option>`;
             });
             if (!userOpts) {
-                toast('Takas yapılabilecek Lv.10+ oyuncu yok.', 'error');
+                toast('Takas yapılabilecek oyuncu yok.', 'error');
                 return;
             }
-
-            let itemChecks = '';
-            inv.forEach(function(item, i) {
-                const it = normalizeItem(item);
-                itemChecks += `
-                    <label style="display:flex;align-items:center;gap:8px;padding:8px;background:rgba(0,0,0,0.25);border-radius:10px;margin-bottom:6px;cursor:pointer;">
-                        <input type="checkbox" class="trade-item-cb" value="${i}" style="width:18px;height:18px;">
-                        <span style="flex:1;">${escapeHtml(it.name)}</span>
-                    </label>
-                `;
-            });
-
-            openModal('🔄 Yeni Takas', `
-                <p style="color:var(--text-muted);font-size:12px;margin-bottom:12px;">Sadece karakter takası — para eklenemez.</p>
+            openModal('🔄 Takas İsteği', `
                 <div class="form-group">
-                    <label>Karşı taraf (Lv.10+)</label>
+                    <label>Kime istek göndereceksin?</label>
                     <select id="trade-to">${userOpts}</select>
                 </div>
-                <div class="form-group">
-                    <label>Vereceğin karakterler</label>
-                    <div style="max-height:180px;overflow-y:auto;">${itemChecks}</div>
-                </div>
-                <button class="primary-btn" onclick="confirmStartTrade()">TEKLİF GÖNDER</button>
+                <button class="primary-btn" onclick="confirmTradeRequest()">İSTEK GÖNDER</button>
                 <button class="back-btn" onclick="openTrade()">← Geri</button>
             `);
         }
 
-        function confirmStartTrade() {
+        function confirmTradeRequest() {
             const me = getCurrentUser();
             if (!canTrade(me)) return;
             const to = (document.getElementById('trade-to') && document.getElementById('trade-to').value) || '';
@@ -5016,225 +5106,449 @@
                 return;
             }
             if (!canTrade(to)) {
-                toast('Karşı taraf Level ' + TRADE_MIN_LEVEL + ' değil.', 'error');
+                toast('Karşı tarafın seviyesi yetersiz.', 'error');
                 return;
             }
-
-            const cbs = document.querySelectorAll('.trade-item-cb:checked');
-            const idxs = [];
-            cbs.forEach(function(cb) { idxs.push(parseInt(cb.value, 10)); });
-            if (!idxs.length) {
-                toast('En az bir karakter seçmelisin.', 'error');
-                return;
-            }
-
-            const users = loadUsers();
-            ensureUserFields(users[me]);
-
-            idxs.sort(function(a, b) { return b - a; });
-            const offerItems = [];
-            idxs.forEach(function(i) {
-                if (users[me].inventory[i]) {
-                    offerItems.push(normalizeItem(users[me].inventory[i]));
-                    users[me].inventory.splice(i, 1);
-                }
-            });
-            saveUsers(users);
-
+            // Zaten aktif veya bekleyen istek var mı?
             const trades = loadTrades();
-            const trade = {
-                id: 't_' + Date.now() + '_' + Math.floor(Math.random() * 999),
+            const exists = trades.some(function(t) {
+                if (t.status !== 'request' && t.status !== 'active') return false;
+                return (t.from === me && t.to === to) || (t.from === to && t.to === me);
+            });
+            if (exists) {
+                toast('Bu kişiyle zaten açık bir takas / istek var.', 'error');
+                return;
+            }
+            const id = 't_' + Date.now() + '_' + Math.floor(Math.random() * 9999);
+            trades.push({
+                id: id,
                 from: me,
                 to: to,
-                offerItems: offerItems,
-                status: 'pending',
-                at: new Date().toISOString()
-            };
-            trades.push(trade);
+                status: 'request',
+                sideA: { items: [], money: 0, confirmed: false },
+                sideB: { items: [], money: 0, confirmed: false },
+                chat: [],
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+            });
             saveTrades(trades);
-
-            pushNotif(to, '🔄 ' + me + ' sana karakter takası teklif etti. Takas menüsünden incele.', 'info');
-            toast('Takas teklifi gönderildi.');
+            pushNotif(to, '🔄 ' + me + ' sana takas isteği gönderdi.', 'info');
+            toast('Takas isteği gönderildi.');
             openTrade();
         }
 
-        function respondTrade(tradeId) {
+        function acceptTradeRequest(tradeId) {
             const me = getCurrentUser();
-            if (!canTrade(me)) {
-                toast('Level ' + TRADE_MIN_LEVEL + ' gerekli.', 'error');
-                return;
-            }
             const trades = loadTrades();
             const t = trades.find(function(x) { return x.id === tradeId; });
-            if (!t || t.status !== 'pending' || t.to !== me) {
-                toast('Teklif bulunamadı.', 'error');
+            if (!t || t.status !== 'request' || t.to !== me) {
+                toast('İstek bulunamadı veya süresi doldu.', 'error');
+                openTrade();
+                return;
+            }
+            t.status = 'active';
+            t.sideA = { items: [], money: 0, confirmed: false };
+            t.sideB = { items: [], money: 0, confirmed: false };
+            t.chat = t.chat || [];
+            t.updatedAt = new Date().toISOString();
+            saveTrades(trades);
+            pushNotif(t.from, '✅ ' + me + ' takas isteğini kabul etti. Odaya gir!', 'success');
+            toast('Takas kabul edildi — odaya giriyorsun.');
+            window._tradeRoomId = tradeId;
+            openTradeRoom(tradeId);
+        }
+
+        function rejectTradeRequest(tradeId) {
+            const me = getCurrentUser();
+            const trades = loadTrades();
+            const t = trades.find(function(x) { return x.id === tradeId; });
+            if (!t || t.status !== 'request' || t.to !== me) {
+                toast('İstek yok.', 'error');
+                openTrade();
+                return;
+            }
+            t.status = 'rejected';
+            t.updatedAt = new Date().toISOString();
+            saveTrades(trades);
+            pushNotif(t.from, '❌ ' + me + ' takas isteğini reddetti.', 'danger');
+            toast('İstek reddedildi.');
+            openTrade();
+        }
+
+        function cancelTradeRequest(tradeId) {
+            const me = getCurrentUser();
+            const trades = loadTrades();
+            const t = trades.find(function(x) { return x.id === tradeId; });
+            if (!t || t.status !== 'request' || t.from !== me) return;
+            t.status = 'cancelled';
+            t.updatedAt = new Date().toISOString();
+            saveTrades(trades);
+            pushNotif(t.to, '🔄 ' + me + ' takas isteğini iptal etti.', 'info');
+            toast('İstek iptal edildi.');
+            openTrade();
+        }
+
+        function renderTradeSideItems(items) {
+            if (!items || !items.length) return '<div style="color:var(--text-muted);font-size:12px;padding:8px 0;">Boş (max 3 eşya)</div>';
+            return items.map(function(it, i) {
+                const n = normalizeItem(it);
+                return `<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;background:rgba(0,0,0,0.25);border-radius:8px;margin-bottom:4px;font-size:13px;">
+                    <span style="flex:1;">${escapeHtml(n.name)}</span>
+                    <span style="color:var(--text-muted);font-size:11px;">${escapeHtml(n.category || '')}</span>
+                </div>`;
+            }).join('');
+        }
+
+        function openTradeRoom(tradeId) {
+            const me = getCurrentUser();
+            const trades = loadTrades();
+            let t = trades.find(function(x) { return x.id === tradeId; });
+            if (!t || (t.from !== me && t.to !== me)) {
+                toast('Takas bulunamadı.', 'error');
+                window._tradeRoomId = null;
+                openTrade();
+                return;
+            }
+            t = normalizeTrade(t);
+
+            // İptal / bitti ise canlı kapat
+            if (t.status === 'cancelled' || t.status === 'rejected' || t.status === 'done') {
+                window._tradeRoomId = null;
+                if (t.status === 'cancelled') toast('Takas iptal edildi.', 'error');
+                else if (t.status === 'done') toast('Takas tamamlandı!', 'success');
+                openTrade();
+                return;
+            }
+            if (t.status !== 'active') {
+                window._tradeRoomId = null;
                 openTrade();
                 return;
             }
 
-            const offerNames = (t.offerItems || []).map(function(i) { return normalizeItem(i).name; }).join(', ') || '—';
-            const inv = (getUser(me) && getUser(me).inventory) || [];
-            let itemChecks = '';
+            window._tradeRoomId = tradeId;
+            const mySideKey = getMyTradeSide(t, me);
+            const otherSideKey = mySideKey === 'sideA' ? 'sideB' : 'sideA';
+            const otherName = t.from === me ? t.to : t.from;
+            const mySide = t[mySideKey];
+            const otherSide = t[otherSideKey];
+
+            const chatHtml = (t.chat || []).slice(-40).map(function(m) {
+                const mine = m.from === me;
+                return `<div style="margin-bottom:6px;text-align:${mine ? 'right' : 'left'};">
+                    <span style="display:inline-block;max-width:85%;padding:6px 10px;border-radius:10px;font-size:13px;background:${mine ? 'rgba(255,0,204,0.25)' : 'rgba(0,0,0,0.35)'};color:var(--text);">
+                        <b style="font-size:11px;color:var(--accent-soft);">${escapeHtml(m.from)}</b><br>${escapeHtml(m.text || '')}
+                    </span>
+                </div>`;
+            }).join('') || '<div style="color:var(--text-muted);font-size:12px;text-align:center;">Henüz mesaj yok</div>';
+
+            openModal('🔄 Takas Odası · ' + escapeHtml(otherName), `
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+                    <div class="info-card" style="margin:0;">
+                        <div style="font-weight:700;color:var(--accent-soft);margin-bottom:6px;">Sen ${mySide.confirmed ? '✅ Onayladı' : ''}</div>
+                        ${renderTradeSideItems(mySide.items)}
+                        <div style="color:var(--success);font-family:Orbitron,sans-serif;font-size:13px;margin-top:6px;">💵 $${Number(mySide.money || 0).toLocaleString('tr-TR')}</div>
+                    </div>
+                    <div class="info-card" style="margin:0;">
+                        <div style="font-weight:700;color:var(--accent-soft);margin-bottom:6px;">${escapeHtml(otherName)} ${otherSide.confirmed ? '✅ Onayladı' : ''}</div>
+                        ${renderTradeSideItems(otherSide.items)}
+                        <div style="color:var(--success);font-family:Orbitron,sans-serif;font-size:13px;margin-top:6px;">💵 $${Number(otherSide.money || 0).toLocaleString('tr-TR')}</div>
+                    </div>
+                </div>
+
+                <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
+                    <button class="primary-btn" style="flex:1;min-width:120px;margin:0;" onclick="tradeAddItemPrompt('${tradeId}')" ${mySide.confirmed ? 'disabled' : ''}>➕ Eşya Ekle (max 3)</button>
+                    <button class="primary-btn" style="flex:1;min-width:120px;margin:0;background:linear-gradient(90deg,#00c853,#00e676);" onclick="tradeSetMoneyPrompt('${tradeId}')" ${mySide.confirmed ? 'disabled' : ''}>💵 Para Koy</button>
+                    <button class="danger-btn" style="flex:1;min-width:120px;margin:0;" onclick="tradeClearMySide('${tradeId}')" ${mySide.confirmed ? 'disabled' : ''}>🗑 Tarafımı Temizle</button>
+                </div>
+
+                <div style="display:flex;gap:8px;margin-bottom:14px;">
+                    ${!mySide.confirmed
+                        ? `<button class="primary-btn" style="flex:1;margin:0;" onclick="tradeConfirmSide('${tradeId}')">✅ Onayla</button>`
+                        : `<button class="primary-btn" style="flex:1;margin:0;opacity:0.7;" onclick="tradeUnconfirmSide('${tradeId}')">↩ Onayı Geri Al</button>`
+                    }
+                    <button class="danger-btn" style="flex:1;margin:0;" onclick="cancelActiveTrade('${tradeId}')">❌ Takası İptal Et</button>
+                </div>
+
+                <div style="font-weight:700;color:var(--accent-soft);margin-bottom:6px;">💬 Takas Sohbeti</div>
+                <div id="trade-chat-box" style="max-height:140px;overflow-y:auto;background:rgba(0,0,0,0.3);border:1px solid var(--border);border-radius:12px;padding:10px;margin-bottom:8px;">
+                    ${chatHtml}
+                </div>
+                <div style="display:flex;gap:8px;">
+                    <input type="text" id="trade-chat-input" placeholder="Mesaj yaz..." style="flex:1;padding:10px 12px;background:rgba(0,0,0,0.35);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:inherit;font-size:14px;outline:none;" onkeydown="if(event.key==='Enter'){tradeSendChat('${tradeId}');}">
+                    <button class="primary-btn" style="width:auto;margin:0;padding:10px 16px;" onclick="tradeSendChat('${tradeId}')">Gönder</button>
+                </div>
+            `);
+
+            // Chat kutusunu alta kaydır
+            setTimeout(function() {
+                const box = document.getElementById('trade-chat-box');
+                if (box) box.scrollTop = box.scrollHeight;
+            }, 50);
+        }
+
+        function tradeAddItemPrompt(tradeId) {
+            const me = getCurrentUser();
+            const trades = loadTrades();
+            let t = trades.find(function(x) { return x.id === tradeId; });
+            if (!t || t.status !== 'active') { toast('Takas kapalı.', 'error'); openTrade(); return; }
+            t = normalizeTrade(t);
+            const sideKey = getMyTradeSide(t, me);
+            if (!sideKey) return;
+            if (t[sideKey].confirmed) { toast('Onayladın — önce onayı geri al.', 'error'); return; }
+            if ((t[sideKey].items || []).length >= 3) {
+                toast('En fazla 3 eşya ekleyebilirsin.', 'error');
+                return;
+            }
+            const users = loadUsers();
+            const inv = (users[me] && users[me].inventory) || [];
+            if (!inv.length) { toast('Envanter boş.', 'error'); return; }
+
+            let opts = '';
             inv.forEach(function(item, i) {
                 const it = normalizeItem(item);
-                itemChecks += `
-                    <label style="display:flex;align-items:center;gap:8px;padding:8px;background:rgba(0,0,0,0.25);border-radius:10px;margin-bottom:6px;cursor:pointer;">
-                        <input type="checkbox" class="trade-counter-cb" value="${i}" style="width:18px;height:18px;">
-                        <span style="flex:1;">${escapeHtml(it.name)}</span>
-                    </label>
-                `;
+                opts += `<option value="${i}">[${escapeHtml(it.category)}] ${escapeHtml(it.name)}</option>`;
             });
-
-            openModal('🔄 Takası Onayla', `
-                <div class="info-card" style="margin-bottom:12px;">
-                    <div class="info-row"><span class="label">Kimden</span><span class="value" style="display:inline-flex;align-items:center;gap:4px;">${formatDisplayName(t.from)}</span></div>
-                    <div class="info-row"><span class="label">Sana teklif (karakter)</span><span class="value">${escapeHtml(offerNames)}</span></div>
-                </div>
+            openModal('➕ Eşya Ekle', `
                 <div class="form-group">
-                    <label>Karşılığında vereceğin karakterler</label>
-                    <div style="max-height:160px;overflow-y:auto;">${itemChecks || '<p style="color:var(--text-muted);font-size:13px;">Envanter boş</p>'}</div>
+                    <label>Envanterinden seç (max 3)</label>
+                    <select id="trade-add-item">${opts}</select>
                 </div>
-                <button class="primary-btn" onclick="acceptTrade('${tradeId}')">✅ KARAKTER TAKASINI ONAYLA</button>
-                <button class="danger-btn" onclick="rejectTrade('${tradeId}')">Reddet</button>
-                <button class="back-btn" onclick="openTrade()">← Geri</button>
+                <button class="primary-btn" onclick="tradeAddItemConfirm('${tradeId}')">EKLE</button>
+                <button class="back-btn" onclick="openTradeRoom('${tradeId}')">← Odaya Dön</button>
             `);
         }
 
-        function acceptTrade(tradeId) {
+        function tradeAddItemConfirm(tradeId) {
             const me = getCurrentUser();
-            if (!canTrade(me)) return;
+            const idx = parseInt((document.getElementById('trade-add-item') || {}).value, 10);
             const trades = loadTrades();
-            const t = trades.find(function(x) { return x.id === tradeId; });
-            if (!t || t.status !== 'pending' || t.to !== me) {
-                toast('Teklif geçersiz.', 'error');
+            let t = trades.find(function(x) { return x.id === tradeId; });
+            if (!t || t.status !== 'active') { toast('Takas kapalı.', 'error'); openTrade(); return; }
+            t = normalizeTrade(t);
+            const sideKey = getMyTradeSide(t, me);
+            if (!sideKey || t[sideKey].confirmed) return;
+            if ((t[sideKey].items || []).length >= 3) {
+                toast('En fazla 3 eşya.', 'error');
+                openTradeRoom(tradeId);
                 return;
             }
-            if (!canTrade(t.from)) {
-                toast('Karşı taraf artık Lv.' + TRADE_MIN_LEVEL + ' değil.', 'error');
-                return;
-            }
-
-            const cbs = document.querySelectorAll('.trade-counter-cb:checked');
-            const idxs = [];
-            cbs.forEach(function(cb) { idxs.push(parseInt(cb.value, 10)); });
-            if (!idxs.length) {
-                toast('Karşılık için en az bir karakter seçmelisin.', 'error');
-                return;
-            }
-            idxs.sort(function(a, b) { return b - a; });
-
             const users = loadUsers();
-            if (!users[me] || !users[t.from]) {
-                toast('Kullanıcı bulunamadı.', 'error');
+            if (!users[me] || !Array.isArray(users[me].inventory) || !users[me].inventory[idx]) {
+                toast('Eşya bulunamadı.', 'error');
                 return;
             }
+            const item = normalizeItem(users[me].inventory[idx]);
+            // Envanterden çıkar (escrow)
+            users[me].inventory = users[me].inventory.slice();
+            users[me].inventory.splice(idx, 1);
+            bumpInvVersion(users[me]);
+            t[sideKey].items.push(item);
+            // Onay kırılır (karşı taraf değişikliği görsün)
+            t.sideA.confirmed = false;
+            t.sideB.confirmed = false;
+            t.updatedAt = new Date().toISOString();
+            saveUser(me, users[me]);
+            saveTrades(trades);
+            pushNotif(t.from === me ? t.to : t.from, '🔄 Takasta yeni eşya: ' + item.name + ' · ' + me, 'info');
+            toast('Eşya eklendi: ' + item.name);
+            openTradeRoom(tradeId);
+        }
+
+        function tradeSetMoneyPrompt(tradeId) {
+            const me = getCurrentUser();
+            const trades = loadTrades();
+            let t = trades.find(function(x) { return x.id === tradeId; });
+            if (!t || t.status !== 'active') { toast('Takas kapalı.', 'error'); openTrade(); return; }
+            t = normalizeTrade(t);
+            const sideKey = getMyTradeSide(t, me);
+            if (!sideKey || t[sideKey].confirmed) { toast('Onayladın — önce onayı geri al.', 'error'); return; }
+            const bal = Number((getUser(me) || {}).balance) || 0;
+            const cur = Number(t[sideKey].money) || 0;
+            const raw = prompt('Koyacağın para ($)\\nBakiyen: $' + bal.toLocaleString('tr-TR') + '\\nŞu an takasta: $' + cur.toLocaleString('tr-TR') + '\\n\\n0 = parayı kaldır');
+            if (raw === null) return;
+            const amount = Math.max(0, Math.floor(Number(raw) || 0));
+            if (amount > bal + cur) {
+                toast('Yetersiz bakiye.', 'error');
+                return;
+            }
+            // Önce önceki parayı iade et, sonra yeniyi kilitle
+            const users = loadUsers();
             ensureUserFields(users[me]);
-            ensureUserFields(users[t.from]);
+            users[me].balance = (Number(users[me].balance) || 0) + cur - amount;
+            t[sideKey].money = amount;
+            t.sideA.confirmed = false;
+            t.sideB.confirmed = false;
+            t.updatedAt = new Date().toISOString();
+            saveUser(me, users[me]);
+            saveTrades(trades);
+            pushNotif(t.from === me ? t.to : t.from, '💵 ' + me + ' takasa $' + amount.toLocaleString('tr-TR') + ' koydu.', 'info');
+            toast('Takas parası: $' + amount.toLocaleString('tr-TR'));
+            openTradeRoom(tradeId);
+        }
 
-            const counterItems = [];
-            idxs.forEach(function(i) {
-                if (users[me].inventory[i]) {
-                    counterItems.push(normalizeItem(users[me].inventory[i]));
-                    users[me].inventory.splice(i, 1);
-                }
-            });
-
-            // Kapasite: net eklenen = offer - counter (sırayla kontrol)
-            const offerCount = (t.offerItems || []).length;
-            // B (me) space after removing counter items
-            if (invSpaceLeft(users[me]) < offerCount) {
-                // iade counter (geri ekle)
-                counterItems.forEach(function(it) { users[me].inventory.push(it); });
-                toast('Envanterin dolu, takas yapılamaz. (' + users[me].inventory.length + '/' + invCapacity(users[me]) + ')', 'error');
-                return;
-            }
-            // A space after removing offer (offer already held outside inv) — offer was removed when trade started
-            if (invSpaceLeft(users[t.from]) < counterItems.length) {
-                counterItems.forEach(function(it) { users[me].inventory.push(it); });
-                toast('Karşı tarafın envanteri dolu.', 'error');
-                return;
-            }
-
-            // A'nın karakterleri B'ye
-            (t.offerItems || []).forEach(function(it) {
+        function tradeClearMySide(tradeId) {
+            const me = getCurrentUser();
+            const trades = loadTrades();
+            let t = trades.find(function(x) { return x.id === tradeId; });
+            if (!t || t.status !== 'active') return;
+            t = normalizeTrade(t);
+            const sideKey = getMyTradeSide(t, me);
+            if (!sideKey || t[sideKey].confirmed) return;
+            if (!confirm('Tarafındaki eşya ve parayı geri al?')) return;
+            const users = loadUsers();
+            ensureUserFields(users[me]);
+            (t[sideKey].items || []).forEach(function(it) {
                 users[me].inventory.push(normalizeItem(it));
             });
-
-            // B'nin karakterleri A'ya
-            counterItems.forEach(function(it) {
-                users[t.from].inventory.push(it);
-            });
-
-            t.status = 'done';
-            t.counterItems = counterItems;
-            saveUsers(users);
+            users[me].balance = (Number(users[me].balance) || 0) + (Number(t[sideKey].money) || 0);
+            bumpInvVersion(users[me]);
+            t[sideKey].items = [];
+            t[sideKey].money = 0;
+            t.sideA.confirmed = false;
+            t.sideB.confirmed = false;
+            t.updatedAt = new Date().toISOString();
+            saveUser(me, users[me]);
             saveTrades(trades);
-
-            pushNotif(t.from, '✅ ' + me + ' karakter takasını kabul etti. Karşılık: ' + counterItems.map(function(i){ return i.name; }).join(', '), 'success');
-            pushNotif(me, '✅ Karakter takası tamamlandı. ' + t.from + ' ile değişim yapıldı.', 'success');
-            toast('Karakter takası tamamlandı!');
-            openTrade();
+            toast('Tarafın temizlendi.');
+            openTradeRoom(tradeId);
         }
 
-        function rejectTrade(tradeId) {
+        function tradeConfirmSide(tradeId) {
             const me = getCurrentUser();
             const trades = loadTrades();
-            const t = trades.find(function(x) { return x.id === tradeId; });
-            if (!t || t.status !== 'pending') return;
-            if (t.to !== me && t.from !== me) return;
-
-            const users = loadUsers();
-            if (users[t.from]) {
-                ensureUserFields(users[t.from]);
-                (t.offerItems || []).forEach(function(it) {
-                    users[t.from].inventory.push(normalizeItem(it));
-                });
-                saveUsers(users);
+            let t = trades.find(function(x) { return x.id === tradeId; });
+            if (!t || t.status !== 'active') { toast('Takas kapalı.', 'error'); openTrade(); return; }
+            t = normalizeTrade(t);
+            const sideKey = getMyTradeSide(t, me);
+            if (!sideKey) return;
+            const my = t[sideKey];
+            const otherKey = sideKey === 'sideA' ? 'sideB' : 'sideA';
+            if (!(my.items || []).length && !(Number(my.money) > 0) && !(t[otherKey].items || []).length && !(Number(t[otherKey].money) > 0)) {
+                toast('En az bir taraf bir şey koymalı.', 'error');
+                return;
             }
-            t.status = 'rejected';
+            my.confirmed = true;
+            t.updatedAt = new Date().toISOString();
+
+            // İkisi de onayladıysa tamamla
+            if (t.sideA.confirmed && t.sideB.confirmed) {
+                const users = loadUsers();
+                const a = t.from;
+                const b = t.to;
+                if (!users[a] || !users[b]) {
+                    toast('Kullanıcı bulunamadı.', 'error');
+                    return;
+                }
+                ensureUserFields(users[a]);
+                ensureUserFields(users[b]);
+                // Eşyalar zaten escrow'da — karşı tarafa ver
+                (t.sideA.items || []).forEach(function(it) {
+                    users[b].inventory.push(normalizeItem(it));
+                });
+                (t.sideB.items || []).forEach(function(it) {
+                    users[a].inventory.push(normalizeItem(it));
+                });
+                // Para zaten düşülmüştü — karşı tarafa ekle
+                users[b].balance = (Number(users[b].balance) || 0) + (Number(t.sideA.money) || 0);
+                users[a].balance = (Number(users[a].balance) || 0) + (Number(t.sideB.money) || 0);
+                bumpInvVersion(users[a]);
+                bumpInvVersion(users[b]);
+                t.status = 'done';
+                t.updatedAt = new Date().toISOString();
+                saveUser(a, users[a]);
+                saveUser(b, users[b]);
+                saveTrades(trades);
+                pushNotif(a, '✅ Takas tamamlandı · ' + b, 'success');
+                pushNotif(b, '✅ Takas tamamlandı · ' + a, 'success');
+                window._tradeRoomId = null;
+                toast('Takas tamamlandı!');
+                openTrade();
+                return;
+            }
+
             saveTrades(trades);
-            pushNotif(t.from, '❌ ' + me + ' takas teklifini reddetti. Karakterlerin iade edildi.', 'danger');
-            toast('Takas reddedildi, karakterler iade edildi.');
-            openTrade();
+            pushNotif(t.from === me ? t.to : t.from, '✅ ' + me + ' takası onayladı.', 'info');
+            toast('Onayladın — karşı taraf da onaylayınca biter.');
+            openTradeRoom(tradeId);
         }
 
-        function cancelTrade(tradeId) {
+        function tradeUnconfirmSide(tradeId) {
             const me = getCurrentUser();
             const trades = loadTrades();
-            const t = trades.find(function(x) { return x.id === tradeId; });
-            if (!t || t.status !== 'pending' || t.from !== me) return;
-            if (!confirm('Teklifi iptal edip karakterlerini geri al?')) return;
+            let t = trades.find(function(x) { return x.id === tradeId; });
+            if (!t || t.status !== 'active') return;
+            t = normalizeTrade(t);
+            const sideKey = getMyTradeSide(t, me);
+            if (!sideKey) return;
+            t[sideKey].confirmed = false;
+            t.updatedAt = new Date().toISOString();
+            saveTrades(trades);
+            openTradeRoom(tradeId);
+        }
 
-            const users = loadUsers();
-            if (users[me]) {
-                ensureUserFields(users[me]);
-                (t.offerItems || []).forEach(function(it) {
-                    users[me].inventory.push(normalizeItem(it));
-                });
-                saveUsers(users);
+        function tradeSendChat(tradeId) {
+            const me = getCurrentUser();
+            const inp = document.getElementById('trade-chat-input');
+            const text = (inp && inp.value || '').trim();
+            if (!text) return;
+            if (text.length > 200) {
+                toast('Mesaj çok uzun (max 200).', 'error');
+                return;
             }
+            const trades = loadTrades();
+            let t = trades.find(function(x) { return x.id === tradeId; });
+            if (!t || t.status !== 'active') { toast('Takas kapalı.', 'error'); return; }
+            t = normalizeTrade(t);
+            t.chat.push({ from: me, text: text, at: new Date().toISOString() });
+            if (t.chat.length > 80) t.chat = t.chat.slice(-80);
+            t.updatedAt = new Date().toISOString();
+            saveTrades(trades);
+            openTradeRoom(tradeId);
+        }
+
+        function cancelActiveTrade(tradeId) {
+            const me = getCurrentUser();
+            const trades = loadTrades();
+            let t = trades.find(function(x) { return x.id === tradeId; });
+            if (!t || t.status !== 'active') return;
+            if (t.from !== me && t.to !== me) return;
+            if (!confirm('Takası iptal etmek istediğine emin misin? Eşya ve paralar iade edilir.')) return;
+            t = normalizeTrade(t);
+            const users = loadUsers();
+            // İade sideA -> from, sideB -> to
+            function refund(uname, side) {
+                if (!users[uname]) return;
+                ensureUserFields(users[uname]);
+                (side.items || []).forEach(function(it) {
+                    users[uname].inventory.push(normalizeItem(it));
+                });
+                users[uname].balance = (Number(users[uname].balance) || 0) + (Number(side.money) || 0);
+                bumpInvVersion(users[uname]);
+                saveUser(uname, users[uname]);
+            }
+            refund(t.from, t.sideA);
+            refund(t.to, t.sideB);
             t.status = 'cancelled';
+            t.sideA = { items: [], money: 0, confirmed: false };
+            t.sideB = { items: [], money: 0, confirmed: false };
+            t.updatedAt = new Date().toISOString();
             saveTrades(trades);
-            pushNotif(t.to, '🔄 ' + me + ' takas teklifini iptal etti.', 'info');
-            toast('Takas iptal, karakterler iade.');
+            const other = t.from === me ? t.to : t.from;
+            pushNotif(other, '❌ ' + me + ' takası iptal etti. Eşya/paralar iade edildi.', 'danger');
+            window._tradeRoomId = null;
+            toast('Takas iptal edildi.');
             openTrade();
         }
 
-        // ========== AYARLAR (DİL + MÜZİK) ==========
-        const SITE_LANG = {
-            tr: {
-                settings: 'Ayarlar', language: 'Dil', music: 'Müzik',
-                langTr: 'Türkçe', langEn: 'English', saved: 'Ayarlar kaydedildi.',
-                bgMusic: 'Arka plan müziği', autoPlay: 'Otomatik çal',
-                volume: 'Ses seviyesi'
-            },
-            en: {
-                settings: 'Settings', language: 'Language', music: 'Music',
-                langTr: 'Turkish', langEn: 'English', saved: 'Settings saved.',
-                bgMusic: 'Background music', autoPlay: 'Auto-play',
-                volume: 'Volume'
-            }
-        };
+        // Eski isimler (geriye uyumluluk — menü/butonlar kırılmasın)
+        function startTrade() { startTradeRequest(); }
+        function confirmStartTrade() { confirmTradeRequest(); }
+        function respondTrade(id) { acceptTradeRequest(id); }
+        function acceptTrade(id) { acceptTradeRequest(id); }
+        function rejectTrade(id) { rejectTradeRequest(id); }
+        function cancelTrade(id) { cancelTradeRequest(id); }
+
+
         function getSiteLang() {
             try { return localStorage.getItem('swordcity_lang') || 'tr'; } catch (e) { return 'tr'; }
         }
@@ -9226,8 +9540,7 @@ Lütfen daha sonra tekrar gelin.</textarea>
         }
 
 
-        seedArdaInventory();
-        seedArdakilicAccount();
+        // Otomatik seed kaldırıldı — her yüklemede veri ezilmesin
 
     </script>
 </body>
