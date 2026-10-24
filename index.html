@@ -1753,20 +1753,147 @@
             return removed;
         }
 
+        function buildNameAliasMap() {
+            const users = loadUsers();
+            const alias = {};
+            Object.keys(users).forEach(function(n) {
+                const u = users[n];
+                if (!u || typeof u !== 'object') return;
+                if (Array.isArray(u.previousNames)) {
+                    u.previousNames.forEach(function(p) {
+                        const k = String(p).toLowerCase();
+                        if (k && k !== n) alias[k] = n;
+                    });
+                }
+                if (u.renamedFrom) {
+                    const k = String(u.renamedFrom).toLowerCase();
+                    if (k && k !== n) alias[k] = n;
+                }
+            });
+            const byFp = {};
+            Object.keys(users).forEach(function(n) {
+                const u = users[n];
+                if (!u) return;
+                const fp = (u.createdAt || '') + '|' + (u.password || '');
+                if (!fp || fp === '|') return;
+                if (!byFp[fp]) byFp[fp] = [];
+                byFp[fp].push(n);
+            });
+            Object.keys(byFp).forEach(function(fp) {
+                const names = byFp[fp];
+                if (names.length < 2) return;
+                names.sort(function(a, b) {
+                    const ta = Date.parse((users[a] && users[a].updatedAt) || (users[a] && users[a].createdAt) || 0) || 0;
+                    const tb = Date.parse((users[b] && users[b].updatedAt) || (users[b] && users[b].createdAt) || 0) || 0;
+                    return tb - ta;
+                });
+                const keep = names[0];
+                names.slice(1).forEach(function(g) { alias[String(g).toLowerCase()] = keep; });
+            });
+            return alias;
+        }
+
         function resolveUsernameAlias(name) {
             const n = String(name || '').toLowerCase();
             const users = loadUsers();
+            const alias = buildNameAliasMap();
+            if (alias[n] && users[alias[n]]) return alias[n];
             if (users[n]) return n;
-            // previousNames içinde ara
-            const keys = Object.keys(users);
-            for (let i = 0; i < keys.length; i++) {
-                const u = users[keys[i]];
-                if (u && Array.isArray(u.previousNames) && u.previousNames.indexOf(n) !== -1) {
-                    return keys[i];
-                }
-            }
             return n;
         }
+
+        function normalizeAllFriendLists() {
+            const users = loadUsers();
+            const alias = buildNameAliasMap();
+            let changed = false;
+            Object.keys(users).forEach(function(uname) {
+                const u = users[uname];
+                if (!u || !Array.isArray(u.friends)) return;
+                const next = [];
+                const seen = {};
+                u.friends.forEach(function(f) {
+                    let name = String(f || '').toLowerCase();
+                    if (alias[name]) name = alias[name];
+                    if (!users[name]) return;
+                    if (name === uname) return;
+                    if (seen[name]) return;
+                    seen[name] = true;
+                    next.push(name);
+                });
+                if (JSON.stringify(next) !== JSON.stringify(u.friends)) {
+                    u.friends = next;
+                    changed = true;
+                }
+            });
+            Object.keys(alias).forEach(function(oldN) {
+                if (users[oldN] && alias[oldN] && alias[oldN] !== oldN && users[alias[oldN]]) {
+                    const a = users[oldN];
+                    const b = users[alias[oldN]];
+                    const same = a && b && ((a.createdAt && a.createdAt === b.createdAt) || (a.password && a.password === b.password));
+                    const marked = b.previousNames && b.previousNames.indexOf(oldN) !== -1;
+                    if (same || marked) {
+                        if (!Array.isArray(b.previousNames)) b.previousNames = [];
+                        if (b.previousNames.indexOf(oldN) === -1) b.previousNames.push(oldN);
+                        delete users[oldN];
+                        changed = true;
+                        if (typeof firebaseReady !== 'undefined' && firebaseReady && typeof db !== 'undefined' && db) {
+                            try { db.ref('users/' + oldN).remove(); } catch (e) {}
+                        }
+                    }
+                }
+            });
+            if (changed) {
+                _usersCache = users;
+                try { safeLocalSet('swordcity_users_v3', JSON.stringify(users)); } catch (e) {}
+                Object.keys(users).forEach(function(n) {
+                    if (typeof firebaseReady !== 'undefined' && firebaseReady) fbSet('users/' + n, users[n]);
+                });
+            }
+            return changed;
+        }
+
+        function normalizeAllChatsAliases() {
+            const alias = buildNameAliasMap();
+            const chats = loadChats();
+            if (!chats) return false;
+            let changed = false;
+            const next = {};
+            Object.keys(chats).forEach(function(cid) {
+                const parts = String(cid).split('__');
+                let newCid = cid;
+                if (parts.length === 2) {
+                    let a = String(parts[0]).toLowerCase();
+                    let b = String(parts[1]).toLowerCase();
+                    if (alias[a]) { a = alias[a]; changed = true; }
+                    if (alias[b]) { b = alias[b]; changed = true; }
+                    newCid = [a, b].sort().join('__');
+                }
+                const room = chats[cid] || { messages: [] };
+                const msgs = Array.isArray(room.messages) ? room.messages.slice() : [];
+                msgs.forEach(function(m) {
+                    if (!m) return;
+                    const fr = String(m.from || '').toLowerCase();
+                    if (alias[fr]) { m.from = alias[fr]; changed = true; }
+                    if (m.replyTo && m.replyTo.from) {
+                        const rf = String(m.replyTo.from).toLowerCase();
+                        if (alias[rf]) { m.replyTo.from = alias[rf]; changed = true; }
+                    }
+                });
+                if (next[newCid] && next[newCid].messages) {
+                    const ids = {};
+                    next[newCid].messages.forEach(function(m) { if (m && m.id) ids[m.id] = true; });
+                    msgs.forEach(function(m) {
+                        if (m && m.id && ids[m.id]) return;
+                        next[newCid].messages.push(m);
+                    });
+                } else {
+                    next[newCid] = { messages: msgs };
+                }
+            });
+            if (changed) saveChats(next);
+            return changed;
+        }
+
 
 
         // ---------- Yardımcı: Firebase veya localStorage ----------
@@ -3193,11 +3320,18 @@
         // ========== SOSYAL SİSTEM (Profil, Arkadaş, Sohbet) ==========
         function openSocial() {
             window._viewingProfile = null;
+            try { normalizeAllFriendLists(); normalizeAllChatsAliases(); } catch (e) {}
             const me = getCurrentUser();
             if (!me) return;
             const users = loadUsers();
             const meUser = ensureUserFields(users[me] || {});
-            const friends = meUser.friends || [];
+            const alias = buildNameAliasMap();
+            const friends = (meUser.friends || []).map(function(f) {
+                const n = String(f).toLowerCase();
+                return alias[n] || n;
+            }).filter(function(f, i, arr) {
+                return f && f !== me && users[f] && arr.indexOf(f) === i;
+            });
             const reqs = loadFriendRequests().filter(r => r.to === me && r.status === 'pending');
 
             let html = `
@@ -3472,9 +3606,16 @@
         }
 
         function showChatList() {
+            try { normalizeAllFriendLists(); normalizeAllChatsAliases(); } catch (e) {}
             const me = getCurrentUser();
             const users = loadUsers();
-            const friends = ensureUserFields(users[me] || {}).friends || [];
+            const alias = buildNameAliasMap();
+            let friends = (ensureUserFields(users[me] || {}).friends || []).map(function(f) {
+                const n = String(f).toLowerCase();
+                return alias[n] || n;
+            }).filter(function(f, i, arr) {
+                return f && f !== me && users[f] && arr.indexOf(f) === i;
+            });
             const chats = loadChats();
             let html = '';
             if (!friends.length) {
@@ -3889,6 +4030,7 @@
         }
 
         function enterApp(username) {
+            try { normalizeAllFriendLists(); normalizeAllChatsAliases(); } catch (e) {}
             document.getElementById('auth-screen').classList.add('hidden');
             document.getElementById('main-app').classList.remove('hidden');
             const badge = document.getElementById('user-badge');
@@ -7568,6 +7710,8 @@
         function modPurgeGhosts() {
             if (!isModerator()) { toast('Sadece moderatör.', 'error'); return; }
             const removed = purgeGhostAccounts();
+            try { normalizeAllFriendLists(); } catch (e) {}
+            try { normalizeAllChatsAliases(); } catch (e) {}
             // Ek: sohbetlerde eski isimleri de tara
             try {
                 const users = loadUsers();
