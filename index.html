@@ -6588,6 +6588,9 @@
                 <button class="mod-btn" onclick="modSetLevel('${username}')">
                     <span style="font-size:20px;">📊</span> Level Ayarla
                 </button>
+                <button class="mod-btn" onclick="modSetCreatedAt('${username}')">
+                    <span style="font-size:20px;">📅</span> Kayıt Tarihi Ayarla
+                </button>
                 <button class="mod-btn" onclick="modLevelUp('${username}')">
                     <span style="font-size:20px;">⬆️</span> Level Atlat (+1)
                 </button>
@@ -6682,6 +6685,79 @@
             users[username].level = n;
             saveUser(username, users[username]);
             toast('📊 ' + username + ' level: ' + n);
+            try { openModPanel(); } catch (e) {}
+        }
+
+        function modSetCreatedAt(username) {
+            if (!isModerator()) {
+                toast('Sadece moderatör değiştirebilir.', 'error');
+                return;
+            }
+            const users = loadUsers();
+            if (!users[username]) {
+                toast('Kullanıcı bulunamadı.', 'error');
+                return;
+            }
+            ensureUserFields(users[username]);
+            const current = users[username].createdAt
+                ? new Date(users[username].createdAt).toLocaleString('tr-TR')
+                : 'yok';
+            const raw = prompt(
+                username + ' kayıt tarihi\n\nMevcut: ' + current +
+                '\n\nYeni tarih yaz (örnekler):\n' +
+                '24.10.2026\n' +
+                '2026-10-24\n' +
+                '2026-10-24 15:30\n' +
+                'bugün / dün'
+            );
+            if (raw === null) return;
+            const text = (raw || '').trim().toLowerCase();
+            if (!text) {
+                toast('Tarih girilmedi.', 'error');
+                return;
+            }
+
+            let d = null;
+            if (text === 'bugün' || text === 'bugun') {
+                d = new Date();
+            } else if (text === 'dün' || text === 'dun') {
+                d = new Date();
+                d.setDate(d.getDate() - 1);
+            } else {
+                // dd.mm.yyyy or dd.mm.yyyy hh:mm
+                let m = text.match(/^(\d{1,2})[\.\/\-](\d{1,2})[\.\/\-](\d{4})(?:[\sT]+(\d{1,2}):(\d{2}))?$/);
+                if (m) {
+                    const day = parseInt(m[1], 10);
+                    const mon = parseInt(m[2], 10) - 1;
+                    const year = parseInt(m[3], 10);
+                    const hh = m[4] != null ? parseInt(m[4], 10) : 12;
+                    const mm = m[5] != null ? parseInt(m[5], 10) : 0;
+                    d = new Date(year, mon, day, hh, mm, 0);
+                } else {
+                    // yyyy-mm-dd or ISO-like
+                    m = text.match(/^(\d{4})[\.\/\-](\d{1,2})[\.\/\-](\d{1,2})(?:[\sT]+(\d{1,2}):(\d{2}))?/);
+                    if (m) {
+                        const year = parseInt(m[1], 10);
+                        const mon = parseInt(m[2], 10) - 1;
+                        const day = parseInt(m[3], 10);
+                        const hh = m[4] != null ? parseInt(m[4], 10) : 12;
+                        const mm = m[5] != null ? parseInt(m[5], 10) : 0;
+                        d = new Date(year, mon, day, hh, mm, 0);
+                    } else {
+                        const parsed = new Date(raw);
+                        if (!isNaN(parsed.getTime())) d = parsed;
+                    }
+                }
+            }
+
+            if (!d || isNaN(d.getTime())) {
+                toast('Tarih anlaşılamadı. Örn: 24.10.2026', 'error');
+                return;
+            }
+
+            users[username].createdAt = d.toISOString();
+            saveUser(username, users[username]);
+            toast('📅 ' + username + ' kayıt tarihi: ' + d.toLocaleString('tr-TR'));
             try { openModPanel(); } catch (e) {}
         }
 
