@@ -2160,9 +2160,12 @@
                 try { refreshOpenLiveViews(); } catch (e) {}
             });
             db.ref('trades').on('value', snap => {
+                const prevTrades = _tradesCache || [];
                 const v = snap.val();
                 _tradesCache = Array.isArray(v) ? v : (v ? Object.values(v) : []);
-                // Aktif takas odası açıksa her değişiklikte canlı yenile (eşya/foto/para/sohbet)
+                const me = (typeof getCurrentUser === 'function') ? getCurrentUser() : null;
+
+                // 1) Aktif oda açıksa yenile / kapanırsa kapat
                 if (window._tradeRoomId) {
                     try {
                         const t = (_tradesCache || []).find(function(x) { return x && x.id === window._tradeRoomId; });
@@ -2173,11 +2176,31 @@
                             else if (st === 'done') toast('Takas tamamlandı!', 'success');
                             try { openTrade(); } catch (e) {}
                         } else if (t.status === 'active') {
-                            // Ekleme ekranındaysak odayı arka planda güncelleme — kullanıcı seçim yapsın
                             const addOpen = document.getElementById('trade-add-item') || (document.querySelector && document.querySelector('[onclick*="tradeAddItemByIndex"]'));
                             if (!addOpen) {
                                 try { openTradeRoom(t.id); } catch (e) {}
                             }
+                        }
+                    } catch (e) {}
+                }
+
+                // 2) Karşı taraf isteği kabul ettiyse — odaya canlı gir (çıkış-giriş gerekmesin)
+                if (me && !window._tradeRoomId) {
+                    try {
+                        const activeMine = (_tradesCache || []).find(function(t) {
+                            return t && t.status === 'active' && (t.from === me || t.to === me);
+                        });
+                        if (activeMine) {
+                            // Önceden request iken active olduysa bildir
+                            const was = (prevTrades || []).find(function(x) { return x && x.id === activeMine.id; });
+                            if (!was || was.status === 'request') {
+                                toast('Takas kabul edildi — odaya giriliyor…', 'success');
+                            }
+                            window._tradeRoomId = activeMine.id;
+                            try { openTradeRoom(activeMine.id); } catch (e) {}
+                        } else if (window._tradeListOpen) {
+                            // İstek listesi açıksa canlı yenile
+                            try { openTrade(); } catch (e) {}
                         }
                     } catch (e) {}
                 }
@@ -5071,6 +5094,7 @@
 
         // ========== TAKAS (Lv.10+) ==========
         function openTrade() {
+            window._tradeListOpen = true;
             const me = getCurrentUser();
             if (!canTrade(me)) {
                 openModal('🔄 Takas', `
@@ -5286,6 +5310,8 @@
         }
 
         function openTradeRoom(tradeId) {
+            window._tradeListOpen = false;
+            window._tradeRoomId = tradeId;
             const me = getCurrentUser();
             const trades = loadTrades();
             let t = trades.find(function(x) { return x.id === tradeId; });
