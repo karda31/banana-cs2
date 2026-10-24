@@ -1853,9 +1853,8 @@
             });
             if (mChanged) saveMarket(market);
 
-            // Tüm kullanıcı envanterlerindeki aynı isimli karakterleri güncelle
+            // Tüm kullanıcı envanterlerindeki aynı isimli karakterleri güncelle (tek tek saveUser → herkese canlı)
             const users = loadUsers();
-            let uChanged = false;
             Object.keys(users).forEach(function(uname) {
                 const inv = users[uname] && users[uname].inventory;
                 if (!Array.isArray(inv)) return;
@@ -1871,15 +1870,62 @@
                 if (invDirty) {
                     users[uname].inventory = next;
                     bumpInvVersion(users[uname]);
-                    uChanged = true;
+                    saveUser(uname, users[uname]);
                 }
             });
-            if (uChanged) saveUsers(users);
 
-            // Pazar açıksa yenile
-            if (window._marketOpen) {
-                try { openMarket(); } catch (e) {}
+            // Açık ekranları canlı yenile
+            refreshOpenLiveViews();
+        }
+
+        function applyCharPricesToLocalCache() {
+            const prices = loadCharPrices();
+            if (!prices || !Object.keys(prices).length) return;
+            const users = _usersCache || {};
+            Object.keys(users).forEach(function(uname) {
+                const inv = users[uname] && users[uname].inventory;
+                if (!Array.isArray(inv)) return;
+                users[uname].inventory = inv.map(function(raw) {
+                    const it = normalizeItem(raw);
+                    if (prices[it.name] != null && Number(prices[it.name]) >= 0) {
+                        return Object.assign({}, typeof raw === 'object' ? raw : {}, {
+                            name: it.name, image: it.image, rarity: it.rarity, category: it.category,
+                            marketValue: Number(prices[it.name]) || 0
+                        });
+                    }
+                    return raw;
+                });
+            });
+            if (_marketCache && _marketCache.length) {
+                _marketCache.forEach(function(listing) {
+                    if (!listing || !listing.item) return;
+                    const it = normalizeItem(listing.item);
+                    if (prices[it.name] != null) {
+                        listing.item = Object.assign({}, listing.item, { marketValue: Number(prices[it.name]) || 0 });
+                    }
+                });
             }
+        }
+
+        function refreshOpenLiveViews() {
+            try {
+                if (window._marketOpen) openMarket();
+            } catch (e) {}
+            try {
+                if (window._inventoryOpen) showInventory(window._invFilter || 'all');
+            } catch (e) {}
+            try {
+                if (window._profileOpen) showProfile();
+            } catch (e) {}
+            try {
+                if (window._viewingProfile) viewUserProfile(window._viewingProfile);
+            } catch (e) {}
+            try {
+                if (window._tradeRoomId) openTradeRoom(window._tradeRoomId);
+            } catch (e) {}
+            try {
+                if (window._bankOpen) openBank();
+            } catch (e) {}
         }
 
         // ---------- TRADES ----------
@@ -2080,15 +2126,24 @@
                     _usersCache = mergeUsers(remote, prev);
                     try { safeLocalSet('swordcity_users_v3', JSON.stringify(_usersCache)); } catch (e) {}
                 }
-                // Açık profil: envanter gizlilik / içerik değişince yenile (atılma olmasın)
+                // Açık ekranları canlı yenile
                 if (window._viewingProfile) {
                     const u = window._viewingProfile;
                     const a = prev[u] || {};
                     const b = (_usersCache || {})[u] || {};
-                    if (!!a.inventoryPrivate !== !!b.inventoryPrivate || JSON.stringify(a.inventory || []) !== JSON.stringify(b.inventory || [])) {
+                    if (!!a.inventoryPrivate !== !!b.inventoryPrivate || JSON.stringify(a.inventory || []) !== JSON.stringify(b.inventory || []) || a.balance !== b.balance || a.level !== b.level) {
                         try { viewUserProfile(u); } catch (e) {}
                     }
                 }
+                try {
+                    if (window._inventoryOpen) showInventory(window._invFilter || 'all');
+                } catch (e) {}
+                try {
+                    if (window._profileOpen) showProfile();
+                } catch (e) {}
+                try {
+                    if (window._bankOpen) openBank();
+                } catch (e) {}
             });
             db.ref('market').on('value', snap => {
                 const v = snap.val();
@@ -2101,14 +2156,13 @@
             db.ref('char_prices').on('value', snap => {
                 const v = snap.val();
                 _charPricesCache = (v && typeof v === 'object') ? v : {};
-                if (window._marketOpen) {
-                    try { openMarket(); } catch (e) {}
-                }
+                try { applyCharPricesToLocalCache(); } catch (e) {}
+                try { refreshOpenLiveViews(); } catch (e) {}
             });
             db.ref('trades').on('value', snap => {
                 const v = snap.val();
                 _tradesCache = Array.isArray(v) ? v : (v ? Object.values(v) : []);
-                // Aktif takas odası açıksa canlı yenile / iptalde kapat
+                // Aktif takas odası açıksa her değişiklikte canlı yenile (eşya/foto/para/sohbet)
                 if (window._tradeRoomId) {
                     try {
                         const t = (_tradesCache || []).find(function(x) { return x && x.id === window._tradeRoomId; });
@@ -2119,7 +2173,11 @@
                             else if (st === 'done') toast('Takas tamamlandı!', 'success');
                             try { openTrade(); } catch (e) {}
                         } else if (t.status === 'active') {
-                            try { openTradeRoom(t.id); } catch (e) {}
+                            // Ekleme ekranındaysak odayı arka planda güncelleme — kullanıcı seçim yapsın
+                            const addOpen = document.getElementById('trade-add-item') || (document.querySelector && document.querySelector('[onclick*="tradeAddItemByIndex"]'));
+                            if (!addOpen) {
+                                try { openTradeRoom(t.id); } catch (e) {}
+                            }
                         }
                     } catch (e) {}
                 }
@@ -3491,6 +3549,10 @@
             window._viewingProfile = null;
             window._replyToMsg = null;
             window._marketOpen = false;
+            window._inventoryOpen = false;
+            window._profileOpen = false;
+            window._bankOpen = false;
+            // trade room bilerek kapatılmıyor — iptal/bitince temizlenir
             document.getElementById('modal').classList.remove('active');
         }
 
@@ -3837,6 +3899,10 @@
         }
 
         function openBank() {
+            window._bankOpen = true;
+            window._inventoryOpen = false;
+            window._profileOpen = false;
+            window._marketOpen = false;
             openModal('🏦 Banka', `
                 <div class="action-grid">
                     <button class="action-btn" onclick="showCreditPage()">
@@ -4039,6 +4105,10 @@
         }
 
         function showProfile() {
+            window._profileOpen = true;
+            window._inventoryOpen = false;
+            window._marketOpen = false;
+            window._bankOpen = false;
             const me = getCurrentUser();
             const user = getUser(me);
             if (!user) return;
@@ -4416,7 +4486,7 @@
                 <div class="info-card" style="text-align:center;margin-bottom:14px;">
                     ${it.image ? `<img src="${escapeHtml(it.image)}" style="width:100px;height:100px;object-fit:cover;border-radius:14px;margin-bottom:8px;" onerror="this.style.display='none'">` : '<div style="font-size:42px;margin-bottom:8px;">⚔️</div>'}
                     <div style="font-size:16px;font-weight:700;color:var(--accent-soft);">${escapeHtml(it.name)}</div>
-                    ${it.marketValue > 0 ? `<div style="color:#ffd54f;font-size:12px;margin-top:4px;">💰 $${Number(it.marketValue).toLocaleString('tr-TR')}</div>` : ''}
+                    ${(getCharMarketPrice(it) || it.marketValue) > 0 ? `<div style="color:#ffd54f;font-size:12px;margin-top:4px;">💰 $${Number(getCharMarketPrice(it) || it.marketValue).toLocaleString('tr-TR')}</div>` : ''}
                 </div>
                 <p style="color:var(--text-muted);font-size:13px;text-align:center;margin-bottom:12px;">Kime göndermek istiyorsun?</p>
                 ${opts}
@@ -4438,7 +4508,7 @@
             const msg = {
                 id: 'm_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
                 from: me,
-                text: '✨ ' + it.name + (it.marketValue > 0 ? ' · 💰 $' + Number(it.marketValue).toLocaleString('tr-TR') : ''),
+                text: '✨ ' + it.name + ((getCharMarketPrice(it) || it.marketValue) > 0 ? ' · 💰 $' + Number(getCharMarketPrice(it) || it.marketValue).toLocaleString('tr-TR') : ''),
                 image: it.image || '',
                 itemShare: true,
                 at: new Date().toISOString()
@@ -4452,6 +4522,10 @@
         }
 
         function showInventory(filterCat) {
+            window._inventoryOpen = true;
+            window._profileOpen = false;
+            window._marketOpen = false;
+            window._bankOpen = false;
             const me = getCurrentUser();
             const user = getUser(me);
             if (!user) return;
@@ -4510,7 +4584,8 @@
                     const imgBlock = it.image
                         ? `<img src="${escapeHtml(it.image)}" alt="${escapeHtml(it.name)}" onclick="openImagePreview('${escapeHtml(it.image).replace(/'/g, "\\'")}', '${escapeHtml(it.name).replace(/'/g, "\\'")}', 'inv')" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:14px;${bStyle}cursor:pointer;background:#0a0014;" onerror="this.style.display='none'">`
                         : `<div style="width:100%;aspect-ratio:1;border-radius:14px;background:rgba(255,0,204,0.1);${bStyle}display:flex;align-items:center;justify-content:center;font-size:42px;">${it.category === 'kart' ? '🃏' : '📦'}</div>`;
-                    const mvTxt = (it.marketValue > 0) ? `<div style="margin-top:4px;color:#ffd54f;font-size:12px;font-weight:600;">💰 Piyasa: $${Number(it.marketValue).toLocaleString('tr-TR')}</div>` : `<div style="margin-top:4px;color:var(--text-muted);font-size:11px;">💰 Piyasa: —</div>`;
+                    const _mvp = getCharMarketPrice(it) || it.marketValue || 0;
+                    const mvTxt = (_mvp > 0) ? `<div style="margin-top:4px;color:#ffd54f;font-size:12px;font-weight:600;">💰 Piyasa: $${Number(_mvp).toLocaleString('tr-TR')}</div>` : `<div style="margin-top:4px;color:var(--text-muted);font-size:11px;">💰 Piyasa: —</div>`;
                     list += `
                         <div style="background:rgba(0,0,0,0.28);${bStyle}border-radius:16px;padding:10px;text-align:center;">
                             ${imgBlock}
@@ -5044,7 +5119,7 @@
 
             openModal('🔄 Takas', `
                 <p style="color:var(--text-muted);font-size:12px;margin-bottom:12px;text-align:center;">
-                    İstek gönder → karşı taraf kabul etsin → birlikte eşya (max 3) ve para koyun → ikiniz de onaylayın.
+                    İstek gönder → karşı taraf kabul etsin → birlikte eşya ve para koyun → ikiniz de onaylayın.
                 </p>
                 <button class="primary-btn" onclick="startTradeRequest()" style="margin-bottom:16px;">📤 Takas İsteği Gönder</button>
                 <div style="font-weight:700;color:var(--accent-soft);margin-bottom:8px;">İstekler</div>
@@ -5188,15 +5263,23 @@
             openTrade();
         }
 
-        function renderTradeSideItems(items) {
-            if (!items || !items.length) return '<div style="color:var(--text-muted);font-size:12px;padding:8px 0;">Boş (max 3 eşya)</div>';
-            return items.map(function(it, i) {
+        function renderTradeSideItems(items, tradeId, isMine) {
+            if (!items || !items.length) return '<div style="color:var(--text-muted);font-size:12px;padding:8px 0;">Boş — eşya ekle</div>';
+            return '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(88px,1fr));gap:10px;">' + items.map(function(it, i) {
                 const n = normalizeItem(it);
-                return `<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;background:rgba(0,0,0,0.25);border-radius:8px;margin-bottom:4px;font-size:13px;">
-                    <span style="flex:1;">${escapeHtml(n.name)}</span>
-                    <span style="color:var(--text-muted);font-size:11px;">${escapeHtml(n.category || '')}</span>
+                const imgBlock = n.image
+                    ? `<img src="${escapeHtml(n.image)}" alt="${escapeHtml(n.name)}" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:12px;background:#0a0014;display:block;" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+                       <div style="width:100%;aspect-ratio:1;border-radius:12px;background:rgba(255,0,204,0.12);display:none;align-items:center;justify-content:center;font-size:28px;">⚔️</div>`
+                    : `<div style="width:100%;aspect-ratio:1;border-radius:12px;background:rgba(255,0,204,0.12);display:flex;align-items:center;justify-content:center;font-size:28px;">⚔️</div>`;
+                const rm = (isMine && tradeId)
+                    ? `<button type="button" title="Bu eşyayı geri al" onclick="event.stopPropagation();tradeRemoveItem('${tradeId}',${i})" style="position:absolute;top:4px;right:4px;width:24px;height:24px;border-radius:50%;border:none;background:#ff3d71;color:#fff;font-size:14px;font-weight:700;cursor:pointer;line-height:24px;padding:0;box-shadow:0 2px 8px rgba(0,0,0,0.45);z-index:2;">×</button>`
+                    : '';
+                return `<div style="position:relative;text-align:center;">
+                    ${rm}
+                    ${imgBlock}
+                    <div style="font-size:11px;margin-top:4px;line-height:1.25;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text);font-weight:600;">${escapeHtml(n.name)}</div>
                 </div>`;
-            }).join('');
+            }).join('') + '</div>';
         }
 
         function openTradeRoom(tradeId) {
@@ -5245,18 +5328,18 @@
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
                     <div class="info-card" style="margin:0;">
                         <div style="font-weight:700;color:var(--accent-soft);margin-bottom:6px;">Sen ${mySide.confirmed ? '✅ Onayladı' : ''}</div>
-                        ${renderTradeSideItems(mySide.items)}
+                        ${renderTradeSideItems(mySide.items, tradeId, true)}
                         <div style="color:var(--success);font-family:Orbitron,sans-serif;font-size:13px;margin-top:6px;">💵 $${Number(mySide.money || 0).toLocaleString('tr-TR')}</div>
                     </div>
                     <div class="info-card" style="margin:0;">
                         <div style="font-weight:700;color:var(--accent-soft);margin-bottom:6px;">${escapeHtml(otherName)} ${otherSide.confirmed ? '✅ Onayladı' : ''}</div>
-                        ${renderTradeSideItems(otherSide.items)}
+                        ${renderTradeSideItems(otherSide.items, tradeId, false)}
                         <div style="color:var(--success);font-family:Orbitron,sans-serif;font-size:13px;margin-top:6px;">💵 $${Number(otherSide.money || 0).toLocaleString('tr-TR')}</div>
                     </div>
                 </div>
 
                 <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
-                    <button class="primary-btn" style="flex:1;min-width:120px;margin:0;" onclick="tradeAddItemPrompt('${tradeId}')" ${mySide.confirmed ? 'disabled' : ''}>➕ Eşya Ekle (max 3)</button>
+                    <button class="primary-btn" style="flex:1;min-width:120px;margin:0;" onclick="tradeAddItemPrompt('${tradeId}')" ${mySide.confirmed ? 'disabled' : ''}>➕ Eşya Ekle</button>
                     <button class="primary-btn" style="flex:1;min-width:120px;margin:0;background:linear-gradient(90deg,#00c853,#00e676);" onclick="tradeSetMoneyPrompt('${tradeId}')" ${mySide.confirmed ? 'disabled' : ''}>💵 Para Koy</button>
                     <button class="danger-btn" style="flex:1;min-width:120px;margin:0;" onclick="tradeClearMySide('${tradeId}')" ${mySide.confirmed ? 'disabled' : ''}>🗑 Tarafımı Temizle</button>
                 </div>
@@ -5295,62 +5378,90 @@
             const sideKey = getMyTradeSide(t, me);
             if (!sideKey) return;
             if (t[sideKey].confirmed) { toast('Onayladın — önce onayı geri al.', 'error'); return; }
-            if ((t[sideKey].items || []).length >= 3) {
-                toast('En fazla 3 eşya ekleyebilirsin.', 'error');
-                return;
-            }
             const users = loadUsers();
             const inv = (users[me] && users[me].inventory) || [];
             if (!inv.length) { toast('Envanter boş.', 'error'); return; }
 
-            let opts = '';
+            let grid = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:10px;max-height:280px;overflow-y:auto;">';
             inv.forEach(function(item, i) {
                 const it = normalizeItem(item);
-                opts += `<option value="${i}">[${escapeHtml(it.category)}] ${escapeHtml(it.name)}</option>`;
+                const img = it.image
+                    ? `<img src="${escapeHtml(it.image)}" alt="" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:12px;background:#0a0014;" onerror="this.style.display='none'">`
+                    : `<div style="width:100%;aspect-ratio:1;border-radius:12px;background:rgba(255,0,204,0.12);display:flex;align-items:center;justify-content:center;font-size:28px;">⚔️</div>`;
+                grid += `<div onclick="tradeAddItemByIndex('${tradeId}',${i})" style="cursor:pointer;text-align:center;padding:6px;background:rgba(0,0,0,0.28);border:1px solid var(--border);border-radius:14px;transition:border-color .15s;">
+                    ${img}
+                    <div style="font-size:11px;margin-top:4px;line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(it.name)}</div>
+                </div>`;
             });
-            openModal('➕ Eşya Ekle', `
-                <div class="form-group">
-                    <label>Envanterinden seç (max 3)</label>
-                    <select id="trade-add-item">${opts}</select>
-                </div>
-                <button class="primary-btn" onclick="tradeAddItemConfirm('${tradeId}')">EKLE</button>
+            grid += '</div>';
+            openModal('➕ Eşya Ekle · sınırsız', `
+                <p style="color:var(--text-muted);font-size:12px;margin-bottom:10px;">Karaktere tıkla — takasa eklenir (canlı).</p>
+                ${grid}
                 <button class="back-btn" onclick="openTradeRoom('${tradeId}')">← Odaya Dön</button>
             `);
         }
 
-        function tradeAddItemConfirm(tradeId) {
+        function tradeAddItemByIndex(tradeId, idx) {
             const me = getCurrentUser();
-            const idx = parseInt((document.getElementById('trade-add-item') || {}).value, 10);
+            idx = parseInt(idx, 10);
             const trades = loadTrades();
             let t = trades.find(function(x) { return x.id === tradeId; });
             if (!t || t.status !== 'active') { toast('Takas kapalı.', 'error'); openTrade(); return; }
             t = normalizeTrade(t);
             const sideKey = getMyTradeSide(t, me);
             if (!sideKey || t[sideKey].confirmed) return;
-            if ((t[sideKey].items || []).length >= 3) {
-                toast('En fazla 3 eşya.', 'error');
-                openTradeRoom(tradeId);
-                return;
-            }
             const users = loadUsers();
             if (!users[me] || !Array.isArray(users[me].inventory) || !users[me].inventory[idx]) {
                 toast('Eşya bulunamadı.', 'error');
                 return;
             }
             const item = normalizeItem(users[me].inventory[idx]);
-            // Envanterden çıkar (escrow)
             users[me].inventory = users[me].inventory.slice();
             users[me].inventory.splice(idx, 1);
             bumpInvVersion(users[me]);
             t[sideKey].items.push(item);
-            // Onay kırılır (karşı taraf değişikliği görsün)
             t.sideA.confirmed = false;
             t.sideB.confirmed = false;
             t.updatedAt = new Date().toISOString();
             saveUser(me, users[me]);
             saveTrades(trades);
-            pushNotif(t.from === me ? t.to : t.from, '🔄 Takasta yeni eşya: ' + item.name + ' · ' + me, 'info');
-            toast('Eşya eklendi: ' + item.name);
+            pushNotif(t.from === me ? t.to : t.from, '🔄 Takasta yeni: ' + item.name + ' · ' + me, 'info');
+            toast('Eklendi: ' + item.name + ' (sınırsız ekleyebilirsin)');
+            // Odayı canlı güncelle, sonra tekrar ekleme ekranı (sınırsız)
+            openTradeRoom(tradeId);
+            setTimeout(function() { try { tradeAddItemPrompt(tradeId); } catch (e) {} }, 120);
+        }
+
+        function tradeAddItemConfirm(tradeId) {
+            const idx = parseInt((document.getElementById('trade-add-item') || {}).value, 10);
+            tradeAddItemByIndex(tradeId, idx);
+        }
+
+        function tradeRemoveItem(tradeId, itemIndex) {
+            const me = getCurrentUser();
+            const trades = loadTrades();
+            let t = trades.find(function(x) { return x.id === tradeId; });
+            if (!t || t.status !== 'active') return;
+            t = normalizeTrade(t);
+            const sideKey = getMyTradeSide(t, me);
+            if (!sideKey || t[sideKey].confirmed) {
+                toast('Onayladın — önce onayı geri al.', 'error');
+                return;
+            }
+            itemIndex = parseInt(itemIndex, 10);
+            if (!t[sideKey].items[itemIndex]) return;
+            const item = normalizeItem(t[sideKey].items[itemIndex]);
+            const users = loadUsers();
+            ensureUserFields(users[me]);
+            users[me].inventory.push(item);
+            bumpInvVersion(users[me]);
+            t[sideKey].items.splice(itemIndex, 1);
+            t.sideA.confirmed = false;
+            t.sideB.confirmed = false;
+            t.updatedAt = new Date().toISOString();
+            saveUser(me, users[me]);
+            saveTrades(trades);
+            toast('Geri alındı: ' + item.name);
             openTradeRoom(tradeId);
         }
 
@@ -7529,7 +7640,7 @@
                     const imgBlock = it.image
                         ? `<img src="${escapeHtml(it.image)}" alt="${escapeHtml(it.name)}" onclick="openImagePreview('${escapeHtml(it.image).replace(/'/g, "\\'")}', '${escapeHtml(it.name).replace(/'/g, "\\'")}', 'mod:${username}')" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:14px;${bStyle}cursor:pointer;background:#0a0014;" onerror="this.style.display='none'">`
                         : `<div style="width:100%;aspect-ratio:1;border-radius:14px;background:rgba(255,0,204,0.1);${bStyle}display:flex;align-items:center;justify-content:center;font-size:42px;">📦</div>`;
-                    const mvLabel = (it.marketValue > 0) ? ('$' + Number(it.marketValue).toLocaleString('tr-TR')) : '—';
+                    const mvLabel = ((getCharMarketPrice(it) || it.marketValue) > 0) ? ('$' + Number(getCharMarketPrice(it) || it.marketValue).toLocaleString('tr-TR')) : '—';
                     invHtml += `
                         <div style="background:rgba(0,0,0,0.28);${bStyle}border-radius:16px;padding:10px;text-align:center;">
                             ${imgBlock}
