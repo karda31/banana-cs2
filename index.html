@@ -1079,6 +1079,42 @@
 
 
 
+        
+        .online-count {
+            font-size: 12px;
+            color: var(--success);
+            background: rgba(0,230,118,0.12);
+            border: 1px solid rgba(0,230,118,0.35);
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        .rep-badge {
+            display: inline-block;
+            font-size: 11px;
+            font-weight: 700;
+            padding: 2px 8px;
+            border-radius: 8px;
+            margin-left: 4px;
+        }
+        .rep-high { background: rgba(0,230,118,0.2); color: #00e676; border: 1px solid rgba(0,230,118,0.4); }
+        .rep-mid { background: rgba(255,193,7,0.15); color: #ffc107; border: 1px solid rgba(255,193,7,0.35); }
+        .rep-low { background: rgba(255,61,113,0.15); color: #ff3d71; border: 1px solid rgba(255,61,113,0.4); }
+        #activity-feed-btn {
+            display: none;
+            align-items: center;
+            justify-content: center;
+            width: 36px; height: 36px;
+            border-radius: 10px;
+            background: rgba(255,0,204,0.1);
+            border: 1px solid var(--border);
+            color: var(--text);
+            font-size: 16px;
+            cursor: pointer;
+        }
+        #activity-feed-btn.show { display: flex; }
+
         /* ===== FEATURE PACK UI ===== */
         #announce-banner {
             display: none;
@@ -1239,6 +1275,8 @@
             <span>Sword City Hard RP</span>
         </div>
         <div class="title-bar-right">
+            <span class="online-count" id="online-count" title="Çevrimiçi">● 0</span>
+            <button id="activity-feed-btn" onclick="openActivityFeed()" title="Şehir akışı">📡</button>
             <button class="notif-btn" id="notif-btn" onclick="openNotifications()" title="Bildirimler">
                 🔔
                 <span class="notif-badge" id="notif-badge">0</span>
@@ -1536,6 +1574,201 @@
         const SESSION_KEY = 'swordcity_session_v3';
         const TRADE_MIN_LEVEL = 3;
 
+
+        // ============================================================
+        // CITY LIVE: online, activity feed, reputation, weekly board
+        // ============================================================
+        let _activityFeedCache = [];
+        let _weeklyStatsCache = {};
+
+        function countOnlineUsers() {
+            const p = _onlineUsers || {};
+            let n = 0;
+            Object.keys(p).forEach(function(k) {
+                if (p[k] && (p[k].online === true || p[k] === true)) n++;
+            });
+            return n;
+        }
+
+        function updateOnlineCountUI() {
+            const el = document.getElementById('online-count');
+            if (!el) return;
+            const n = countOnlineUsers();
+            el.textContent = '● ' + n + ' online';
+        }
+
+        function pushActivity(text, type) {
+            try {
+                const entry = {
+                    id: 'act_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+                    text: String(text || '').slice(0, 120),
+                    type: type || 'info',
+                    at: new Date().toISOString()
+                };
+                _activityFeedCache = _activityFeedCache || [];
+                _activityFeedCache.unshift(entry);
+                if (_activityFeedCache.length > 40) _activityFeedCache = _activityFeedCache.slice(0, 40);
+                try { localStorage.setItem('swordcity_activity_v1', JSON.stringify(_activityFeedCache)); } catch (e) {}
+                if (typeof firebaseReady !== 'undefined' && firebaseReady && typeof fbSet === 'function') {
+                    fbSet('activity_feed', _activityFeedCache);
+                }
+            } catch (e) {}
+        }
+
+        async function loadActivityFeedAsync() {
+            if (firebaseReady) {
+                try {
+                    const d = await fbGet('activity_feed');
+                    _activityFeedCache = Array.isArray(d) ? d : (d ? Object.values(d) : []);
+                } catch (e) {}
+            } else {
+                try { _activityFeedCache = JSON.parse(localStorage.getItem('swordcity_activity_v1') || '[]'); } catch (e) { _activityFeedCache = []; }
+            }
+            return _activityFeedCache;
+        }
+
+        function openActivityFeed() {
+            const list = (_activityFeedCache || []).slice(0, 25);
+            let rows = list.map(function(e) {
+                const when = e.at ? new Date(e.at).toLocaleString('tr-TR') : '';
+                return `<div class="user-list-item" style="cursor:default;flex-direction:column;align-items:flex-start;gap:4px;">
+                    <div style="font-size:13px;">${escapeHtml(e.text || '')}</div>
+                    <div style="font-size:11px;color:var(--text-muted);">${when}</div>
+                </div>`;
+            }).join('') || '<p style="color:var(--text-muted);text-align:center;padding:16px;">Henüz olay yok. Şehir uyanınca burada görünecek.</p>';
+            openModal('📡 Şehir Akışı', `
+                <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Son pazar, takas, level ve klan olayları — canlı.</p>
+                ${rows}
+                <button class="back-btn" onclick="closeModal()">Kapat</button>
+            `);
+        }
+
+        // ---- Reputation ----
+        function getReputation(userOrName) {
+            let u = userOrName;
+            if (typeof userOrName === 'string') u = getUser(userOrName);
+            let r = (u && typeof u.reputation === 'number') ? u.reputation : 50;
+            if (r < 0) r = 0;
+            if (r > 100) r = 100;
+            return r;
+        }
+
+        function repLabel(score) {
+            if (score >= 75) return { text: 'Güvenilir', cls: 'rep-high' };
+            if (score >= 40) return { text: 'Normal', cls: 'rep-mid' };
+            return { text: 'Şüpheli', cls: 'rep-low' };
+        }
+
+        function repBadgeHtml(username) {
+            const s = getReputation(username);
+            const L = repLabel(s);
+            return '<span class="rep-badge ' + L.cls + '" title="İtibar: ' + s + '/100">' + L.text + ' ' + s + '</span>';
+        }
+
+        function adjustReputation(username, delta, reason) {
+            if (!username) return;
+            const users = loadUsers();
+            if (!users[username]) return;
+            ensureUserFields(users[username]);
+            let r = typeof users[username].reputation === 'number' ? users[username].reputation : 50;
+            r = Math.max(0, Math.min(100, r + delta));
+            users[username].reputation = r;
+            saveUser(username, users[username]);
+            if (reason) {
+                try { pushModLog('rep', username + ' ' + (delta > 0 ? '+' : '') + delta + ' → ' + r + ' (' + reason + ')'); } catch (e) {}
+            }
+        }
+
+        function modSetReputation(username) {
+            if (!isModerator()) return;
+            const cur = getReputation(username);
+            const raw = prompt(username + ' itibar skoru (0-100)\\nMevcut: ' + cur, String(cur));
+            if (raw === null) return;
+            const n = parseInt(raw, 10);
+            if (isNaN(n) || n < 0 || n > 100) { toast('0-100 arası gir.', 'error'); return; }
+            const users = loadUsers();
+            if (!users[username]) return;
+            ensureUserFields(users[username]);
+            users[username].reputation = n;
+            saveUser(username, users[username]);
+            pushModLog('rep_set', username + ' = ' + n);
+            pushNotif(username, '⚖️ İtibar skorun güncellendi: ' + n + '/100', 'info');
+            toast('İtibar: ' + n);
+            modSelectUser(username);
+        }
+
+        // ---- Weekly leaderboard ----
+        function weekKey() {
+            const d = new Date();
+            // ISO-ish week: year + week number
+            const onejan = new Date(d.getFullYear(), 0, 1);
+            const week = Math.ceil((((d - onejan) / 86400000) + onejan.getDay() + 1) / 7);
+            return d.getFullYear() + '-W' + String(week).padStart(2, '0');
+        }
+
+        function loadWeeklyStats() { return _weeklyStatsCache || {}; }
+        async function loadWeeklyStatsAsync() {
+            if (firebaseReady) {
+                try {
+                    const d = await fbGet('weekly_stats');
+                    _weeklyStatsCache = (d && typeof d === 'object') ? d : {};
+                } catch (e) {}
+            } else {
+                try { _weeklyStatsCache = JSON.parse(localStorage.getItem('swordcity_weekly_v1') || '{}'); } catch (e) { _weeklyStatsCache = {}; }
+            }
+            return _weeklyStatsCache;
+        }
+        function saveWeeklyStats(map) {
+            _weeklyStatsCache = map || {};
+            try { localStorage.setItem('swordcity_weekly_v1', JSON.stringify(_weeklyStatsCache)); } catch (e) {}
+            if (firebaseReady) fbSet('weekly_stats', _weeklyStatsCache);
+        }
+        function addWeeklyStat(username, field, amount) {
+            if (!username || !amount) return;
+            const wk = weekKey();
+            const map = loadWeeklyStats();
+            if (!map[wk]) map[wk] = {};
+            if (!map[wk][username]) map[wk][username] = { tp: 0, sales: 0, trades: 0 };
+            map[wk][username][field] = (Number(map[wk][username][field]) || 0) + Number(amount);
+            saveWeeklyStats(map);
+        }
+
+        function openLeaderboard() {
+            const wk = weekKey();
+            const map = loadWeeklyStats();
+            const data = map[wk] || {};
+            const rows = Object.keys(data).map(function(name) {
+                const s = data[name] || {};
+                return {
+                    name: name,
+                    tp: Number(s.tp) || 0,
+                    sales: Number(s.sales) || 0,
+                    trades: Number(s.trades) || 0,
+                    score: (Number(s.tp) || 0) + (Number(s.sales) || 0) * 0.01 + (Number(s.trades) || 0) * 20
+                };
+            });
+            rows.sort(function(a, b) { return b.score - a.score; });
+            let html = `<div class="info-card" style="margin-bottom:12px;">
+                <div style="font-weight:700;color:var(--accent-soft);">🏆 Bu hafta · ${escapeHtml(wk)}</div>
+                <div style="font-size:12px;color:var(--text-muted);margin-top:4px;">TP + satış + takas skoruna göre sıralama. Hafta değişince sıfırlanır.</div>
+            </div>`;
+            if (!rows.length) {
+                html += '<p style="color:var(--text-muted);text-align:center;padding:16px;">Bu hafta henüz veri yok. TP kazan, satış yap, takas tamamla!</p>';
+            } else {
+                rows.slice(0, 20).forEach(function(r, i) {
+                    const medal = i === 0 ? '🥇' : (i === 1 ? '🥈' : (i === 2 ? '🥉' : (i + 1) + '.'));
+                    html += `<div class="user-list-item" style="cursor:default;">
+                        <div>
+                            <div class="user-list-name">${medal} ${formatDisplayName(r.name)} ${repBadgeHtml(r.name)}</div>
+                            <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">TP ${r.tp} · Satış $${r.sales.toLocaleString('tr-TR')} · Takas ${r.trades}</div>
+                        </div>
+                        <span style="font-size:12px;color:var(--accent-soft);">${Math.round(r.score)}</span>
+                    </div>`;
+                });
+            }
+            openModal('🏆 Haftalık Sıralama', html + '<button class="back-btn" onclick="closeModal()">Kapat</button>');
+        }
+
         // ============================================================
         // FEATURE PACK — günlük, unvan, log, hediye, vergi, event, banner
         // ============================================================
@@ -1560,10 +1793,96 @@
             return { name: 'Yeni', color: 'var(--text-muted)' };
         }
 
-        function titleChipHtml(level) {
-            const t = getLevelTitle(level);
-            return '<span class="title-chip" style="color:' + t.color + ';border-color:' + t.color + '40;">' + t.name + '</span>';
+        // Kullanıcı unvanı: özel (mod) > level unvanı
+        function getUserTitle(userOrName) {
+            let u = userOrName;
+            if (typeof userOrName === 'string') u = getUser(userOrName);
+            if (!u || typeof u !== 'object') return getLevelTitle(0);
+            if (u.customTitle && String(u.customTitle).trim()) {
+                return {
+                    name: String(u.customTitle).trim().slice(0, 24),
+                    color: (u.customTitleColor && String(u.customTitleColor).trim()) || '#ff66e0',
+                    custom: true
+                };
+            }
+            return getLevelTitle(u.level || 0);
         }
+
+        function titleChipHtml(levelOrUser) {
+            let t;
+            if (levelOrUser && typeof levelOrUser === 'object') t = getUserTitle(levelOrUser);
+            else if (typeof levelOrUser === 'string' && getUser(levelOrUser)) t = getUserTitle(levelOrUser);
+            else t = getLevelTitle(levelOrUser);
+            const extra = t.custom ? 'box-shadow:0 0 10px ' + t.color + '55;' : '';
+            return '<span class="title-chip" style="color:' + t.color + ';border-color:' + t.color + '66;' + extra + '">' + escapeHtml(t.name) + '</span>';
+        }
+
+        function modSetUserTitle(username) {
+            if (!isModerator()) { toast('Sadece moderatör.', 'error'); return; }
+            const users = loadUsers();
+            if (!users[username]) { toast('Kullanıcı yok.', 'error'); return; }
+            ensureUserFields(users[username]);
+            const cur = users[username].customTitle || '';
+            const curC = users[username].customTitleColor || '#ff66e0';
+            openModal('🏅 Unvan Ayarla · ' + escapeHtml(username), `
+                <div class="info-card" style="margin-bottom:12px;">
+                    <div class="info-row"><span class="label">Level unvanı</span><span class="value">${escapeHtml(getLevelTitle(users[username].level || 0).name)}</span></div>
+                    <div class="info-row"><span class="label">Özel unvan</span><span class="value">${cur ? escapeHtml(cur) : '— (level unvanı)'}</span></div>
+                </div>
+                <div class="form-group"><label>Özel unvan (boş = level unvanına dön)</label>
+                <input type="text" id="title-name" maxlength="24" value="${escapeHtml(cur)}" placeholder="Örn: Kurucu, Efsane RP, VIP"></div>
+                <div class="form-group"><label>Renk (hex)</label>
+                <input type="text" id="title-color" value="${escapeHtml(curC)}" placeholder="#ff66e0"></div>
+                <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Hazır seçenekler:</div>
+                <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;">
+                    ${['Kurucu|#ffd700','Yönetici|#ff3d71','VIP|#c400ff','Efsane RP|#00e676','Destekçi|#4aa3ff','Beta|#ffc107','Yasaklı|#888'].map(function(p) {
+                        const parts = p.split('|');
+                        return '<button type="button" onclick="document.getElementById(\'title-name\').value=\'' + parts[0] + '\';document.getElementById(\'title-color\').value=\'' + parts[1] + '\';" style="padding:6px 10px;border-radius:8px;border:1px solid ' + parts[1] + ';background:rgba(0,0,0,0.3);color:' + parts[1] + ';cursor:pointer;font-size:12px;font-family:inherit;">' + parts[0] + '</button>';
+                    }).join('')}
+                </div>
+                <button class="primary-btn" onclick="modSaveUserTitle('${username}')">Kaydet</button>
+                <button class="danger-btn" onclick="modClearUserTitle('${username}')">Özel Unvanı Kaldır</button>
+                <button class="back-btn" onclick="modSelectUser('${username}')">← Geri</button>
+            `);
+        }
+
+        function modSaveUserTitle(username) {
+            if (!isModerator()) return;
+            const users = loadUsers();
+            if (!users[username]) return;
+            ensureUserFields(users[username]);
+            const name = ((document.getElementById('title-name') || {}).value || '').trim().slice(0, 24);
+            let color = ((document.getElementById('title-color') || {}).value || '').trim();
+            if (color && color.charAt(0) !== '#') color = '#' + color;
+            if (color && !/^#[0-9a-fA-F]{3,8}$/.test(color)) color = '#ff66e0';
+            if (!name) {
+                users[username].customTitle = '';
+                users[username].customTitleColor = '';
+            } else {
+                users[username].customTitle = name;
+                users[username].customTitleColor = color || '#ff66e0';
+            }
+            saveUser(username, users[username]);
+            try { pushModLog('set_title', username + ' → ' + (name || '(level)')); } catch (e) {}
+            pushNotif(username, name ? ('🏅 Yeni unvanın: ' + name) : '🏅 Özel unvanın kaldırıldı (level unvanı aktif).', 'success');
+            toast(name ? 'Unvan kaydedildi: ' + name : 'Özel unvan kaldırıldı');
+            modSelectUser(username);
+            try { refreshOpenLiveViews(); } catch (e) {}
+        }
+
+        function modClearUserTitle(username) {
+            if (!isModerator()) return;
+            const users = loadUsers();
+            if (!users[username]) return;
+            users[username].customTitle = '';
+            users[username].customTitleColor = '';
+            saveUser(username, users[username]);
+            try { pushModLog('clear_title', username); } catch (e) {}
+            pushNotif(username, '🏅 Özel unvanın kaldırıldı.', 'info');
+            toast('Özel unvan kaldırıldı');
+            modSelectUser(username);
+        }
+
 
         function todayKey() {
             const d = new Date();
@@ -1638,6 +1957,8 @@
             users[me].lastDailyClaim = todayKey();
             users[me].dailyStreak = streak;
             saveUser(me, users[me]);
+            try { addWeeklyStat(me, 'tp', tp); } catch (e) {}
+            try { pushActivity('🎁 ' + me + ' günlük ödül aldı (seri ' + streak + ')', 'daily'); } catch (e) {}
             pushNotif(me, '🎁 Günlük ödül: +' + gold + ' gold, +' + tp + ' TP, $' + money + ' · seri ' + streak, 'success');
             pushModLog('daily_claim', me + ' günlük ödül aldı (seri ' + streak + ')');
             toast('🎁 Ödül alındı! Seri: ' + streak);
@@ -3236,6 +3557,14 @@
                     try { openMarket(); } catch (e) {}
                 }
             });
+            db.ref('activity_feed').on('value', snap => {
+                const v = snap.val();
+                _activityFeedCache = Array.isArray(v) ? v : (v ? Object.values(v) : []);
+            });
+            db.ref('weekly_stats').on('value', snap => {
+                const v = snap.val();
+                _weeklyStatsCache = (v && typeof v === 'object') ? v : {};
+            });
             db.ref('global_announcement').on('value', snap => {
                 _announceCache = snap.val();
                 try { renderAnnouncement(); } catch (e) {}
@@ -3615,6 +3944,9 @@
             if (typeof user.lastDailyClaim === 'undefined') user.lastDailyClaim = '';
             if (typeof user.statusText === 'undefined') user.statusText = '';
             if (typeof user.statusEmoji === 'undefined') user.statusEmoji = '';
+            if (typeof user.customTitle === 'undefined') user.customTitle = '';
+            if (typeof user.customTitleColor === 'undefined') user.customTitleColor = '';
+            if (typeof user.reputation !== 'number') user.reputation = 50;
             return user;
         }
 
@@ -3629,7 +3961,7 @@
         function formatDisplayName(username) {
             const name = username || '';
             const u = getUser(name);
-            const title = titleChipHtml(u ? u.level : 0);
+            const title = titleChipHtml(u || 0);
             if (hasPrime(name)) {
                 return '<span class="rainbow-name">' + escapeHtml(name) + '</span><span class="blue-check" title="Prime">✓</span>' + title;
             }
@@ -3983,6 +4315,7 @@
                     <button class="action-btn" onclick="showFriendRequests()"><span class="btn-icon">📨</span>İstekler (${reqs.length})</button>
                     <button class="action-btn" onclick="showChatList()"><span class="btn-icon">💬</span>Sohbetler</button>
                     <button class="action-btn" onclick="openGiftMenu()"><span class="btn-icon">🎀</span>Hediye</button>
+                    <button class="action-btn" onclick="openLeaderboard()"><span class="btn-icon">🏆</span>Sıralama</button>
                 </div>
             `;
             openModal('👥 Sosyal', html);
@@ -4036,7 +4369,7 @@
                 const u = ensureUserFields(users[uname]);
                 html += `
                     <div class="user-list-item" onclick="viewUserProfile('${escapeHtml(uname)}')">
-                        <div class="user-list-name">${formatDisplayName(uname)}</div>
+                        <div class="user-list-name">${formatDisplayName(uname)} ${repBadgeHtml(uname)}</div>
                         ${statusLineHtml(uname)}
                         <div style="font-size:12px;color:var(--text-muted);">Lv.${u.level || 0}</div>
                     </div>
@@ -4656,6 +4989,8 @@
             document.getElementById('notif-badge').classList.remove('show');
             document.getElementById('shop-tab').classList.remove('show');
             try { var db=document.getElementById('daily-btn'); if(db) db.classList.remove('show'); } catch(e){}
+            try { var af=document.getElementById('activity-feed-btn'); if(af) af.classList.remove('show'); } catch(e){}
+            try { var oc=document.getElementById('online-count'); if(oc) oc.textContent='● 0'; } catch(e){}
             try { var ab=document.getElementById('announce-banner'); if(ab) ab.classList.remove('show'); } catch(e){}
             toggleShop(false);
             const modFolder = document.getElementById('mod-folder');
@@ -4684,6 +5019,13 @@
             updateNotifBadge();
             try { updateDailyButton(); } catch (e) {}
             try { loadAnnounceAsync(); } catch (e) {}
+            try {
+                const fb = document.getElementById('activity-feed-btn');
+                if (fb) fb.classList.add('show');
+                loadActivityFeedAsync();
+                loadWeeklyStatsAsync();
+                updateOnlineCountUI();
+            } catch (e) {}
             try { applyMusicMutePreference(); } catch (e) {}
             try { checkBackupReminder(); } catch (e) {}
             try {
@@ -5382,7 +5724,8 @@
                         <span class="label">Kayıt Tarihi</span>
                         <span class="value">${date}</span>
                     </div>
-                    <div class="info-row"><span class="label">Unvan</span><span class="value">${getLevelTitle(user.level || 0).name} ${titleChipHtml(user.level || 0)}</span></div>
+                    <div class="info-row"><span class="label">Unvan</span><span class="value">${titleChipHtml(user)}${user.customTitle ? ' <span style="font-size:11px;color:var(--text-muted);">(özel)</span>' : ''}</span></div>
+                    <div class="info-row"><span class="label">İtibar</span><span class="value">${repBadgeHtml(me)} (${getReputation(user)}/100)</span></div>
                     <div class="info-row"><span class="label">Durum</span><span class="value">${escapeHtml((user.statusEmoji ? user.statusEmoji + ' ' : '') + (user.statusText || '—'))}</span></div>
                     <div class="info-row"><span class="label">Günlük seri</span><span class="value">${user.dailyStreak || 0} gün</span></div>
                 </div>
@@ -6287,6 +6630,13 @@
             // SERVER satışı: para yanar, kimse kazanmaz
             try {
                 recordSalePrice(boughtItem.name, price, { buyer: me, seller: listing.seller });
+                if (!serverSale) {
+                    addWeeklyStat(listing.seller, 'sales', price);
+                    adjustReputation(listing.seller, 1, 'pazar satışı');
+                    pushActivity('🏪 ' + listing.seller + ' sattı: ' + boughtItem.name + ' ($' + price.toLocaleString('tr-TR') + ')', 'market');
+                } else {
+                    pushActivity('🛒 ' + me + ' SERVER\'dan aldı: ' + boughtItem.name, 'market');
+                }
             } catch (e) {}
 
             if (!Array.isArray(users2[me].inventory)) users2[me].inventory = [];
@@ -6516,6 +6866,12 @@
                 openTrade();
                 return;
             }
+            try {
+                const repOther = getReputation(t.from);
+                if (repOther < 30 && !confirm('⚠️ Karşı tarafın itibarı düşük (' + repOther + '/100 — Şüpheli). Yine de kabul edilsin mi?')) {
+                    return;
+                }
+            } catch (e) {}
             t.status = 'active';
             t.sideA = { items: [], money: 0, confirmed: false };
             t.sideB = { items: [], money: 0, confirmed: false };
@@ -6878,6 +7234,11 @@
                         at: t.updatedAt
                     });
                     pushModLog('trade_done', a + ' ↔ ' + b);
+                    adjustReputation(a, 2, 'takas tamam');
+                    adjustReputation(b, 2, 'takas tamam');
+                    addWeeklyStat(a, 'trades', 1);
+                    addWeeklyStat(b, 'trades', 1);
+                    pushActivity('🔄 ' + a + ' ↔ ' + b + ' takas tamamladı', 'trade');
                 } catch (e) {}
                 pushNotif(a, '✅ Takas tamamlandı · ' + b, 'success');
                 pushNotif(b, '✅ Takas tamamlandı · ' + a, 'success');
@@ -8284,6 +8645,14 @@
                         <span class="value">Lv.${u.level || 0} · ${u.tp || 0}/100</span>
                     </div>
                     <div class="info-row">
+                        <span class="label">Unvan</span>
+                        <span class="value">${titleChipHtml(u)}</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="label">İtibar</span>
+                        <span class="value">${repBadgeHtml(username)} (${getReputation(u)}/100)</span>
+                    </div>
+                    <div class="info-row">
                         <span class="label">Prime</span>
                         <span class="value">${hasPrime(username) ? '👑 Aktif' : 'Yok'}</span>
                     </div>
@@ -8311,6 +8680,12 @@
                 </div>
                 <button class="mod-btn" onclick="modRenameUser('${username}')">
                     <span style="font-size:20px;">✏️</span> İsim Değiştir
+                </button>
+                <button class="mod-btn" onclick="modSetUserTitle('${username}')">
+                    <span style="font-size:20px;">🏅</span> Unvan Ayarla
+                </button>
+                <button class="mod-btn" onclick="modSetReputation('${username}')">
+                    <span style="font-size:20px;">⚖️</span> İtibar Ayarla
                 </button>
                 <button class="mod-btn" onclick="modGiveMoney('${username}')">
                     <span style="font-size:20px;">💰</span> Para Ver
@@ -8594,6 +8969,8 @@
             pushNotif(username, '⭐ TP güncellendi: ' + users[username].tp + '/100 · Level: ' + users[username].level + (leveled ? ' (+' + leveled + ' level!)' : ''), leveled ? 'success' : 'info');
             toast(msg);
             try { pushModLog('give_tp', username + ' TP ' + n); } catch (e) {}
+            try { if (n > 0) addWeeklyStat(username, 'tp', n); } catch (e) {}
+            try { pushActivity('⭐ ' + username + ' +' + n + ' TP aldı', 'tp'); } catch (e) {}
             window._modViewingUser = username;
             modSelectUser(username);
             try { refreshOpenLiveViews(); } catch (e) {}
@@ -9486,6 +9863,7 @@
                 });
                 db.ref('presence').on('value', function(snap) {
                     _onlineUsers = snap.val() || {};
+                    try { updateOnlineCountUI(); } catch (e) {}
                 });
             } catch (e) { console.warn('presence', e); }
         }
