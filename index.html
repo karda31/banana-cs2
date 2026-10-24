@@ -1078,6 +1078,70 @@
         }
 
 
+
+        /* ===== FEATURE PACK UI ===== */
+        #announce-banner {
+            display: none;
+            position: sticky;
+            top: 50px;
+            z-index: 95;
+            background: linear-gradient(90deg, rgba(255,0,204,0.25), rgba(74,163,255,0.2));
+            border-bottom: 1px solid var(--border);
+            padding: 10px 16px;
+            text-align: center;
+            font-size: 13px;
+            color: var(--text);
+            backdrop-filter: blur(8px);
+        }
+        #announce-banner.show { display: block; }
+        #announce-banner .ab-close {
+            float: right; cursor: pointer; opacity: 0.7; font-size: 16px; border: none; background: transparent; color: var(--text);
+        }
+        .title-chip {
+            display: inline-block;
+            font-size: 10px;
+            font-weight: 700;
+            padding: 1px 7px;
+            border-radius: 8px;
+            margin-left: 6px;
+            vertical-align: middle;
+            letter-spacing: 0.3px;
+            background: rgba(255,0,204,0.2);
+            border: 1px solid var(--border);
+            color: var(--accent-soft);
+        }
+        .status-line {
+            font-size: 12px;
+            color: var(--text-muted);
+            font-style: italic;
+            margin-top: 2px;
+        }
+        .daily-btn-float {
+            position: fixed;
+            right: 14px;
+            bottom: 90px;
+            z-index: 90;
+            background: linear-gradient(135deg, var(--accent), #aa00ff);
+            color: #1a001f;
+            border: none;
+            border-radius: 14px;
+            padding: 12px 14px;
+            font-weight: 700;
+            font-family: inherit;
+            cursor: pointer;
+            box-shadow: 0 4px 24px rgba(255,0,204,0.4);
+            display: none;
+        }
+        .daily-btn-float.show { display: block; }
+        @media (max-width: 640px) {
+            .folder-grid { grid-template-columns: repeat(2, 1fr) !important; gap: 10px !important; }
+            .modal-content { max-width: 96vw !important; padding: 18px 14px !important; }
+            .auth-box { padding: 28px 18px !important; }
+            #music-player { bottom: 12px; left: 8px; transform: scale(0.92); transform-origin: bottom left; }
+            .shop-tab { font-size: 12px; padding: 12px 8px; }
+            .daily-btn-float { right: 10px; bottom: 70px; padding: 10px 12px; font-size: 13px; }
+        }
+
         /* ===== BAKIM EKRANI ===== */
         #maintenance-overlay {
             display: none;
@@ -1183,6 +1247,8 @@
             <div class="clock" id="clock">00:00:00</div>
         </div>
     </div>
+    <div id="announce-banner"><button class="ab-close" onclick="dismissAnnouncement()" title="Kapat">✕</button><span id="announce-text"></span></div>
+    <button class="daily-btn-float" id="daily-btn" onclick="openDailyReward()">🎁 Günlük</button>
 
     <button class="shop-tab" id="shop-tab" onclick="toggleShop(true)">🛒 MAĞAZA</button>
     <div class="shop-overlay" id="shop-overlay" onclick="toggleShop(false)"></div>
@@ -1469,6 +1535,543 @@
 
         const SESSION_KEY = 'swordcity_session_v3';
         const TRADE_MIN_LEVEL = 3;
+
+        // ============================================================
+        // FEATURE PACK — günlük, unvan, log, hediye, vergi, event, banner
+        // ============================================================
+        const MARKET_TAX_RATE = 0.05; // %5 pazar komisyonu
+        const DAILY_BASE_GOLD = 50;
+        const DAILY_BASE_TP = 15;
+        const DAILY_BASE_MONEY = 500;
+        let _modLogCache = [];
+        let _tradeHistoryCache = [];
+        let _priceHistoryCache = {};
+        let _globalEventCache = null;
+        let _announceCache = null;
+
+        function getLevelTitle(level) {
+            const lv = Number(level) || 0;
+            if (lv >= 50) return { name: 'Efsane', color: '#ffd700' };
+            if (lv >= 35) return { name: 'Şampiyon', color: '#ff66e0' };
+            if (lv >= 25) return { name: 'Usta', color: '#4aa3ff' };
+            if (lv >= 15) return { name: 'Uzman', color: '#69f0ae' };
+            if (lv >= 10) return { name: 'Çırak', color: '#ffc107' };
+            if (lv >= 5) return { name: 'Acemi', color: '#b89cc9' };
+            return { name: 'Yeni', color: 'var(--text-muted)' };
+        }
+
+        function titleChipHtml(level) {
+            const t = getLevelTitle(level);
+            return '<span class="title-chip" style="color:' + t.color + ';border-color:' + t.color + '40;">' + t.name + '</span>';
+        }
+
+        function todayKey() {
+            const d = new Date();
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            return y + '-' + m + '-' + day;
+        }
+
+        function yesterdayKey() {
+            const d = new Date();
+            d.setDate(d.getDate() - 1);
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            return y + '-' + m + '-' + day;
+        }
+
+        function canClaimDaily(user) {
+            if (!user) return false;
+            return (user.lastDailyClaim || '') !== todayKey();
+        }
+
+        function openDailyReward() {
+            const me = getCurrentUser();
+            const u = getUser(me);
+            if (!u) return;
+            const claimed = !canClaimDaily(u);
+            const streak = Number(u.dailyStreak) || 0;
+            const bonus = Math.min(7, streak + (claimed ? 0 : 1));
+            const gold = DAILY_BASE_GOLD + bonus * 10;
+            const tp = DAILY_BASE_TP + bonus * 2;
+            const money = DAILY_BASE_MONEY + bonus * 100;
+            openModal('🎁 Günlük Ödül', `
+                <div class="info-card" style="text-align:center;">
+                    <div style="font-size:42px;margin-bottom:8px;">📅</div>
+                    <div style="font-size:15px;margin-bottom:6px;">Seri: <b style="color:var(--accent-soft);">${streak} gün</b></div>
+                    <div style="font-size:13px;color:var(--text-muted);margin-bottom:12px;">Her gün girişte ödül büyür (max 7 gün seri).</div>
+                    <div class="info-row"><span class="label">🥇 Gold</span><span class="value">${gold}</span></div>
+                    <div class="info-row"><span class="label">⭐ TP</span><span class="value">+${tp}</span></div>
+                    <div class="info-row"><span class="label">💵 Para</span><span class="value">$${money.toLocaleString('tr-TR')}</span></div>
+                </div>
+                ${claimed
+                    ? '<p style="text-align:center;color:var(--success);margin-top:12px;">✅ Bugünkü ödül alındı. Yarın tekrar gel!</p>'
+                    : '<button class="primary-btn" onclick="claimDailyReward()">Ödülü Al</button>'}
+                <button class="back-btn" onclick="closeModal()">Kapat</button>
+            `);
+        }
+
+        function claimDailyReward() {
+            const me = getCurrentUser();
+            const users = loadUsers();
+            if (!users[me]) return;
+            ensureUserFields(users[me]);
+            if (!canClaimDaily(users[me])) {
+                toast('Bugünkü ödülü zaten aldın.', 'error');
+                openDailyReward();
+                return;
+            }
+            const last = users[me].lastDailyClaim || '';
+            let streak = Number(users[me].dailyStreak) || 0;
+            if (last === yesterdayKey()) streak += 1;
+            else streak = 1;
+            streak = Math.min(streak, 365);
+            const bonus = Math.min(7, streak);
+            const gold = DAILY_BASE_GOLD + bonus * 10;
+            const tp = DAILY_BASE_TP + bonus * 2;
+            const money = DAILY_BASE_MONEY + bonus * 100;
+            users[me].gold = (Number(users[me].gold) || 0) + gold;
+            users[me].balance = (Number(users[me].balance) || 0) + money;
+            applyTpAndLevel(users[me], tp);
+            users[me].lastDailyClaim = todayKey();
+            users[me].dailyStreak = streak;
+            saveUser(me, users[me]);
+            pushNotif(me, '🎁 Günlük ödül: +' + gold + ' gold, +' + tp + ' TP, $' + money + ' · seri ' + streak, 'success');
+            pushModLog('daily_claim', me + ' günlük ödül aldı (seri ' + streak + ')');
+            toast('🎁 Ödül alındı! Seri: ' + streak);
+            updateDailyButton();
+            openDailyReward();
+            try { if (window._profileOpen) showProfile(); } catch (e) {}
+        }
+
+        function updateDailyButton() {
+            const btn = document.getElementById('daily-btn');
+            if (!btn) return;
+            const me = getCurrentUser();
+            if (!me) { btn.classList.remove('show'); return; }
+            const u = getUser(me);
+            if (u && canClaimDaily(u)) btn.classList.add('show');
+            else btn.classList.remove('show');
+        }
+
+        // ---- Mod log ----
+        function loadModLog() { return _modLogCache || []; }
+        async function loadModLogAsync() {
+            if (firebaseReady) {
+                try {
+                    const d = await fbGet('mod_log');
+                    _modLogCache = Array.isArray(d) ? d : (d ? Object.values(d) : []);
+                } catch (e) { _modLogCache = _modLogCache || []; }
+            } else {
+                try { _modLogCache = JSON.parse(localStorage.getItem('swordcity_mod_log_v1') || '[]'); } catch (e) { _modLogCache = []; }
+            }
+            return _modLogCache;
+        }
+        function pushModLog(action, detail) {
+            try {
+                const entry = {
+                    id: 'ml_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+                    action: action || 'info',
+                    detail: detail || '',
+                    by: getCurrentUser() || 'system',
+                    at: new Date().toISOString()
+                };
+                _modLogCache = loadModLog();
+                _modLogCache.unshift(entry);
+                if (_modLogCache.length > 200) _modLogCache = _modLogCache.slice(0, 200);
+                try { localStorage.setItem('swordcity_mod_log_v1', JSON.stringify(_modLogCache)); } catch (e) {}
+                if (firebaseReady) fbSet('mod_log', _modLogCache);
+            } catch (e) {}
+        }
+        function openModLogPanel() {
+            if (!isModerator()) { toast('Sadece moderatör.', 'error'); return; }
+            const list = loadModLog();
+            let rows = list.slice(0, 80).map(function(e) {
+                return `<div class="user-list-item" style="cursor:default;flex-direction:column;align-items:flex-start;gap:4px;">
+                    <div style="font-size:12px;color:var(--accent-soft);">${escapeHtml(e.action)} · ${escapeHtml(e.by || '')}</div>
+                    <div style="font-size:13px;">${escapeHtml(e.detail || '')}</div>
+                    <div style="font-size:11px;color:var(--text-muted);">${e.at ? new Date(e.at).toLocaleString('tr-TR') : ''}</div>
+                </div>`;
+            }).join('') || '<p style="color:var(--text-muted);">Log boş.</p>';
+            openModal('📋 Mod Log', rows + '<button class="back-btn" onclick="showModUserList()">← Geri</button>');
+        }
+
+        // ---- Trade history ----
+        function loadTradeHistory() { return _tradeHistoryCache || []; }
+        async function loadTradeHistoryAsync() {
+            if (firebaseReady) {
+                try {
+                    const d = await fbGet('trade_history');
+                    _tradeHistoryCache = Array.isArray(d) ? d : (d ? Object.values(d) : []);
+                } catch (e) {}
+            } else {
+                try { _tradeHistoryCache = JSON.parse(localStorage.getItem('swordcity_trade_hist_v1') || '[]'); } catch (e) { _tradeHistoryCache = []; }
+            }
+            return _tradeHistoryCache;
+        }
+        function recordTradeHistory(entry) {
+            _tradeHistoryCache = loadTradeHistory();
+            _tradeHistoryCache.unshift(entry);
+            if (_tradeHistoryCache.length > 150) _tradeHistoryCache = _tradeHistoryCache.slice(0, 150);
+            try { localStorage.setItem('swordcity_trade_hist_v1', JSON.stringify(_tradeHistoryCache)); } catch (e) {}
+            if (firebaseReady) fbSet('trade_history', _tradeHistoryCache);
+        }
+        function openTradeHistory() {
+            const me = getCurrentUser();
+            const list = loadTradeHistory().filter(function(h) {
+                return h && (h.a === me || h.b === me || isModerator(me));
+            }).slice(0, 40);
+            let rows = list.map(function(h) {
+                return `<div class="info-card" style="margin-bottom:8px;">
+                    <div style="font-size:13px;"><b>${escapeHtml(h.a)}</b> ↔ <b>${escapeHtml(h.b)}</b></div>
+                    <div style="font-size:12px;color:var(--text-muted);margin-top:4px;">${escapeHtml(h.summary || '')}</div>
+                    <div style="font-size:11px;color:var(--text-muted);">${h.at ? new Date(h.at).toLocaleString('tr-TR') : ''}</div>
+                </div>`;
+            }).join('') || '<p style="color:var(--text-muted);text-align:center;">Henüz takas geçmişi yok.</p>';
+            openModal('📜 Takas Geçmişi', rows + '<button class="back-btn" onclick="openTrade()">← Takas</button>');
+        }
+
+        // ---- Price history ----
+        function loadPriceHistory() { return _priceHistoryCache || {}; }
+        async function loadPriceHistoryAsync() {
+            if (firebaseReady) {
+                try {
+                    const d = await fbGet('price_history');
+                    _priceHistoryCache = (d && typeof d === 'object') ? d : {};
+                } catch (e) {}
+            } else {
+                try { _priceHistoryCache = JSON.parse(localStorage.getItem('swordcity_price_hist_v1') || '{}'); } catch (e) { _priceHistoryCache = {}; }
+            }
+            return _priceHistoryCache;
+        }
+        function recordSalePrice(itemName, price, meta) {
+            if (!itemName || !(price > 0)) return;
+            const map = loadPriceHistory();
+            if (!map[itemName]) map[itemName] = [];
+            map[itemName].unshift({
+                price: Number(price),
+                at: new Date().toISOString(),
+                buyer: (meta && meta.buyer) || '',
+                seller: (meta && meta.seller) || ''
+            });
+            if (map[itemName].length > 30) map[itemName] = map[itemName].slice(0, 30);
+            _priceHistoryCache = map;
+            try { localStorage.setItem('swordcity_price_hist_v1', JSON.stringify(map)); } catch (e) {}
+            if (firebaseReady) fbSet('price_history', map);
+        }
+        function getAvgPrice(itemName) {
+            const arr = (loadPriceHistory()[itemName] || []).slice(0, 10);
+            if (!arr.length) return 0;
+            const sum = arr.reduce(function(s, x) { return s + (Number(x.price) || 0); }, 0);
+            return Math.round(sum / arr.length);
+        }
+
+        // ---- Announcement + event ----
+        async function loadAnnounceAsync() {
+            if (firebaseReady) {
+                try { _announceCache = await fbGet('global_announcement'); } catch (e) {}
+                try { _globalEventCache = await fbGet('global_event'); } catch (e) {}
+            } else {
+                try { _announceCache = JSON.parse(localStorage.getItem('swordcity_announce_v1') || 'null'); } catch (e) {}
+                try { _globalEventCache = JSON.parse(localStorage.getItem('swordcity_event_v1') || 'null'); } catch (e) {}
+            }
+            renderAnnouncement();
+        }
+        function renderAnnouncement() {
+            const bar = document.getElementById('announce-banner');
+            const span = document.getElementById('announce-text');
+            if (!bar || !span) return;
+            const a = _announceCache;
+            const dismissed = localStorage.getItem('swordcity_announce_dismiss');
+            if (a && a.text && a.id && dismissed !== String(a.id)) {
+                span.textContent = a.text;
+                bar.classList.add('show');
+            } else {
+                bar.classList.remove('show');
+            }
+        }
+        function dismissAnnouncement() {
+            const a = _announceCache;
+            if (a && a.id) try { localStorage.setItem('swordcity_announce_dismiss', String(a.id)); } catch (e) {}
+            const bar = document.getElementById('announce-banner');
+            if (bar) bar.classList.remove('show');
+        }
+        function setAnnouncement(text) {
+            if (!isModerator()) return;
+            const obj = { id: 'ann_' + Date.now(), text: String(text || '').trim(), at: new Date().toISOString(), by: getCurrentUser() };
+            if (!obj.text) { toast('Metin boş.', 'error'); return; }
+            _announceCache = obj;
+            try { localStorage.setItem('swordcity_announce_v1', JSON.stringify(obj)); } catch (e) {}
+            if (firebaseReady) fbSet('global_announcement', obj);
+            try { localStorage.removeItem('swordcity_announce_dismiss'); } catch (e) {}
+            renderAnnouncement();
+            pushModLog('announce', obj.text.slice(0, 80));
+            toast('Duyuru yayınlandı.');
+        }
+        function openModAnnouncePanel() {
+            if (!isModerator()) return;
+            openModal('📢 Duyuru Banner', `
+                <div class="form-group"><label>Duyuru metni</label>
+                <textarea id="ann-text" rows="3" placeholder="Örn: Bu akşam 22:00 bakım" style="width:100%;padding:12px;background:rgba(0,0,0,0.35);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:inherit;"></textarea></div>
+                <button class="primary-btn" onclick="setAnnouncement(document.getElementById('ann-text').value)">Yayınla</button>
+                <button class="danger-btn" onclick="clearAnnouncement()">Duyuruyu Kaldır</button>
+                <div style="margin-top:16px;font-weight:700;color:var(--accent-soft);">Event</div>
+                <div class="form-group"><label>Event başlığı (boş = kapalı)</label>
+                <input type="text" id="ev-title" placeholder="Kasa drop x2"></div>
+                <div class="form-group"><label>Açıklama</label>
+                <input type="text" id="ev-desc" placeholder="Bu hafta sonu kasalar 2x"></div>
+                <button class="primary-btn" onclick="setGlobalEvent()">Event Kaydet</button>
+                <button class="back-btn" onclick="showModUserList()">← Geri</button>
+            `);
+        }
+        function clearAnnouncement() {
+            _announceCache = null;
+            if (firebaseReady) fbSet('global_announcement', null);
+            try { localStorage.removeItem('swordcity_announce_v1'); } catch (e) {}
+            renderAnnouncement();
+            toast('Duyuru kaldırıldı.');
+        }
+        function setGlobalEvent() {
+            if (!isModerator()) return;
+            const title = (document.getElementById('ev-title') && document.getElementById('ev-title').value || '').trim();
+            const desc = (document.getElementById('ev-desc') && document.getElementById('ev-desc').value || '').trim();
+            if (!title) {
+                _globalEventCache = null;
+                if (firebaseReady) fbSet('global_event', null);
+                try { localStorage.removeItem('swordcity_event_v1'); } catch (e) {}
+                toast('Event kapatıldı.');
+                return;
+            }
+            _globalEventCache = { title: title, desc: desc, at: new Date().toISOString() };
+            try { localStorage.setItem('swordcity_event_v1', JSON.stringify(_globalEventCache)); } catch (e) {}
+            if (firebaseReady) fbSet('global_event', _globalEventCache);
+            pushModLog('event', title);
+            toast('Event aktif: ' + title);
+        }
+        function getActiveEvent() { return _globalEventCache; }
+
+        // ---- Status message ----
+        function openSetStatus() {
+            const me = getCurrentUser();
+            const u = getUser(me) || {};
+            openModal('💬 Durum Mesajı', `
+                <div class="form-group"><label>Durum (max 60 karakter)</label>
+                <input type="text" id="st-text" maxlength="60" value="${escapeHtml(u.statusText || '')}" placeholder="Örn: RP'deyim / AFK"></div>
+                <div class="form-group"><label>Emoji</label>
+                <input type="text" id="st-emoji" maxlength="4" value="${escapeHtml(u.statusEmoji || '')}" placeholder="🔥"></div>
+                <button class="primary-btn" onclick="saveStatusMessage()">Kaydet</button>
+                <button class="danger-btn" onclick="clearStatusMessage()">Temizle</button>
+                <button class="back-btn" onclick="showProfile()">← Profil</button>
+            `);
+        }
+        function saveStatusMessage() {
+            const me = getCurrentUser();
+            const users = loadUsers();
+            if (!users[me]) return;
+            ensureUserFields(users[me]);
+            users[me].statusText = ((document.getElementById('st-text') && document.getElementById('st-text').value) || '').trim().slice(0, 60);
+            users[me].statusEmoji = ((document.getElementById('st-emoji') && document.getElementById('st-emoji').value) || '').trim().slice(0, 4);
+            saveUser(me, users[me]);
+            toast('Durum güncellendi.');
+            showProfile();
+        }
+        function clearStatusMessage() {
+            const me = getCurrentUser();
+            const users = loadUsers();
+            if (!users[me]) return;
+            users[me].statusText = '';
+            users[me].statusEmoji = '';
+            saveUser(me, users[me]);
+            toast('Durum temizlendi.');
+            showProfile();
+        }
+        function statusLineHtml(username) {
+            const u = getUser(username);
+            if (!u || (!u.statusText && !u.statusEmoji)) return '';
+            return '<div class="status-line">' + escapeHtml((u.statusEmoji ? u.statusEmoji + ' ' : '') + (u.statusText || '')) + '</div>';
+        }
+
+        // ---- Gift ----
+        function openGiftMenu() {
+            const me = getCurrentUser();
+            const u = ensureUserFields(getUser(me) || {});
+            const friends = u.friends || [];
+            if (!friends.length) {
+                toast('Hediye için önce arkadaş ekle.', 'error');
+                return;
+            }
+            const opts = friends.map(function(f) {
+                return `<option value="${escapeHtml(f)}">${escapeHtml(f)}</option>`;
+            }).join('');
+            openModal('🎀 Hediye Gönder', `
+                <div class="form-group"><label>Arkadaş</label>
+                <select id="gift-to">${opts}</select></div>
+                <div class="form-group"><label>Tür</label>
+                <select id="gift-type" onchange="toggleGiftFields()">
+                    <option value="money">💵 Para</option>
+                    <option value="item">🎒 Envanter eşyası</option>
+                </select></div>
+                <div class="form-group" id="gift-money-wrap"><label>Miktar ($)</label>
+                <input type="number" id="gift-money" min="1" value="100"></div>
+                <div class="form-group" id="gift-item-wrap" style="display:none;"><label>Eşya index</label>
+                <select id="gift-item"></select></div>
+                <button class="primary-btn" onclick="sendGift()">Gönder</button>
+                <button class="back-btn" onclick="openSocial()">← Sosyal</button>
+            `);
+            // fill items
+            const inv = u.inventory || [];
+            const sel = document.getElementById('gift-item');
+            if (sel) {
+                sel.innerHTML = inv.map(function(it, i) {
+                    const n = normalizeItem(it);
+                    return `<option value="${i}">${escapeHtml(n.name)}</option>`;
+                }).join('') || '<option value="">Envanter boş</option>';
+            }
+        }
+        function toggleGiftFields() {
+            const t = (document.getElementById('gift-type') || {}).value;
+            const mw = document.getElementById('gift-money-wrap');
+            const iw = document.getElementById('gift-item-wrap');
+            if (mw) mw.style.display = t === 'money' ? '' : 'none';
+            if (iw) iw.style.display = t === 'item' ? '' : 'none';
+        }
+        function sendGift() {
+            const me = getCurrentUser();
+            const to = ((document.getElementById('gift-to') || {}).value || '').toLowerCase();
+            const type = ((document.getElementById('gift-type') || {}).value) || 'money';
+            const users = loadUsers();
+            if (!users[me] || !users[to]) { toast('Kullanıcı yok.', 'error'); return; }
+            ensureUserFields(users[me]);
+            ensureUserFields(users[to]);
+            if (!(users[me].friends || []).includes(to) && !(users[to].friends || []).includes(me)) {
+                toast('Sadece arkadaşlara hediye.', 'error'); return;
+            }
+            if (type === 'money') {
+                const amt = Math.floor(Number((document.getElementById('gift-money') || {}).value) || 0);
+                if (amt < 1) { toast('Geçersiz miktar.', 'error'); return; }
+                if ((users[me].balance || 0) < amt) { toast('Yetersiz bakiye.', 'error'); return; }
+                if (!confirm('$' + amt.toLocaleString('tr-TR') + ' → ' + to + ' ?')) return;
+                users[me].balance -= amt;
+                users[to].balance = (users[to].balance || 0) + amt;
+                saveUser(me, users[me]);
+                saveUser(to, users[to]);
+                pushNotif(to, '🎀 ' + me + ' sana $' + amt.toLocaleString('tr-TR') + ' hediye etti!', 'success');
+                pushModLog('gift_money', me + ' → ' + to + ' $' + amt);
+                toast('Hediye gönderildi.');
+            } else {
+                const idx = parseInt((document.getElementById('gift-item') || {}).value, 10);
+                if (isNaN(idx) || !users[me].inventory || !users[me].inventory[idx]) {
+                    toast('Eşya seç.', 'error'); return;
+                }
+                if (invSpaceLeft(users[to]) < 1) { toast('Karşı tarafın envanteri dolu.', 'error'); return; }
+                const item = normalizeItem(users[me].inventory[idx]);
+                if (!confirm('"' + item.name + '" → ' + to + ' ?')) return;
+                users[me].inventory.splice(idx, 1);
+                users[to].inventory.push(item);
+                bumpInvVersion(users[me]);
+                bumpInvVersion(users[to]);
+                saveUser(me, users[me]);
+                saveUser(to, users[to]);
+                pushNotif(to, '🎀 ' + me + ' sana "' + item.name + '" hediye etti!', 'success');
+                pushModLog('gift_item', me + ' → ' + to + ' ' + item.name);
+                toast('Hediye gönderildi.');
+            }
+            openSocial();
+        }
+
+        // ---- Clan chat ----
+        function openClanChat() {
+            const me = getCurrentUser();
+            const clans = loadClans();
+            const myClan = clans.find(function(c) { return clanMembers(c).includes(me); });
+            if (!myClan) { toast('Bir klana üye değilsin.', 'error'); return; }
+            const cid = 'clan__' + (myClan.id || myClan.name || 'x');
+            const chats = loadChats();
+            if (!chats[cid]) chats[cid] = { messages: [] };
+            const msgs = chats[cid].messages || [];
+            let html = '<div id="clan-chat-box" style="max-height:280px;overflow-y:auto;margin-bottom:10px;">';
+            if (!msgs.length) html += '<p style="color:var(--text-muted);text-align:center;">Henüz mesaj yok.</p>';
+            msgs.slice(-80).forEach(function(m) {
+                const mine = m.from === me;
+                html += `<div style="margin:6px 0;text-align:${mine ? 'right' : 'left'};">
+                    <div style="display:inline-block;max-width:85%;padding:8px 12px;border-radius:12px;background:${mine ? 'rgba(255,0,204,0.2)' : 'rgba(0,0,0,0.35)'};border:1px solid var(--border);font-size:13px;">
+                        <div style="font-size:11px;color:var(--accent-soft);margin-bottom:2px;">${escapeHtml(m.from || '')}</div>
+                        ${escapeHtml(m.text || '')}
+                    </div></div>`;
+            });
+            html += '</div>';
+            openModal('🛡️ Klan Sohbeti · ' + escapeHtml(myClan.name || ''), `
+                ${html}
+                <div class="form-group"><input type="text" id="clan-chat-input" placeholder="Mesaj yaz..." maxlength="300"></div>
+                <button class="primary-btn" onclick="sendClanChatMessage()">Gönder</button>
+                <button class="back-btn" onclick="openClans()">← Klanlar</button>
+            `);
+            setTimeout(function() {
+                const box = document.getElementById('clan-chat-box');
+                if (box) box.scrollTop = box.scrollHeight;
+            }, 50);
+        }
+        function sendClanChatMessage() {
+            const me = getCurrentUser();
+            const clans = loadClans();
+            const myClan = clans.find(function(c) { return clanMembers(c).includes(me); });
+            if (!myClan) return;
+            const input = document.getElementById('clan-chat-input');
+            const text = (input && input.value || '').trim();
+            if (!text) return;
+            const cid = 'clan__' + (myClan.id || myClan.name || 'x');
+            const chats = loadChats();
+            if (!chats[cid]) chats[cid] = { messages: [] };
+            chats[cid].messages.push({
+                id: 'cm_' + Date.now(),
+                from: me,
+                text: text.slice(0, 300),
+                at: new Date().toISOString()
+            });
+            if (chats[cid].messages.length > 150) chats[cid].messages = chats[cid].messages.slice(-150);
+            saveChats(chats);
+            // notify other members
+            clanMembers(myClan).forEach(function(m) {
+                if (m !== me) pushNotif(m, '🛡️ Klan: ' + me + ': ' + text.slice(0, 40), 'info');
+            });
+            openClanChat();
+        }
+
+        // ---- Music mute persistence helper ----
+        function applyMusicMutePreference() {
+            try {
+                const muted = localStorage.getItem('swordcity_music_muted') === '1';
+                const audio = document.querySelector('#music-player audio, #music-player iframe');
+                // player may use YT API — store flag for toggle hooks
+                window._musicMuted = muted;
+            } catch (e) {}
+        }
+        function toggleMusicMutePersist() {
+            window._musicMuted = !window._musicMuted;
+            try { localStorage.setItem('swordcity_music_muted', window._musicMuted ? '1' : '0'); } catch (e) {}
+            toast(window._musicMuted ? 'Müzik: kapalı (kayıtlı)' : 'Müzik: açık (kayıtlı)');
+        }
+
+        // ---- Backup reminder ----
+        function checkBackupReminder() {
+            if (!isModerator()) return;
+            try {
+                const last = localStorage.getItem('swordcity_last_backup_at');
+                const now = Date.now();
+                if (!last || (now - Number(last)) > 7 * 24 * 3600 * 1000) {
+                    setTimeout(function() {
+                        toast('🛡️ Yedek hatırlatması: 7 gündür yedek almadın (Mod paneli).', 'info');
+                    }, 2500);
+                }
+            } catch (e) {}
+        }
+
+        function markBackupDone() {
+            try { localStorage.setItem('swordcity_last_backup_at', String(Date.now())); } catch (e) {}
+        }
+
         const MOD_USER = 'ardakilic5534';
         const MOD_PASSWORD = 'mod123';
         const BANNED_NAMES_KEY = 'swordcity_banned_names_v1';
@@ -1979,6 +2582,7 @@
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a'); a.href=url; a.download='banana-cs2-yedek-'+new Date().toISOString().slice(0,10)+'.json';
                 document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url), 1500);
+                try { markBackupDone(); } catch (e) {}
                 toast('Yedek indirildi. Dosyayı güvenli bir yerde sakla.');
             } catch (e) { console.error(e); toast('Yedek alınamadı: '+(e.message||'erişim hatası'), 'error'); }
             finally { if (btn) { btn.disabled=false; btn.textContent='🛡️ Verileri yedekle (JSON indir)'; } }
@@ -2632,6 +3236,25 @@
                     try { openMarket(); } catch (e) {}
                 }
             });
+            db.ref('global_announcement').on('value', snap => {
+                _announceCache = snap.val();
+                try { renderAnnouncement(); } catch (e) {}
+            });
+            db.ref('global_event').on('value', snap => {
+                _globalEventCache = snap.val();
+            });
+            db.ref('mod_log').on('value', snap => {
+                const v = snap.val();
+                _modLogCache = Array.isArray(v) ? v : (v ? Object.values(v) : []);
+            });
+            db.ref('trade_history').on('value', snap => {
+                const v = snap.val();
+                _tradeHistoryCache = Array.isArray(v) ? v : (v ? Object.values(v) : []);
+            });
+            db.ref('price_history').on('value', snap => {
+                const v = snap.val();
+                _priceHistoryCache = (v && typeof v === 'object') ? v : {};
+            });
             db.ref('char_prices').on('value', snap => {
                 const v = snap.val();
                 _charPricesCache = (v && typeof v === 'object') ? v : {};
@@ -2988,6 +3611,10 @@
             if (typeof user.inventoryPrivate === 'undefined') user.inventoryPrivate = false;
             if (!Array.isArray(user.friends)) user.friends = [];
             if (!Array.isArray(user.pets)) user.pets = [];
+            if (typeof user.dailyStreak !== 'number') user.dailyStreak = 0;
+            if (typeof user.lastDailyClaim === 'undefined') user.lastDailyClaim = '';
+            if (typeof user.statusText === 'undefined') user.statusText = '';
+            if (typeof user.statusEmoji === 'undefined') user.statusEmoji = '';
             return user;
         }
 
@@ -3001,10 +3628,12 @@
 
         function formatDisplayName(username) {
             const name = username || '';
+            const u = getUser(name);
+            const title = titleChipHtml(u ? u.level : 0);
             if (hasPrime(name)) {
-                return '<span class="rainbow-name">' + escapeHtml(name) + '</span><span class="blue-check" title="Prime">✓</span>';
+                return '<span class="rainbow-name">' + escapeHtml(name) + '</span><span class="blue-check" title="Prime">✓</span>' + title;
             }
-            return escapeHtml(name);
+            return escapeHtml(name) + title;
         }
 
         function applyTpAndLevel(user, addTp) {
@@ -3353,6 +3982,7 @@
                     <button class="action-btn" onclick="showMyFriends()"><span class="btn-icon">👥</span>Arkadaşlarım</button>
                     <button class="action-btn" onclick="showFriendRequests()"><span class="btn-icon">📨</span>İstekler (${reqs.length})</button>
                     <button class="action-btn" onclick="showChatList()"><span class="btn-icon">💬</span>Sohbetler</button>
+                    <button class="action-btn" onclick="openGiftMenu()"><span class="btn-icon">🎀</span>Hediye</button>
                 </div>
             `;
             openModal('👥 Sosyal', html);
@@ -3407,6 +4037,7 @@
                 html += `
                     <div class="user-list-item" onclick="viewUserProfile('${escapeHtml(uname)}')">
                         <div class="user-list-name">${formatDisplayName(uname)}</div>
+                        ${statusLineHtml(uname)}
                         <div style="font-size:12px;color:var(--text-muted);">Lv.${u.level || 0}</div>
                     </div>
                 `;
@@ -4024,6 +4655,8 @@
             document.getElementById('notif-btn').classList.remove('show');
             document.getElementById('notif-badge').classList.remove('show');
             document.getElementById('shop-tab').classList.remove('show');
+            try { var db=document.getElementById('daily-btn'); if(db) db.classList.remove('show'); } catch(e){}
+            try { var ab=document.getElementById('announce-banner'); if(ab) ab.classList.remove('show'); } catch(e){}
             toggleShop(false);
             const modFolder = document.getElementById('mod-folder');
             if (modFolder) modFolder.style.display = 'none';
@@ -4049,6 +4682,21 @@
             document.getElementById('notif-btn').classList.add('show');
             document.getElementById('shop-tab').classList.add('show');
             updateNotifBadge();
+            try { updateDailyButton(); } catch (e) {}
+            try { loadAnnounceAsync(); } catch (e) {}
+            try { applyMusicMutePreference(); } catch (e) {}
+            try { checkBackupReminder(); } catch (e) {}
+            try {
+                loadTradeHistoryAsync();
+                loadPriceHistoryAsync();
+                loadModLogAsync();
+            } catch (e) {}
+            try {
+                const u = getUser(username);
+                if (u && canClaimDaily(u)) {
+                    setTimeout(function() { try { openDailyReward(); } catch (e) {} }, 800);
+                }
+            } catch (e) {}
             try { localStorage.setItem('swordcity_last_user', username); } catch (e) {}
 
             // Girişte tema / ayarlar korunsun — global kilit varsa onu uygula
@@ -4131,7 +4779,10 @@
             const myClan = clans.find(c => clanMembers(c).includes(me));
             const ownedClan = clans.find(c => c.owner === me);
             const balance = ((getUser(me) || {}).balance || 0);
+            const _ev = (typeof getActiveEvent === 'function') ? getActiveEvent() : null;
             let html = `
+                ${_ev && _ev.title ? '<div class="info-card" style="border-color:var(--warning);margin-bottom:10px;"><b style="color:var(--warning);">🎉 Event:</b> ' + escapeHtml(_ev.title) + ' — ' + escapeHtml(_ev.desc || '') + '</div>' : ''}
+                ${myClan ? '<button class="primary-btn" onclick="openClanChat()" style="margin-bottom:10px;">💬 Klan Sohbeti</button>' : ''}
                 <div class="info-card" style="background:linear-gradient(135deg,rgba(125,60,255,.18),rgba(255,0,204,.08));border:1px solid rgba(170,100,255,.35);">
                     <div style="display:flex;align-items:center;gap:12px;">
                         <div style="font-size:34px;">🛡️</div>
@@ -4731,8 +5382,13 @@
                         <span class="label">Kayıt Tarihi</span>
                         <span class="value">${date}</span>
                     </div>
+                    <div class="info-row"><span class="label">Unvan</span><span class="value">${getLevelTitle(user.level || 0).name} ${titleChipHtml(user.level || 0)}</span></div>
+                    <div class="info-row"><span class="label">Durum</span><span class="value">${escapeHtml((user.statusEmoji ? user.statusEmoji + ' ' : '') + (user.statusText || '—'))}</span></div>
+                    <div class="info-row"><span class="label">Günlük seri</span><span class="value">${user.dailyStreak || 0} gün</span></div>
                 </div>
                 <button class="primary-btn" onclick="toggleInventoryPrivacy()">${user.inventoryPrivate ? '🔓 Envanteri Herkese Aç' : '🔒 Envanteri Gizle'}</button>
+                <button class="primary-btn" onclick="openSetStatus()" style="margin-top:8px;">💬 Durum Mesajı</button>
+                <button class="primary-btn" onclick="openDailyReward()" style="margin-top:8px;">🎁 Günlük Ödül</button>
                 <button class="primary-btn" onclick="openChangeUsername()" style="margin-top:8px;background:rgba(74,163,255,0.2);border:1px solid rgba(74,163,255,0.45);color:#4aa3ff;">✏️ İsim Değiştir</button>
                 <button class="back-btn" onclick="openChangePassword()" style="margin-top:8px;">🔑 Şifre Değiştir</button>
             `);
@@ -5305,7 +5961,7 @@
 
             let list = '';
             if (!market.length) {
-                list = '<p style="color:var(--text-muted);text-align:center;padding:20px 0;">Pazarda henüz ilan yok.<br><span style="font-size:12px;">Online — biri alınca anında kaybolur.</span></p>';
+                list = '<p style="color:var(--text-muted);text-align:center;padding:20px 0;">Pazarda henüz ilan yok.<br><span style="font-size:12px;">Online — biri alınca anında kaybolur. Satışlarda %5 komisyon kesilir..</span></p>';
             } else {
                 // Karakter ve diğerleri ayır
                 const chars = [];
@@ -5620,13 +6276,18 @@
             }
 
             const price = Number(listing.price) || 0;
+            const tax = (!serverSale && price > 0) ? Math.floor(price * MARKET_TAX_RATE) : 0;
+            const sellerGain = price - tax;
             // Para sadece alıcıdan düşer
             users2[me].balance = (Number(users2[me].balance) || 0) - price;
             if (!serverSale) {
-                // Oyuncu satışı: satıcı kazanır
-                users2[listing.seller].balance = (Number(users2[listing.seller].balance) || 0) + price;
+                // Oyuncu satışı: satıcı kazanır (komisyon düşülür)
+                users2[listing.seller].balance = (Number(users2[listing.seller].balance) || 0) + sellerGain;
             }
             // SERVER satışı: para yanar, kimse kazanmaz
+            try {
+                recordSalePrice(boughtItem.name, price, { buyer: me, seller: listing.seller });
+            } catch (e) {}
 
             if (!Array.isArray(users2[me].inventory)) users2[me].inventory = [];
             users2[me].inventory = users2[me].inventory.slice();
@@ -5648,7 +6309,7 @@
             saveUser(me, users2[me]);
             if (!serverSale) {
                 saveUser(listing.seller, users2[listing.seller]);
-                pushNotif(listing.seller, '🏪 "' + boughtItem.name + '" satıldı +$' + price.toLocaleString('tr-TR') + ' · Alıcı: ' + me, 'success');
+                pushNotif(listing.seller, '🏪 "' + boughtItem.name + '" satıldı +$' + sellerGain.toLocaleString('tr-TR') + (tax ? ' (komisyon -$' + tax + ')' : '') + ' · Alıcı: ' + me, 'success');
             }
             _usersCache = users2;
 
@@ -5754,7 +6415,8 @@
                 <p style="color:var(--text-muted);font-size:12px;margin-bottom:12px;text-align:center;">
                     İstek gönder → karşı taraf kabul etsin → birlikte eşya ve para koyun → ikiniz de onaylayın.
                 </p>
-                <button class="primary-btn" onclick="startTradeRequest()" style="margin-bottom:16px;">📤 Takas İsteği Gönder</button>
+                <button class="primary-btn" onclick="startTradeRequest()" style="margin-bottom:8px;">📤 Takas İsteği Gönder</button>
+                <button class="back-btn" onclick="openTradeHistory()" style="margin-bottom:16px;">📜 Takas Geçmişi</button>
                 <div style="font-weight:700;color:var(--accent-soft);margin-bottom:8px;">İstekler</div>
                 ${pending}
             `);
@@ -6206,6 +6868,17 @@
                 saveUser(a, users[a]);
                 saveUser(b, users[b]);
                 saveTrades(trades);
+                try {
+                    const sumA = ((t.sideA.items || []).length) + ' eşya + $' + (t.sideA.money || 0);
+                    const sumB = ((t.sideB.items || []).length) + ' eşya + $' + (t.sideB.money || 0);
+                    recordTradeHistory({
+                        id: t.id,
+                        a: a, b: b,
+                        summary: a + ' verdi: ' + sumA + ' | ' + b + ' verdi: ' + sumB,
+                        at: t.updatedAt
+                    });
+                    pushModLog('trade_done', a + ' ↔ ' + b);
+                } catch (e) {}
                 pushNotif(a, '✅ Takas tamamlandı · ' + b, 'success');
                 pushNotif(b, '✅ Takas tamamlandı · ' + a, 'success');
                 window._tradeRoomId = null;
@@ -7365,6 +8038,12 @@
                 <button class="mod-btn" onclick="modPurgeGhosts()" style="margin-bottom:8px;">
                     <span style="font-size:20px;">👻</span> Hayalet Hesapları Temizle
                 </button>
+                <button class="mod-btn" onclick="openModLogPanel()" style="margin-bottom:8px;">
+                    <span style="font-size:20px;">📋</span> Mod Log
+                </button>
+                <button class="mod-btn" onclick="openModAnnouncePanel()" style="margin-bottom:8px;">
+                    <span style="font-size:20px;">📢</span> Duyuru & Event
+                </button>
                 <button class="mod-btn" onclick="showSupportTickets()" style="margin-bottom:8px;">
                     <span style="font-size:20px;">📩</span> Destek Talepleri
                 </button>
@@ -7914,6 +8593,7 @@
             if (leveled > 0) msg += ' (+' + leveled + ' level!)';
             pushNotif(username, '⭐ TP güncellendi: ' + users[username].tp + '/100 · Level: ' + users[username].level + (leveled ? ' (+' + leveled + ' level!)' : ''), leveled ? 'success' : 'info');
             toast(msg);
+            try { pushModLog('give_tp', username + ' TP ' + n); } catch (e) {}
             window._modViewingUser = username;
             modSelectUser(username);
             try { refreshOpenLiveViews(); } catch (e) {}
