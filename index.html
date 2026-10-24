@@ -1812,9 +1812,10 @@
                 const next = [];
                 const seen = {};
                 u.friends.forEach(function(f) {
-                    let name = String(f || '').toLowerCase();
-                    if (alias[name]) name = alias[name];
-                    if (!users[name]) return;
+                    let name = String(f || '').toLowerCase().trim();
+                    if (!name) return;
+                    if (alias[name] && users[alias[name]]) name = alias[name];
+                    // Hesap yoksa bile listeden SİLME (geçici senkron); sadece alias varsa çevir
                     if (name === uname) return;
                     if (seen[name]) return;
                     seen[name] = true;
@@ -2662,22 +2663,29 @@
                     } catch (e) {}
                 }
 
-                // 2) Karşı taraf isteği kabul ettiyse — odaya canlı gir (çıkış-giriş gerekmesin)
+                // 2) Takas isteği / kabul — menüyü OTOMATİK AÇMA (sadece bildir; liste açıksa yenile)
                 if (me && !window._tradeRoomId) {
                     try {
                         const activeMine = (_tradesCache || []).find(function(t) {
                             return t && t.status === 'active' && (t.from === me || t.to === me);
                         });
                         if (activeMine) {
-                            // Önceden request iken active olduysa bildir
                             const was = (prevTrades || []).find(function(x) { return x && x.id === activeMine.id; });
                             if (!was || was.status === 'request') {
-                                toast('Takas kabul edildi — odaya giriliyor…', 'success');
+                                toast('Takas kabul edildi. Takas menüsünden odaya girebilirsin.', 'success');
                             }
-                            window._tradeRoomId = activeMine.id;
-                            try { openTradeRoom(activeMine.id); } catch (e) {}
-                        } else if (window._tradeListOpen) {
-                            // İstek listesi açıksa canlı yenile
+                            // otomatik openTradeRoom YOK
+                        }
+                        const newReq = (_tradesCache || []).find(function(t) {
+                            return t && t.status === 'request' && t.to === me;
+                        });
+                        if (newReq) {
+                            const wasR = (prevTrades || []).find(function(x) { return x && x.id === newReq.id; });
+                            if (!wasR) {
+                                toast('Yeni takas isteği: ' + (newReq.from || '?'), 'info');
+                            }
+                        }
+                        if (window._tradeListOpen) {
                             try { openTrade(); } catch (e) {}
                         }
                     } catch (e) {}
@@ -3320,17 +3328,18 @@
         // ========== SOSYAL SİSTEM (Profil, Arkadaş, Sohbet) ==========
         function openSocial() {
             window._viewingProfile = null;
-            try { normalizeAllFriendLists(); normalizeAllChatsAliases(); } catch (e) {}
+            try { normalizeAllChatsAliases(); } catch (e) {}
             const me = getCurrentUser();
             if (!me) return;
             const users = loadUsers();
             const meUser = ensureUserFields(users[me] || {});
-            const alias = buildNameAliasMap();
+            const alias = (typeof buildNameAliasMap === 'function') ? buildNameAliasMap() : {};
             const friends = (meUser.friends || []).map(function(f) {
-                const n = String(f).toLowerCase();
-                return alias[n] || n;
+                const n = String(f).toLowerCase().trim();
+                if (alias[n] && users[alias[n]]) return alias[n];
+                return n;
             }).filter(function(f, i, arr) {
-                return f && f !== me && users[f] && arr.indexOf(f) === i;
+                return f && f !== me && arr.indexOf(f) === i;
             });
             const reqs = loadFriendRequests().filter(r => r.to === me && r.status === 'pending');
 
@@ -3606,15 +3615,16 @@
         }
 
         function showChatList() {
-            try { normalizeAllFriendLists(); normalizeAllChatsAliases(); } catch (e) {}
+            try { normalizeAllChatsAliases(); } catch (e) {}
             const me = getCurrentUser();
             const users = loadUsers();
             const alias = buildNameAliasMap();
             let friends = (ensureUserFields(users[me] || {}).friends || []).map(function(f) {
-                const n = String(f).toLowerCase();
-                return alias[n] || n;
+                const n = String(f).toLowerCase().trim();
+                if (alias[n] && users[alias[n]]) return alias[n];
+                return n;
             }).filter(function(f, i, arr) {
-                return f && f !== me && users[f] && arr.indexOf(f) === i;
+                return f && f !== me && arr.indexOf(f) === i;
             });
             const chats = loadChats();
             let html = '';
@@ -5697,16 +5707,23 @@
                 return;
             }
 
-            // Aktif takas odası varsa direkt oraya
+            // Aktif odaya otomatik girme — listede göster
             const trades = loadTrades();
             const active = trades.find(function(t) {
                 return t.status === 'active' && (t.from === me || t.to === me);
             });
-            if (active) {
-                openTradeRoom(active.id);
-                return;
-            }
 
+            let activeBanner = '';
+            if (active) {
+                const other = active.from === me ? active.to : active.from;
+                activeBanner = `
+                    <div class="info-card" style="margin-bottom:12px;border-color:var(--success);">
+                        <div style="font-weight:700;color:var(--success);margin-bottom:6px;">🟢 Aktif takas odası</div>
+                        <div style="font-size:13px;color:var(--text-muted);margin-bottom:8px;">Karşı taraf: ${formatDisplayName(other)}</div>
+                        <button class="primary-btn" onclick="openTradeRoom('${active.id}')">Odaya Gir</button>
+                    </div>
+                `;
+            }
             const requests = trades.filter(function(t) {
                 return t.status === 'request' && (t.from === me || t.to === me);
             });
@@ -5733,6 +5750,7 @@
             }
 
             openModal('🔄 Takas', `
+                ${activeBanner || ''}
                 <p style="color:var(--text-muted);font-size:12px;margin-bottom:12px;text-align:center;">
                     İstek gönder → karşı taraf kabul etsin → birlikte eşya ve para koyun → ikiniz de onaylayın.
                 </p>
@@ -5842,10 +5860,9 @@
             t.chat = t.chat || [];
             t.updatedAt = new Date().toISOString();
             saveTrades(trades);
-            pushNotif(t.from, '✅ ' + me + ' takas isteğini kabul etti. Odaya gir!', 'success');
-            toast('Takas kabul edildi — odaya giriyorsun.');
-            window._tradeRoomId = tradeId;
-            openTradeRoom(tradeId);
+            pushNotif(t.from, '✅ ' + me + ' takas isteğini kabul etti. Takas menüsünden odaya girebilir.', 'success');
+            toast('Takas kabul edildi. İstersen odaya girebilirsin.');
+            openTrade();
         }
 
         function rejectTradeRequest(tradeId) {
