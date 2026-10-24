@@ -1542,35 +1542,48 @@
 
         // Kullanıcı anahtarını her yerde eski→yeni olarak taşı
         function renameUserEverywhere(oldName, newName) {
-            oldName = String(oldName || '').toLowerCase();
-            newName = String(newName || '').toLowerCase();
+            oldName = String(oldName || '').toLowerCase().trim();
+            newName = String(newName || '').toLowerCase().trim();
             if (!oldName || !newName || oldName === newName) return false;
             const users = loadUsers();
             if (!users[oldName]) return false;
             if (users[newName]) return false;
 
-            // 1) Hesabı taşı
-            users[newName] = users[oldName];
-            users[newName].updatedAt = new Date().toISOString();
+            // Hesabı kopyala + eski isim geçmişi
+            const account = Object.assign({}, users[oldName]);
+            account.updatedAt = new Date().toISOString();
+            const prev = Array.isArray(account.previousNames) ? account.previousNames.slice() : [];
+            if (prev.indexOf(oldName) === -1) prev.push(oldName);
+            account.previousNames = prev;
+            account.renamedFrom = oldName;
+            account.renamedAt = account.updatedAt;
+
+            users[newName] = account;
             delete users[oldName];
 
-            // 2) Arkadaş listeleri
+            // Arkadaş listeleri
             Object.keys(users).forEach(function(u) {
                 if (!users[u] || !Array.isArray(users[u].friends)) return;
                 users[u].friends = users[u].friends.map(function(f) {
                     return (String(f).toLowerCase() === oldName) ? newName : f;
-                });
+                }).filter(function(f, i, arr) { return arr.indexOf(f) === i; });
             });
 
-            // 3) Local + Firebase users (eski sil, yeni yaz)
+            // Yerel cache — eski anahtar YOK
             _usersCache = users;
             try { safeLocalSet('swordcity_users_v3', JSON.stringify(users)); } catch (e) {}
-            if (firebaseReady) {
-                fbSet('users/' + newName, users[newName]);
-                try { db.ref('users/' + oldName).remove(); } catch (e) {}
+
+            // Firebase: yeni yaz + eskiyi zorla sil
+            if (firebaseReady && db) {
+                try {
+                    fbSet('users/' + newName, users[newName]);
+                    db.ref('users/' + oldName).remove().catch(function(err) { console.warn('eski isim silinemedi', err); });
+                    // alias haritası (eski→yeni) — hayalet hesabı engellemek için
+                    try { db.ref('name_aliases/' + oldName).set(newName); } catch (e) {}
+                } catch (e) { console.warn(e); }
             }
 
-            // 4) Market seller
+            // Market
             try {
                 const market = loadMarket();
                 let mCh = false;
@@ -1580,7 +1593,7 @@
                 if (mCh) saveMarket(market);
             } catch (e) {}
 
-            // 5) Trades
+            // Trades
             try {
                 const trades = loadTrades();
                 let tCh = false;
@@ -1592,7 +1605,7 @@
                 if (tCh) saveTrades(trades);
             } catch (e) {}
 
-            // 6) Friend requests
+            // Friend requests
             try {
                 const reqs = loadFriendRequests();
                 let rCh = false;
@@ -1604,44 +1617,73 @@
                 if (rCh) saveFriendRequests(reqs);
             } catch (e) {}
 
-            // 7) Chats keys + message authors
+            // Chats — anahtar + mesaj yazarları + Firebase'de eski odayı sil
             try {
                 const chats = loadChats();
                 const next = {};
+                const oldKeys = [];
                 Object.keys(chats || {}).forEach(function(cid) {
                     let newCid = cid;
-                    const parts = cid.split('__');
+                    let touched = false;
+                    const parts = String(cid).split('__');
                     if (parts.length === 2) {
-                        const a = parts[0] === oldName ? newName : parts[0];
-                        const b = parts[1] === oldName ? newName : parts[1];
-                        newCid = [a, b].sort().join('__');
+                        const a0 = String(parts[0]).toLowerCase();
+                        const b0 = String(parts[1]).toLowerCase();
+                        const a = a0 === oldName ? newName : parts[0];
+                        const b = b0 === oldName ? newName : parts[1];
+                        if (a0 === oldName || b0 === oldName) {
+                            touched = true;
+                            oldKeys.push(cid);
+                        }
+                        newCid = [String(a).toLowerCase(), String(b).toLowerCase()].sort().join('__');
                     }
                     const room = chats[cid] || { messages: [] };
-                    if (Array.isArray(room.messages)) {
-                        room.messages.forEach(function(m) {
-                            if (m && String(m.from).toLowerCase() === oldName) m.from = newName;
+                    const msgs = Array.isArray(room.messages) ? room.messages.slice() : [];
+                    msgs.forEach(function(m) {
+                        if (m && String(m.from).toLowerCase() === oldName) m.from = newName;
+                        if (m && m.replyTo && String(m.replyTo.from).toLowerCase() === oldName) m.replyTo.from = newName;
+                    });
+                    if (next[newCid] && Array.isArray(next[newCid].messages)) {
+                        const ids = {};
+                        next[newCid].messages.forEach(function(m) { if (m && m.id) ids[m.id] = true; });
+                        msgs.forEach(function(m) {
+                            if (m && m.id && ids[m.id]) return;
+                            next[newCid].messages.push(m);
                         });
-                    }
-                    if (next[newCid] && next[newCid].messages && room.messages) {
-                        next[newCid].messages = (next[newCid].messages || []).concat(room.messages);
                     } else {
-                        next[newCid] = room;
+                        next[newCid] = { messages: msgs };
                     }
                 });
-                saveChats(next);
-            } catch (e) {}
+                _chatsCache = next;
+                try { localStorage.setItem('swordcity_chats', JSON.stringify(next)); } catch (e) {}
+                if (firebaseReady && db) {
+                    // tüm chats ağacını yeni haliyle yaz
+                    fbSet('chats', next);
+                    // eski anahtarları tek tek sil (güvenlik)
+                    oldKeys.forEach(function(k) {
+                        try { db.ref('chats/' + k).remove(); } catch (e) {}
+                    });
+                }
+            } catch (e) { console.warn('chat rename', e); }
 
-            // 8) Notifications
+            // Notifications
             try {
                 const all = loadAllNotifs();
-                if (all[oldName]) {
-                    all[newName] = (all[newName] || []).concat(all[oldName]);
+                if (all && all[oldName]) {
+                    all[newName] = (all[newName] || []).concat(all[oldName] || []);
                     delete all[oldName];
                     saveAllNotifs(all);
                 }
             } catch (e) {}
 
-            // 9) Session
+            // Presence / online
+            try {
+                if (firebaseReady && db) {
+                    db.ref('presence/' + oldName).remove().catch(function(){});
+                }
+            } catch (e) {}
+
+            // Session
             if (getCurrentUser() === oldName) {
                 setSession(newName);
                 try {
@@ -1654,8 +1696,78 @@
                 if (last && last.toLowerCase() === oldName) localStorage.setItem('swordcity_last_user', newName);
             } catch (e) {}
 
+            // Açık sohbet penceresi
+            try {
+                if (window._openChatWith && String(window._openChatWith).toLowerCase() === oldName) {
+                    window._openChatWith = newName;
+                }
+            } catch (e) {}
+
             return true;
         }
+
+        // Hayalet (rename sonrası kalan) hesapları temizle
+        function purgeGhostAccounts() {
+            const users = loadUsers();
+            const byFingerprint = {};
+            Object.keys(users).forEach(function(name) {
+                const u = users[name];
+                if (!u || typeof u !== 'object') return;
+                const fp = (u.createdAt || '') + '|' + (u.password || '') + '|' + (u.card && u.card.number ? u.card.number : '');
+                if (!fp || fp === '||') return;
+                if (!byFingerprint[fp]) byFingerprint[fp] = [];
+                byFingerprint[fp].push(name);
+            });
+            let removed = [];
+            Object.keys(byFingerprint).forEach(function(fp) {
+                const names = byFingerprint[fp];
+                if (names.length < 2) return;
+                // en güncel updatedAt kalsın, diğerlerini sil
+                names.sort(function(a, b) {
+                    const ta = Date.parse((users[a] && users[a].updatedAt) || (users[a] && users[a].createdAt) || 0) || 0;
+                    const tb = Date.parse((users[b] && users[b].updatedAt) || (users[b] && users[b].createdAt) || 0) || 0;
+                    return tb - ta;
+                });
+                const keep = names[0];
+                names.slice(1).forEach(function(ghost) {
+                    if (isModerator(ghost)) return;
+                    // keep hesabına previousNames ekle
+                    if (!users[keep].previousNames) users[keep].previousNames = [];
+                    if (users[keep].previousNames.indexOf(ghost) === -1) users[keep].previousNames.push(ghost);
+                    delete users[ghost];
+                    removed.push(ghost);
+                    if (firebaseReady && db) {
+                        try { db.ref('users/' + ghost).remove(); } catch (e) {}
+                        try { db.ref('name_aliases/' + ghost).set(keep); } catch (e) {}
+                    }
+                });
+            });
+            if (removed.length) {
+                _usersCache = users;
+                try { safeLocalSet('swordcity_users_v3', JSON.stringify(users)); } catch (e) {}
+                // keep hesaplarını firebase'e yaz
+                Object.keys(users).forEach(function(n) {
+                    if (firebaseReady) fbSet('users/' + n, users[n]);
+                });
+            }
+            return removed;
+        }
+
+        function resolveUsernameAlias(name) {
+            const n = String(name || '').toLowerCase();
+            const users = loadUsers();
+            if (users[n]) return n;
+            // previousNames içinde ara
+            const keys = Object.keys(users);
+            for (let i = 0; i < keys.length; i++) {
+                const u = users[keys[i]];
+                if (u && Array.isArray(u.previousNames) && u.previousNames.indexOf(n) !== -1) {
+                    return keys[i];
+                }
+            }
+            return n;
+        }
+
 
         // ---------- Yardımcı: Firebase veya localStorage ----------
         function fbGet(path) {
@@ -1769,6 +1881,26 @@
                 const a = local[k]; // local
                 const b = remote[k]; // remote
                 if (a && typeof a === 'object' && !(b && typeof b === 'object')) {
+                    // Remote'de yok: hayalet mi? (aynı createdAt+password başka isimde remote'de varsa at)
+                    var isGhost = false;
+                    try {
+                        var fpA = (a.createdAt || '') + '|' + (a.password || '');
+                        if (fpA && fpA !== '|') {
+                            Object.keys(remote).forEach(function(rk) {
+                                var r = remote[rk];
+                                if (!r || typeof r !== 'object') return;
+                                var fpR = (r.createdAt || '') + '|' + (r.password || '');
+                                if (fpR === fpA) isGhost = true;
+                            });
+                        }
+                        // previousNames ile de kontrol
+                        Object.keys(remote).forEach(function(rk) {
+                            var r = remote[rk];
+                            if (r && Array.isArray(r.previousNames) && r.previousNames.indexOf(k) !== -1) isGhost = true;
+                            if (r && r.renamedFrom && String(r.renamedFrom).toLowerCase() === String(k).toLowerCase()) isGhost = true;
+                        });
+                    } catch (e) {}
+                    if (isGhost) return; // hayalet eski isim — ekleme
                     out[k] = a;
                     return;
                 }
@@ -2312,6 +2444,25 @@
                 if (remote && typeof remote === 'object' && Object.keys(remote).length > 0) {
                     // prev = local öncelikli birleştirme (menüde gezerken profil sıfırlanmasın)
                     _usersCache = mergeUsers(remote, prev);
+                    try {
+                        // previousNames hayaletlerini bir kez daha temizle
+                        var _ghostDrop = false;
+                        Object.keys(_usersCache || {}).forEach(function(nm) {
+                            var uu = _usersCache[nm];
+                            if (!uu) return;
+                            Object.keys(_usersCache).forEach(function(other) {
+                                if (other === nm) return;
+                                var o = _usersCache[other];
+                                if (o && Array.isArray(o.previousNames) && o.previousNames.indexOf(nm) !== -1) {
+                                    delete _usersCache[nm];
+                                    _ghostDrop = true;
+                                }
+                            });
+                        });
+                        if (_ghostDrop) {
+                            try { if (firebaseReady && db) { /* already removed on rename */ } } catch (e) {}
+                        }
+                    } catch (e) {}
                     try { safeLocalSet('swordcity_users_v3', JSON.stringify(_usersCache)); } catch (e) {}
                 }
                 // Açık ekranları canlı yenile (TP / level / bakiye dahil)
@@ -2999,6 +3150,15 @@
                 // Her girişte Firebase'den taze veri çek → başka cihazdan hesap çalışır
                 await loadUsersAsync();
                 clearExpiredBan(username);
+                // Eski isimle giriş denemesi → yeni isme yönlendir
+                try {
+                    const resolved = resolveUsernameAlias(username);
+                    if (resolved !== username && getUser(resolved)) {
+                        toast('Bu hesap yeniden adlandırıldı. Yeni isim: ' + resolved, 'info');
+                        username = resolved;
+                        try { document.getElementById('login-user').value = resolved; } catch (e) {}
+                    }
+                } catch (e) {}
                 let user = getUser(username);
                 // Kurucu: hesap yoksa veya banlıysa kurtar — bakiyeyi ASLA sıfırlama
                 if ((username === MOD_USER || username === 'ardakilic5534') && pass === MOD_PASSWORD) {
@@ -3077,8 +3237,28 @@
             const box = document.getElementById('user-search-results');
             if (!box) return;
             let html = '';
+            // Hayalet isimleri gizle (başka hesabın previousNames listesindekiler)
+            const ghostSet = {};
+            Object.keys(users).forEach(function(n) {
+                const uu = users[n];
+                if (uu && Array.isArray(uu.previousNames)) {
+                    uu.previousNames.forEach(function(p) { ghostSet[String(p).toLowerCase()] = true; });
+                }
+            });
             Object.keys(users).forEach(function(uname) {
                 if (uname === me) return;
+                if (ghostSet[uname.toLowerCase()] && users[uname] && !users[uname].password) return;
+                // aynı fingerprint ile hem eski hem yeni varsa eskisini gizle
+                if (ghostSet[uname.toLowerCase()]) {
+                    // eğer bu uname birinin previousNames'indeyse ve o hesap hâlâ duruyorsa gizle
+                    let isPrev = false;
+                    Object.keys(users).forEach(function(n) {
+                        if (n === uname) return;
+                        const uu = users[n];
+                        if (uu && Array.isArray(uu.previousNames) && uu.previousNames.indexOf(uname) !== -1) isPrev = true;
+                    });
+                    if (isPrev) return;
+                }
                 if (q && uname.toLowerCase().indexOf(q) === -1) return;
                 const u = ensureUserFields(users[uname]);
                 html += `
@@ -3438,6 +3618,11 @@
         }
 
         function openPrivateChat(other) {
+            try {
+                const resolved = resolveUsernameAlias(other);
+                if (resolved && resolved !== other) other = resolved;
+            } catch (e) {}
+
             const me = getCurrentUser();
             window._openChatWith = other;
             window._viewingProfile = null;
@@ -7018,6 +7203,9 @@
                 <button class="mod-btn" onclick="openBannedNamesPanel()" style="margin-bottom:8px;">
                     <span style="font-size:20px;">🚫</span> İsim Yasakları
                 </button>
+                <button class="mod-btn" onclick="modPurgeGhosts()" style="margin-bottom:8px;">
+                    <span style="font-size:20px;">👻</span> Hayalet Hesapları Temizle
+                </button>
                 <button class="mod-btn" onclick="showSupportTickets()" style="margin-bottom:8px;">
                     <span style="font-size:20px;">📩</span> Destek Talepleri
                 </button>
@@ -7375,6 +7563,57 @@
             toast('✅ ' + username + ' → ' + check.username);
             window._modViewingUser = check.username;
             modSelectUser(check.username);
+        }
+
+        function modPurgeGhosts() {
+            if (!isModerator()) { toast('Sadece moderatör.', 'error'); return; }
+            const removed = purgeGhostAccounts();
+            // Ek: sohbetlerde eski isimleri de tara
+            try {
+                const users = loadUsers();
+                const alias = {};
+                Object.keys(users).forEach(function(n) {
+                    const u = users[n];
+                    if (u && Array.isArray(u.previousNames)) {
+                        u.previousNames.forEach(function(p) { alias[String(p).toLowerCase()] = n; });
+                    }
+                });
+                const chats = loadChats();
+                let chatChanged = false;
+                const next = {};
+                Object.keys(chats || {}).forEach(function(cid) {
+                    const parts = String(cid).split('__');
+                    let a = parts[0], b = parts[1];
+                    if (parts.length === 2) {
+                        if (alias[String(a).toLowerCase()]) { a = alias[String(a).toLowerCase()]; chatChanged = true; }
+                        if (alias[String(b).toLowerCase()]) { b = alias[String(b).toLowerCase()]; chatChanged = true; }
+                        const newCid = [a, b].sort().join('__');
+                        const room = chats[cid] || { messages: [] };
+                        if (Array.isArray(room.messages)) {
+                            room.messages.forEach(function(m) {
+                                if (m && alias[String(m.from).toLowerCase()]) {
+                                    m.from = alias[String(m.from).toLowerCase()];
+                                    chatChanged = true;
+                                }
+                            });
+                        }
+                        if (next[newCid] && next[newCid].messages) {
+                            next[newCid].messages = next[newCid].messages.concat(room.messages || []);
+                        } else {
+                            next[newCid] = room;
+                        }
+                    } else {
+                        next[cid] = chats[cid];
+                    }
+                });
+                if (chatChanged) saveChats(next);
+            } catch (e) { console.warn(e); }
+            if (removed.length) {
+                toast('Temizlendi: ' + removed.join(', '));
+            } else {
+                toast('Hayalet hesap bulunamadı (sohbet isimleri de tarandı).');
+            }
+            showModUserList();
         }
 
         function openBannedNamesPanel() {
