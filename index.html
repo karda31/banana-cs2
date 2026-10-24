@@ -1471,6 +1471,191 @@
         const TRADE_MIN_LEVEL = 3;
         const MOD_USER = 'ardakilic5534';
         const MOD_PASSWORD = 'mod123';
+        const BANNED_NAMES_KEY = 'swordcity_banned_names_v1';
+        let _bannedNamesCache = null;
+
+        function loadBannedNames() {
+            if (_bannedNamesCache) return _bannedNamesCache.slice();
+            try {
+                const raw = localStorage.getItem(BANNED_NAMES_KEY);
+                _bannedNamesCache = raw ? JSON.parse(raw) : [];
+                if (!Array.isArray(_bannedNamesCache)) _bannedNamesCache = [];
+            } catch (e) { _bannedNamesCache = []; }
+            return _bannedNamesCache.slice();
+        }
+
+        async function loadBannedNamesAsync() {
+            if (firebaseReady) {
+                try {
+                    const data = await fbGet('banned_names');
+                    if (Array.isArray(data)) _bannedNamesCache = data;
+                    else if (data && typeof data === 'object') _bannedNamesCache = Object.values(data);
+                    else _bannedNamesCache = _bannedNamesCache || [];
+                    try { localStorage.setItem(BANNED_NAMES_KEY, JSON.stringify(_bannedNamesCache)); } catch (e) {}
+                } catch (e) {}
+            }
+            return loadBannedNames();
+        }
+
+        function saveBannedNames(list) {
+            _bannedNamesCache = (list || []).map(function(n) { return String(n).toLowerCase().trim(); }).filter(Boolean);
+            // unique
+            const seen = {};
+            _bannedNamesCache = _bannedNamesCache.filter(function(n) {
+                if (seen[n]) return false;
+                seen[n] = true;
+                return true;
+            });
+            try { localStorage.setItem(BANNED_NAMES_KEY, JSON.stringify(_bannedNamesCache)); } catch (e) {}
+            if (firebaseReady) fbSet('banned_names', _bannedNamesCache);
+        }
+
+        function isNameBanned(name) {
+            const n = String(name || '').toLowerCase().trim();
+            if (!n) return false;
+            const banned = loadBannedNames();
+            return banned.some(function(b) {
+                if (!b) return false;
+                if (n === b) return true;
+                // en az 3 karakterlik yasaklar isim içinde geçiyorsa engelle
+                if (b.length >= 3 && n.indexOf(b) !== -1) return true;
+                return false;
+            });
+        }
+
+        function validateUsername(rawName, opts) {
+            opts = opts || {};
+            const raw = String(rawName || '').trim();
+            const username = raw.toLowerCase();
+            if (!username || username.length < 3) return { ok: false, error: 'Kullanıcı adı en az 3 karakter olmalı.' };
+            if (username.length > 20) return { ok: false, error: 'Kullanıcı adı en fazla 20 karakter olabilir.' };
+            if (!/^[a-zA-Z0-9_ğüşıöçĞÜŞİÖÇ]+$/.test(raw)) return { ok: false, error: 'Sadece harf, rakam ve _ kullanılabilir.' };
+            if (isNameBanned(username) && !opts.skipBanCheck) return { ok: false, error: 'Bu isim yasaklı. Başka bir isim seç.' };
+            if (!opts.allowTaken) {
+                const users = loadUsers();
+                if (users[username] && username !== (opts.current || '').toLowerCase()) {
+                    return { ok: false, error: 'Bu kullanıcı adı zaten alınmış.' };
+                }
+            }
+            return { ok: true, username: username, raw: raw };
+        }
+
+        // Kullanıcı anahtarını her yerde eski→yeni olarak taşı
+        function renameUserEverywhere(oldName, newName) {
+            oldName = String(oldName || '').toLowerCase();
+            newName = String(newName || '').toLowerCase();
+            if (!oldName || !newName || oldName === newName) return false;
+            const users = loadUsers();
+            if (!users[oldName]) return false;
+            if (users[newName]) return false;
+
+            // 1) Hesabı taşı
+            users[newName] = users[oldName];
+            users[newName].updatedAt = new Date().toISOString();
+            delete users[oldName];
+
+            // 2) Arkadaş listeleri
+            Object.keys(users).forEach(function(u) {
+                if (!users[u] || !Array.isArray(users[u].friends)) return;
+                users[u].friends = users[u].friends.map(function(f) {
+                    return (String(f).toLowerCase() === oldName) ? newName : f;
+                });
+            });
+
+            // 3) Local + Firebase users (eski sil, yeni yaz)
+            _usersCache = users;
+            try { safeLocalSet('swordcity_users_v3', JSON.stringify(users)); } catch (e) {}
+            if (firebaseReady) {
+                fbSet('users/' + newName, users[newName]);
+                try { db.ref('users/' + oldName).remove(); } catch (e) {}
+            }
+
+            // 4) Market seller
+            try {
+                const market = loadMarket();
+                let mCh = false;
+                market.forEach(function(l) {
+                    if (l && String(l.seller).toLowerCase() === oldName) { l.seller = newName; mCh = true; }
+                });
+                if (mCh) saveMarket(market);
+            } catch (e) {}
+
+            // 5) Trades
+            try {
+                const trades = loadTrades();
+                let tCh = false;
+                trades.forEach(function(t) {
+                    if (!t) return;
+                    if (String(t.from).toLowerCase() === oldName) { t.from = newName; tCh = true; }
+                    if (String(t.to).toLowerCase() === oldName) { t.to = newName; tCh = true; }
+                });
+                if (tCh) saveTrades(trades);
+            } catch (e) {}
+
+            // 6) Friend requests
+            try {
+                const reqs = loadFriendRequests();
+                let rCh = false;
+                reqs.forEach(function(r) {
+                    if (!r) return;
+                    if (String(r.from).toLowerCase() === oldName) { r.from = newName; rCh = true; }
+                    if (String(r.to).toLowerCase() === oldName) { r.to = newName; rCh = true; }
+                });
+                if (rCh) saveFriendRequests(reqs);
+            } catch (e) {}
+
+            // 7) Chats keys + message authors
+            try {
+                const chats = loadChats();
+                const next = {};
+                Object.keys(chats || {}).forEach(function(cid) {
+                    let newCid = cid;
+                    const parts = cid.split('__');
+                    if (parts.length === 2) {
+                        const a = parts[0] === oldName ? newName : parts[0];
+                        const b = parts[1] === oldName ? newName : parts[1];
+                        newCid = [a, b].sort().join('__');
+                    }
+                    const room = chats[cid] || { messages: [] };
+                    if (Array.isArray(room.messages)) {
+                        room.messages.forEach(function(m) {
+                            if (m && String(m.from).toLowerCase() === oldName) m.from = newName;
+                        });
+                    }
+                    if (next[newCid] && next[newCid].messages && room.messages) {
+                        next[newCid].messages = (next[newCid].messages || []).concat(room.messages);
+                    } else {
+                        next[newCid] = room;
+                    }
+                });
+                saveChats(next);
+            } catch (e) {}
+
+            // 8) Notifications
+            try {
+                const all = loadAllNotifs();
+                if (all[oldName]) {
+                    all[newName] = (all[newName] || []).concat(all[oldName]);
+                    delete all[oldName];
+                    saveAllNotifs(all);
+                }
+            } catch (e) {}
+
+            // 9) Session
+            if (getCurrentUser() === oldName) {
+                setSession(newName);
+                try {
+                    const badge = document.getElementById('user-badge');
+                    if (badge) badge.innerHTML = '👤 ' + formatDisplayName(newName);
+                } catch (e) {}
+            }
+            try {
+                const last = localStorage.getItem('swordcity_last_user');
+                if (last && last.toLowerCase() === oldName) localStorage.setItem('swordcity_last_user', newName);
+            } catch (e) {}
+
+            return true;
+        }
 
         // ---------- Yardımcı: Firebase veya localStorage ----------
         function fbGet(path) {
@@ -1926,6 +2111,9 @@
             try {
                 if (window._bankOpen) openBank();
             } catch (e) {}
+            try {
+                if (window._modViewingUser) modSelectUser(window._modViewingUser);
+            } catch (e) {}
         }
 
         // ---------- TRADES ----------
@@ -2126,15 +2314,16 @@
                     _usersCache = mergeUsers(remote, prev);
                     try { safeLocalSet('swordcity_users_v3', JSON.stringify(_usersCache)); } catch (e) {}
                 }
-                // Açık ekranları canlı yenile
+                // Açık ekranları canlı yenile (TP / level / bakiye dahil)
                 if (window._viewingProfile) {
                     const u = window._viewingProfile;
                     const a = prev[u] || {};
                     const b = (_usersCache || {})[u] || {};
-                    if (!!a.inventoryPrivate !== !!b.inventoryPrivate || JSON.stringify(a.inventory || []) !== JSON.stringify(b.inventory || []) || a.balance !== b.balance || a.level !== b.level) {
+                    if (!!a.inventoryPrivate !== !!b.inventoryPrivate || JSON.stringify(a.inventory || []) !== JSON.stringify(b.inventory || []) || a.balance !== b.balance || a.level !== b.level || a.tp !== b.tp || a.gold !== b.gold || a.emerald !== b.emerald || a.diamond !== b.diamond) {
                         try { viewUserProfile(u); } catch (e) {}
                     }
                 }
+                // Kendi profil / envanter / banka açıkken TP-level değişince anında güncelle
                 try {
                     if (window._inventoryOpen) showInventory(window._invFilter || 'all');
                 } catch (e) {}
@@ -2143,6 +2332,17 @@
                 } catch (e) {}
                 try {
                     if (window._bankOpen) openBank();
+                } catch (e) {}
+                // Moderatör paneli açıkken seçili kullanıcı canlı yenilensin
+                try {
+                    if (window._modViewingUser) {
+                        const mu = window._modViewingUser;
+                        const a = prev[mu] || {};
+                        const b = (_usersCache || {})[mu] || {};
+                        if (a.level !== b.level || a.tp !== b.tp || a.balance !== b.balance || a.gold !== b.gold || a.emerald !== b.emerald || a.diamond !== b.diamond || !!a.prime !== !!b.prime) {
+                            modSelectUser(mu);
+                        }
+                    }
                 } catch (e) {}
             });
             db.ref('market').on('value', snap => {
@@ -2253,7 +2453,8 @@
                 loadReportsAsync(),
                 loadSupportTicketsAsync(),
                 loadFriendRequestsAsync(),
-                loadChatsAsync()
+                loadChatsAsync(),
+                loadBannedNamesAsync()
             ]);
             startRealtimeListeners();
             console.log("📦 Tüm veriler yüklendi");
@@ -2723,12 +2924,9 @@
                 const secQ = document.getElementById('reg-question') ? document.getElementById('reg-question').value : 'pet';
                 const secA = (document.getElementById('reg-answer') ? document.getElementById('reg-answer').value : '').trim();
 
-                if (!username || username.length < 3) {
-                    toast('Kullanıcı adı en az 3 karakter olmalı.', 'error');
-                    return;
-                }
-                if (!/^[a-zA-Z0-9_ğüşıöçĞÜŞİÖÇ]+$/.test(rawName)) {
-                    toast('Kullanıcı adı sadece harf, rakam ve _ içerebilir.', 'error');
+                const nameCheck = validateUsername(rawName);
+                if (!nameCheck.ok) {
+                    toast(nameCheck.error, 'error');
                     return;
                 }
                 if (pass.length < 4) {
@@ -4198,8 +4396,64 @@
                     </div>
                 </div>
                 <button class="primary-btn" onclick="toggleInventoryPrivacy()">${user.inventoryPrivate ? '🔓 Envanteri Herkese Aç' : '🔒 Envanteri Gizle'}</button>
+                <button class="primary-btn" onclick="openChangeUsername()" style="margin-top:8px;background:rgba(74,163,255,0.2);border:1px solid rgba(74,163,255,0.45);color:#4aa3ff;">✏️ İsim Değiştir</button>
                 <button class="back-btn" onclick="openChangePassword()" style="margin-top:8px;">🔑 Şifre Değiştir</button>
             `);
+        }
+
+        function openChangeUsername() {
+            const me = getCurrentUser();
+            if (!me) return;
+            openModal('✏️ İsim Değiştir', `
+                <div class="info-card" style="margin-bottom:12px;">
+                    <div class="info-row"><span class="label">Mevcut</span><span class="value">${escapeHtml(me)}</span></div>
+                </div>
+                <div class="form-group">
+                    <label>Yeni kullanıcı adı</label>
+                    <input type="text" id="cu-new" placeholder="3-20 karakter, harf/rakam/_">
+                </div>
+                <div class="form-group">
+                    <label>Şifren (onay)</label>
+                    <input type="password" id="cu-pass" placeholder="Hesap şifren">
+                </div>
+                <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">İsim değişince arkadaş listesi, sohbet ve pazar otomatik güncellenir. Yasaklı isimler kullanılamaz.</p>
+                <button class="primary-btn" onclick="doChangeUsername()">Kaydet</button>
+                <button class="back-btn" onclick="showProfile()">← Profil</button>
+            `);
+        }
+
+        function doChangeUsername() {
+            const me = getCurrentUser();
+            if (!me) return;
+            if (isModerator(me)) {
+                toast('Kurucu hesabın ismi buradan değiştirilemez.', 'error');
+                return;
+            }
+            const newRaw = (document.getElementById('cu-new') && document.getElementById('cu-new').value) || '';
+            const pass = (document.getElementById('cu-pass') && document.getElementById('cu-pass').value) || '';
+            const users = loadUsers();
+            if (!users[me] || users[me].password !== pass) {
+                toast('Şifre yanlış.', 'error');
+                return;
+            }
+            const check = validateUsername(newRaw, { current: me });
+            if (!check.ok) {
+                toast(check.error, 'error');
+                return;
+            }
+            if (check.username === me) {
+                toast('Zaten bu isimdesin.', 'error');
+                return;
+            }
+            if (!confirm('İsmin "' + me + '" → "' + check.username + '" olacak. Emin misin?')) return;
+            const ok = renameUserEverywhere(me, check.username);
+            if (!ok) {
+                toast('İsim değiştirilemedi.', 'error');
+                return;
+            }
+            toast('✅ İsmin güncellendi: ' + check.username);
+            enterApp(check.username);
+            showProfile();
         }
 
         function openChangePassword() {
@@ -4448,14 +4702,21 @@
         }
 
         function normalizeItem(item) {
-            if (typeof item === 'string') return { name: item, image: '', rarity: 'siradan', category: 'karakter', marketValue: 0 };
+            if (typeof item === 'string') return { name: item, image: '', rarity: 'siradan', category: 'karakter', marketValue: 0, info: '' };
             return {
                 name: (item && item.name) ? item.name : 'İsimsiz',
                 image: (item && item.image) ? item.image : '',
                 rarity: normalizeRarity(item && item.rarity),
                 category: normalizeCategory(item && item.category),
-                marketValue: (item && typeof item.marketValue === 'number') ? item.marketValue : (item && item.marketValue ? Number(item.marketValue) || 0 : 0)
+                marketValue: (item && typeof item.marketValue === 'number') ? item.marketValue : (item && item.marketValue ? Number(item.marketValue) || 0 : 0),
+                info: (item && item.info) ? String(item.info) : ''
             };
+        }
+
+        function itemInfoBoxHtml(item) {
+            const it = normalizeItem(item);
+            if (!it.info || !String(it.info).trim()) return '';
+            return '<div style="margin-top:8px;padding:8px 10px;background:rgba(0,180,255,0.1);border:1px solid rgba(0,180,255,0.35);border-radius:10px;text-align:left;font-size:12px;line-height:1.45;color:var(--text);word-break:break-word;"><div style="font-size:10px;color:#4aa3ff;font-weight:700;margin-bottom:3px;letter-spacing:0.5px;">ℹ️ BİLGİ</div>' + escapeHtml(String(it.info).trim()) + '</div>';
         }
 
         function itemThumb(item, size) {
@@ -4609,6 +4870,7 @@
                         : `<div style="width:100%;aspect-ratio:1;border-radius:14px;background:rgba(255,0,204,0.1);${bStyle}display:flex;align-items:center;justify-content:center;font-size:42px;">${it.category === 'kart' ? '🃏' : '📦'}</div>`;
                     const _mvp = getCharMarketPrice(it) || it.marketValue || 0;
                     const mvTxt = (_mvp > 0) ? `<div style="margin-top:4px;color:#ffd54f;font-size:12px;font-weight:600;">💰 Piyasa: $${Number(_mvp).toLocaleString('tr-TR')}</div>` : `<div style="margin-top:4px;color:var(--text-muted);font-size:11px;">💰 Piyasa: —</div>`;
+                    const infoBox = itemInfoBoxHtml(it);
                     list += `
                         <div style="background:rgba(0,0,0,0.28);${bStyle}border-radius:16px;padding:10px;text-align:center;">
                             ${imgBlock}
@@ -4616,6 +4878,7 @@
                             <div style="margin-top:6px;">${rarityBadgeHtml(it.rarity)}</div>
                             <div style="margin-top:4px;">${categoryBadgeHtml(it.category)}</div>
                             ${mvTxt}
+                            ${infoBox}
                             ${isStickerCategory(it.category) ? (it.pendingStickerRequest ? `<button disabled style="margin-top:8px;width:100%;padding:6px;background:rgba(255,193,7,0.12);border:1px solid rgba(255,193,7,0.45);color:var(--warning);border-radius:8px;cursor:not-allowed;font-size:12px;font-weight:600;">⏳ Talep bekleniyor</button>` : `<button onclick="startUseSticker(${i})" style="margin-top:8px;width:100%;padding:6px;background:rgba(0,230,118,0.15);border:1px solid rgba(0,230,118,0.4);color:var(--success);border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;">🎨 Çıkartma Kullan</button>`) : ''}
                             ${isEggCategory(it.category) ? `<button onclick="hatchEggFromInventory(${i})" style="margin-top:8px;width:100%;padding:6px;background:rgba(255,193,7,0.15);border:1px solid rgba(255,193,7,0.45);color:var(--warning);border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;">🥚 Yumurtayı Kır</button>` : ''}
                             <button onclick="shareCharacterToChat(${i})" style="margin-top:8px;width:100%;padding:6px;background:rgba(255,0,204,0.15);border:1px solid var(--border);color:var(--accent-soft);border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;">✨ Paylaş (DM)</button>
@@ -4694,6 +4957,7 @@
                         <div style="margin-top:10px;font-weight:600;font-size:14px;line-height:1.3;word-break:break-word;color:${nameColor};">${escapeHtml(it.name)}</div>
                         <div style="margin-top:6px;">${rarityBadgeHtml(it.rarity)}</div>
                         <div style="margin-top:4px;">${categoryBadgeHtml(it.category)}</div>
+                        ${itemInfoBoxHtml(it)}
                         <div style="color:var(--success);font-family:Orbitron,sans-serif;font-size:13px;margin-top:6px;">İlan: $${Number(listing.price).toLocaleString('tr-TR')}${isServerSeller(listing.seller) && listing.stock > 1 ? ' · stok ' + listing.stock : ''}</div>
                         <div style="color:#ffd54f;font-size:12px;font-weight:700;margin-top:4px;">Orijinal piyasa: $${Number(getCharMarketPrice(it) || it.marketValue || 0).toLocaleString('tr-TR')}</div>
                         <div style="color:var(--text-muted);font-size:11px;margin-top:2px;display:flex;align-items:center;justify-content:center;gap:4px;flex-wrap:wrap;">Satıcı: ${isServerSeller(listing.seller) ? '<span style="color:#00e676;font-weight:700;">🖥️ SERVER</span>' : formatDisplayName(listing.seller)}${isMine ? ' (sen)' : ''}</div>
@@ -6751,6 +7015,9 @@
                     <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">Yedek dosyası oyuncu bilgileri içerebilir; kimseyle paylaşma. Güncellemeden önce indir.</div>
                     <button class="mod-btn" id="data-backup-btn" onclick="downloadDataBackup()" style="margin-bottom:0;">🛡️ Verileri yedekle (JSON indir)</button>
                 </div>
+                <button class="mod-btn" onclick="openBannedNamesPanel()" style="margin-bottom:8px;">
+                    <span style="font-size:20px;">🚫</span> İsim Yasakları
+                </button>
                 <button class="mod-btn" onclick="showSupportTickets()" style="margin-bottom:8px;">
                     <span style="font-size:20px;">📩</span> Destek Talepleri
                 </button>
@@ -6973,6 +7240,7 @@
         }
 
         function modSelectUser(username) {
+            window._modViewingUser = username;
             const users = loadUsers();
             const u = ensureUserFields(users[username] || {});
             clearExpiredBan(username);
@@ -7015,6 +7283,9 @@
                     </div>
                     ${banInfo}
                 </div>
+                <button class="mod-btn" onclick="modRenameUser('${username}')">
+                    <span style="font-size:20px;">✏️</span> İsim Değiştir
+                </button>
                 <button class="mod-btn" onclick="modGiveMoney('${username}')">
                     <span style="font-size:20px;">💰</span> Para Ver
                 </button>
@@ -7074,6 +7345,126 @@
             `);
         }
 
+        function modRenameUser(username) {
+            if (!isModerator()) {
+                toast('Sadece moderatör.', 'error');
+                return;
+            }
+            if (isModerator(username)) {
+                toast('Kurucu hesabın ismi değiştirilemez.', 'error');
+                return;
+            }
+            const newRaw = prompt(username + ' için yeni isim:\n\n3-20 karakter, harf/rakam/_');
+            if (newRaw === null) return;
+            const check = validateUsername(newRaw, { current: username });
+            if (!check.ok) {
+                toast(check.error, 'error');
+                return;
+            }
+            if (check.username === username.toLowerCase()) {
+                toast('Zaten bu isim.', 'error');
+                return;
+            }
+            if (!confirm('"' + username + '" → "' + check.username + '" olarak değiştirilsin mi?')) return;
+            const ok = renameUserEverywhere(username, check.username);
+            if (!ok) {
+                toast('İsim değiştirilemedi (muhtemelen alınmış).', 'error');
+                return;
+            }
+            pushNotif(check.username, '✏️ İsmin moderatör tarafından değiştirildi: ' + check.username, 'info');
+            toast('✅ ' + username + ' → ' + check.username);
+            window._modViewingUser = check.username;
+            modSelectUser(check.username);
+        }
+
+        function openBannedNamesPanel() {
+            if (!isModerator()) {
+                toast('Sadece moderatör.', 'error');
+                return;
+            }
+            const list = loadBannedNames();
+            let rows = '';
+            if (!list.length) {
+                rows = '<p style="color:var(--text-muted);font-size:13px;">Yasaklı isim yok.</p>';
+            } else {
+                list.forEach(function(n, i) {
+                    rows += `<div class="user-list-item" style="cursor:default;">
+                        <div class="user-list-name">🚫 ${escapeHtml(n)}</div>
+                        <button onclick="modRemoveBannedName(${i})" style="background:rgba(255,61,113,0.2);border:1px solid rgba(255,61,113,0.4);color:#ff3d71;border-radius:8px;padding:6px 10px;cursor:pointer;font-size:12px;">Kaldır</button>
+                    </div>`;
+                });
+            }
+            openModal('🚫 İsim Yasakları (' + list.length + ')', `
+                <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px;">Yasaklı isimler kayıt ve isim değişiminde kullanılamaz. Kısmi eşleşme de engellenir.</p>
+                <div class="form-group">
+                    <label>Yeni yasaklı isim</label>
+                    <input type="text" id="ban-name-input" placeholder="örn: admin, mod, hack">
+                </div>
+                <button class="primary-btn" onclick="modAddBannedName()">Yasakla</button>
+                <div style="margin-top:16px;">${rows}</div>
+                <button class="back-btn" onclick="showModUserList()">← Hesap Listesi</button>
+            `);
+        }
+
+        function modAddBannedName() {
+            const raw = (document.getElementById('ban-name-input') && document.getElementById('ban-name-input').value || '').trim().toLowerCase();
+            if (!raw || raw.length < 2) {
+                toast('En az 2 karakter gir.', 'error');
+                return;
+            }
+            if (raw === MOD_USER) {
+                toast('Kurucu ismi yasaklanamaz.', 'error');
+                return;
+            }
+            const list = loadBannedNames();
+            if (list.indexOf(raw) >= 0) {
+                toast('Zaten listede.', 'error');
+                return;
+            }
+            list.push(raw);
+            saveBannedNames(list);
+            toast('🚫 Yasaklandı: ' + raw);
+            openBannedNamesPanel();
+        }
+
+        function modRemoveBannedName(index) {
+            const list = loadBannedNames();
+            if (index < 0 || index >= list.length) return;
+            const removed = list.splice(index, 1)[0];
+            saveBannedNames(list);
+            toast('Kaldırıldı: ' + removed);
+            openBannedNamesPanel();
+        }
+
+        function modSetItemInfo(username, index) {
+            if (!isModerator()) {
+                toast('Sadece moderatör.', 'error');
+                return;
+            }
+            const users = loadUsers();
+            if (!users[username] || !users[username].inventory || !users[username].inventory[index]) {
+                toast('Eşya bulunamadı.', 'error');
+                return;
+            }
+            const it = normalizeItem(users[username].inventory[index]);
+            const current = it.info || '';
+            const text = prompt(
+                'ℹ️ Bilgi kutusu — ' + it.name + '\n\nOyuncular envanterde ve profillerde bunu görür.\nBoş bırakırsan bilgi silinir.\n\nMevcut:\n' + (current || '(yok)'),
+                current
+            );
+            if (text === null) return;
+            const invItem = users[username].inventory[index];
+            if (typeof invItem === 'string') {
+                users[username].inventory[index] = { name: invItem, image: '', rarity: 'siradan', category: 'karakter', marketValue: 0, info: text.trim() };
+            } else {
+                invItem.info = text.trim();
+            }
+            if (typeof bumpInvVersion === 'function') bumpInvVersion(users[username]);
+            saveUser(username, users[username]);
+            toast(text.trim() ? '✅ Bilgi kaydedildi' : 'Bilgi silindi');
+            modViewInventory(username);
+        }
+
         function modGiveCurrency(username, type) {
             const labels = { gold: 'Gold', emerald: 'Emerald', diamond: 'Diamond' };
             const label = labels[type] || type;
@@ -7117,12 +7508,15 @@
             if (!users[username]) return;
             ensureUserFields(users[username]);
             const leveled = applyTpAndLevel(users[username], n);
-            saveUsers(users);
+            // Tek kullanıcıyı Firebase'e yaz → arkadaş tarafında canlı güncellensin
+            saveUser(username, users[username]);
             let msg = '✅ TP güncellendi: ' + users[username].tp + '/100 · Lv.' + users[username].level;
             if (leveled > 0) msg += ' (+' + leveled + ' level!)';
             pushNotif(username, '⭐ TP güncellendi: ' + users[username].tp + '/100 · Level: ' + users[username].level + (leveled ? ' (+' + leveled + ' level!)' : ''), leveled ? 'success' : 'info');
             toast(msg);
+            window._modViewingUser = username;
             modSelectUser(username);
+            try { refreshOpenLiveViews(); } catch (e) {}
         }
 
         function modSetLevel(username) {
@@ -7138,8 +7532,11 @@
             ensureUserFields(users[username]);
             users[username].level = n;
             saveUser(username, users[username]);
+            pushNotif(username, '📊 Level güncellendi: Lv.' + n, 'success');
             toast('📊 ' + username + ' level: ' + n);
-            try { openModPanel(); } catch (e) {}
+            window._modViewingUser = username;
+            modSelectUser(username);
+            try { refreshOpenLiveViews(); } catch (e) {}
         }
 
         function modSetCreatedAt(username) {
@@ -7212,7 +7609,8 @@
             users[username].createdAt = d.toISOString();
             saveUser(username, users[username]);
             toast('📅 ' + username + ' kayıt tarihi: ' + d.toLocaleString('tr-TR'));
-            try { openModPanel(); } catch (e) {}
+            window._modViewingUser = username;
+            modSelectUser(username);
         }
 
         function modSendNotif(username) {
@@ -7282,7 +7680,9 @@
             saveUser(username, users[username]);
             pushNotif(username, '⬆️ Level atladın! Yeni level: ' + users[username].level, 'success');
             toast('⬆️ ' + username + ' level: ' + users[username].level);
-            try { openModPanel(); } catch (e) {}
+            window._modViewingUser = username;
+            modSelectUser(username);
+            try { refreshOpenLiveViews(); } catch (e) {}
         }
 
         function modBanUser(username) {
@@ -7432,7 +7832,7 @@
             } else {
                 toast('💰 ' + username + ' bakiyesi: $' + num.toLocaleString('tr-TR'));
             }
-            try { openModPanel(); } catch (e) {}
+            try { if (typeof username !== "undefined" && username) { window._modViewingUser = username; modSelectUser(username); } else if (window._modViewingUser) { modSelectUser(window._modViewingUser); } } catch (e) {}
         }
 
         function modGiveCustomAch(username) {
@@ -7714,6 +8114,7 @@
                         ? `<img src="${escapeHtml(it.image)}" alt="${escapeHtml(it.name)}" onclick="openImagePreview('${escapeHtml(it.image).replace(/'/g, "\\'")}', '${escapeHtml(it.name).replace(/'/g, "\\'")}', 'mod:${username}')" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:14px;${bStyle}cursor:pointer;background:#0a0014;" onerror="this.style.display='none'">`
                         : `<div style="width:100%;aspect-ratio:1;border-radius:14px;background:rgba(255,0,204,0.1);${bStyle}display:flex;align-items:center;justify-content:center;font-size:42px;">📦</div>`;
                     const mvLabel = ((getCharMarketPrice(it) || it.marketValue) > 0) ? ('$' + Number(getCharMarketPrice(it) || it.marketValue).toLocaleString('tr-TR')) : '—';
+                    const infoBox = itemInfoBoxHtml(it);
                     invHtml += `
                         <div style="background:rgba(0,0,0,0.28);${bStyle}border-radius:16px;padding:10px;text-align:center;">
                             ${imgBlock}
@@ -7721,12 +8122,14 @@
                             <div style="margin-top:6px;">${rarityBadgeHtml(it.rarity)}</div>
                             <div style="margin-top:4px;">${categoryBadgeHtml(it.category)}</div>
                             <div style="margin-top:4px;color:#ffd54f;font-size:12px;font-weight:600;">💰 Piyasa: ${mvLabel}</div>
+                            ${infoBox}
                             <div style="display:flex;gap:6px;justify-content:center;margin-top:10px;flex-wrap:wrap;">
                                 <button onclick="modRenameInventoryItem('${username}', ${i})" style="background:rgba(40,200,120,0.14);border:1px solid rgba(40,200,120,.35);color:var(--success);border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;">✏️ İsim</button>
                                 <button onclick="modEditItemImage('${username}', ${i})" style="background:rgba(255,0,204,0.15);border:1px solid var(--border);color:var(--accent-soft);border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;">📷 Foto</button>
                                 <button onclick="modSetItemRarity('${username}', ${i})" style="background:rgba(255,213,79,0.15);border:1px solid rgba(255,213,79,0.4);color:#ffd54f;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;">💎 Enderlik</button>
                                 <button onclick="modSetItemCategory('${username}', ${i})" style="background:rgba(74,163,255,0.15);border:1px solid rgba(74,163,255,0.4);color:#4aa3ff;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;">📁 Kategori</button>
                                 <button onclick="modSetItemMarketValue('${username}', ${i})" style="background:rgba(255,213,79,0.2);border:1px solid rgba(255,213,79,0.45);color:#ffd54f;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;">💰 Piyasa</button>
+                                <button onclick="modSetItemInfo('${username}', ${i})" style="background:rgba(0,180,255,0.15);border:1px solid rgba(0,180,255,0.4);color:#4aa3ff;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;">ℹ️ Bilgi</button>
                                 <button onclick="modRemoveInventory('${username}', ${i})" style="background:rgba(255,61,113,0.2);border:1px solid rgba(255,61,113,0.4);color:#ff3d71;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;">Sil</button>
                             </div>
                         </div>
