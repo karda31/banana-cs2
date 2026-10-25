@@ -1455,6 +1455,46 @@
             display: block;
         }
 
+
+        .item-info-screen { }
+        .item-info-box {
+            margin: 14px 0;
+            padding: 14px;
+            background: rgba(0,180,255,0.1);
+            border: 1px solid rgba(0,180,255,0.4);
+            border-radius: 14px;
+            text-align: left;
+        }
+        .item-info-box-title {
+            font-size: 12px;
+            color: #4aa3ff;
+            font-weight: 700;
+            margin-bottom: 8px;
+            letter-spacing: 0.4px;
+        }
+        .item-info-box-body {
+            font-size: 14px;
+            line-height: 1.55;
+            color: var(--text);
+            word-break: break-word;
+            white-space: pre-wrap;
+        }
+        .item-info-empty {
+            margin: 14px 0;
+            padding: 14px;
+            background: rgba(0,0,0,0.25);
+            border: 1px dashed var(--border);
+            border-radius: 14px;
+            color: var(--text-muted);
+            font-size: 13px;
+            text-align: center;
+        }
+        .item-info-actions {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-top: 8px;
+        }
 </style>
 </head>
 <body>
@@ -6560,12 +6600,260 @@
             };
         }
 
-        function itemInfoBoxHtml(item, uid) {
-            const it = normalizeItem(item);
-            if (!it.info || !String(it.info).trim()) return '';
-            const id = 'inv-info-box-' + (uid != null ? uid : Math.random().toString(36).slice(2, 8));
-            return '<div class="inv-info-wrap" id="' + id + '" style="margin-top:8px;"><div class="inv-info-toggle" onclick="toggleInvInfo(\'' + id + '\', event)"><span class="inv-info-label">ℹ️ BİLGİ</span><span class="inv-info-chevron">▼</span></div><div class="inv-info-body">' + escapeHtml(String(it.info).trim()) + '</div></div>';
+        // ========== EŞYA BİLGİ SİSTEMİ (tek akış) ==========
+        function getItemInfoText(item) {
+            try {
+                const it = normalizeItem(item);
+                return (it.info && String(it.info).trim()) ? String(it.info).trim() : '';
+            } catch (e) { return ''; }
         }
+
+        function setItemInfoOnObject(raw, text) {
+            const n = normalizeItem(raw);
+            const base = (raw && typeof raw === 'object') ? Object.assign({}, raw) : {};
+            base.name = n.name;
+            base.image = n.image;
+            base.rarity = n.rarity;
+            base.category = n.category;
+            base.marketValue = n.marketValue;
+            base.info = text || '';
+            return base;
+        }
+
+        /** Bilgi ekranı — envanter veya pazar */
+        function showItemInfoScreen(opts) {
+            opts = opts || {};
+            const it = normalizeItem(opts.item || {});
+            const rs = rarityStyle(it.rarity);
+            const bStyle = rarityBorderStyle(it.rarity);
+            const nameColor = (rs.special === 'rainbow' || rs.special === 'galaxy') ? 'var(--text)' : rs.color;
+            const infoText = getItemInfoText(it);
+            const tradeN = (typeof getItemTradeCount === 'function') ? getItemTradeCount(it.name) : 0;
+            const priceLabel = opts.listingPrice != null ? Number(opts.listingPrice) : null;
+            const marketVal = (typeof getCharMarketPrice === 'function' ? getCharMarketPrice(it) : 0) || it.marketValue || 0;
+
+            let imgHtml;
+            if (it.image) {
+                imgHtml = '<img class="inv-detail-img" src="' + escapeHtml(it.image) + '" alt="" style="' + bStyle + '" onerror="this.style.display=\'none\'">';
+            } else {
+                imgHtml = '<div class="inv-detail-img" style="background:rgba(255,0,204,0.12);' + bStyle + 'display:flex;align-items:center;justify-content:center;font-size:64px;">' + (it.category === 'kart' ? '🃏' : '📦') + '</div>';
+            }
+
+            const infoBlock = infoText
+                ? ('<div class="item-info-box"><div class="item-info-box-title">ℹ️ Bilgi</div><div class="item-info-box-body">' + escapeHtml(infoText) + '</div></div>')
+                : '<div class="item-info-empty">Bu eşya için henüz bilgi yok.</div>';
+
+            let rows = '';
+            rows += '<div class="info-row"><span class="label">Kategori</span><span class="value">' + escapeHtml(it.category || '—') + '</span></div>';
+            rows += '<div class="info-row"><span class="label">Nadirlik</span><span class="value">' + escapeHtml(String(it.rarity || '—')) + '</span></div>';
+            if (priceLabel != null) {
+                rows += '<div class="info-row"><span class="label">İlan fiyatı</span><span class="value" style="color:var(--success);">$' + Number(priceLabel).toLocaleString('tr-TR') + '</span></div>';
+            }
+            rows += '<div class="info-row"><span class="label">Piyasa</span><span class="value" style="color:#ffd54f;">' + (marketVal > 0 ? '$' + Number(marketVal).toLocaleString('tr-TR') : '—') + '</span></div>';
+            if (opts.seller) {
+                rows += '<div class="info-row"><span class="label">Satıcı</span><span class="value">' + escapeHtml(opts.seller) + '</span></div>';
+            }
+            rows += '<div class="info-row"><span class="label">El değişimi</span><span class="value">' + tradeN + '</span></div>';
+
+            let actions = '';
+            // Mod düzenleme
+            if (isModerator()) {
+                if (opts.listingId) {
+                    actions += '<button class="mod-btn" type="button" onclick="modEditItemInfo({listingId:\'' + String(opts.listingId).replace(/'/g, "\\'") + '\'})">✏️ Bilgiyi düzenle</button>';
+                } else if (opts.invIndex != null && opts.owner) {
+                    actions += '<button class="mod-btn" type="button" onclick="modEditItemInfo({owner:\'' + String(opts.owner).replace(/'/g, "\\'") + '\',invIndex:' + opts.invIndex + '})">✏️ Bilgiyi düzenle</button>';
+                } else if (it.name) {
+                    actions += '<button class="mod-btn" type="button" onclick="modEditItemInfo({itemName:\'' + String(it.name).replace(/'/g, "\\'") + '\'})">✏️ Bilgiyi düzenle (isme göre)</button>';
+                }
+            }
+            // Envanter aksiyonları
+            if (opts.source === 'inv' && opts.invIndex != null) {
+                const idx = opts.invIndex;
+                try {
+                    if (typeof isStickerCategory === 'function' && isStickerCategory(it.category)) {
+                        if (it.pendingStickerRequest) actions += '<button disabled class="primary-btn" style="opacity:0.6;">⏳ Talep bekleniyor</button>';
+                        else actions += '<button class="primary-btn" type="button" onclick="startUseSticker(' + idx + ')">🎨 Çıkartma kullan</button>';
+                    }
+                    if (typeof isEggCategory === 'function' && isEggCategory(it.category)) {
+                        actions += '<button class="primary-btn" type="button" onclick="hatchEggFromInventory(' + idx + ')">🥚 Yumurtayı kır</button>';
+                    }
+                } catch (e) {}
+                actions += '<button class="primary-btn" type="button" onclick="shareCharacterToChat(' + idx + ')">✨ Paylaş (DM)</button>';
+                actions += '<button class="danger-btn" type="button" onclick="deleteInventoryItem(' + idx + ')">🗑 Sil</button>';
+                actions += '<button class="back-btn" type="button" onclick="showInventory(window._invFilter || \'all\')">← Envantere dön</button>';
+            } else if (opts.source === 'market') {
+                actions += '<button class="back-btn" type="button" onclick="openMarket()">← Pazara dön</button>';
+            } else {
+                actions += '<button class="back-btn" type="button" onclick="closeModal()">← Kapat</button>';
+            }
+
+            openModal('ℹ️ ' + escapeHtml(it.name),
+                '<div class="item-info-screen">'
+                + '<div style="text-align:center;">' + imgHtml
+                + '<div style="font-size:20px;font-weight:700;color:' + nameColor + ';margin:8px 0 10px;word-break:break-word;">' + escapeHtml(it.name) + '</div>'
+                + '<div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-bottom:12px;">' + rarityBadgeHtml(it.rarity) + categoryBadgeHtml(it.category) + '</div></div>'
+                + '<div class="info-card">' + rows + '</div>'
+                + infoBlock
+                + '<div class="item-info-actions">' + actions + '</div></div>'
+            );
+        }
+
+        function openInventoryItem(index) {
+            const me = getCurrentUser();
+            const user = getUser(me);
+            if (!user || !user.inventory || !user.inventory[index]) {
+                toast('Eşya bulunamadı.', 'error');
+                return;
+            }
+            showItemInfoScreen({
+                source: 'inv',
+                item: user.inventory[index],
+                invIndex: index,
+                owner: me
+            });
+        }
+
+        function openMarketItemInfo(listingId) {
+            const market = loadMarket();
+            const listing = market.find(function(l) { return l && l.id === listingId; });
+            if (!listing) { toast('İlan bulunamadı.', 'error'); return; }
+            showItemInfoScreen({
+                source: 'market',
+                item: listing.item,
+                listingId: listingId,
+                listingPrice: listing.price,
+                seller: listing.seller
+            });
+        }
+
+        function modEditItemInfo(ctx) {
+            if (!isModerator()) { toast('Sadece moderatör.', 'error'); return; }
+            ctx = ctx || {};
+            let item = null;
+            let title = 'Bilgi düzenle';
+            if (ctx.listingId) {
+                const listing = loadMarket().find(function(l) { return l && l.id === ctx.listingId; });
+                if (!listing) { toast('İlan yok.', 'error'); return; }
+                item = normalizeItem(listing.item);
+                title = 'Bilgi düzenle — ' + item.name;
+            } else if (ctx.owner != null && ctx.invIndex != null) {
+                const users = loadUsers();
+                const u = users[ctx.owner];
+                if (!u || !u.inventory || !u.inventory[ctx.invIndex]) { toast('Eşya yok.', 'error'); return; }
+                item = normalizeItem(u.inventory[ctx.invIndex]);
+                title = 'Bilgi düzenle — ' + item.name;
+            } else if (ctx.itemName) {
+                item = { name: ctx.itemName, info: '' };
+                // try find existing info from any source
+                const market = loadMarket();
+                for (let i = 0; i < market.length; i++) {
+                    const n = normalizeItem(market[i].item);
+                    if (n.name === ctx.itemName && n.info) { item = n; break; }
+                }
+                title = 'Bilgi düzenle — ' + ctx.itemName;
+            } else {
+                toast('Hedef yok.', 'error');
+                return;
+            }
+
+            const ctxJson = escapeHtml(JSON.stringify(ctx)).replace(/'/g, '&#39;');
+            openModal('✏️ ' + escapeHtml(title),
+                '<p style="font-size:13px;color:var(--text-muted);margin-bottom:10px;">Bu metin envanter ve pazarda <b>ℹ️ Bilgi</b> ekranında görünür.</p>'
+                + '<div class="form-group"><label>Bilgi metni</label>'
+                + '<textarea id="mod-item-info-text" rows="7" maxlength="2000" style="width:100%;padding:12px;background:rgba(0,0,0,0.35);border:1px solid var(--border);border-radius:12px;color:var(--text);font-family:inherit;font-size:14px;line-height:1.5;resize:vertical;">' + escapeHtml(item.info || '') + '</textarea></div>'
+                + '<label style="display:flex;align-items:flex-start;gap:8px;font-size:13px;margin:12px 0;cursor:pointer;line-height:1.4;">'
+                + '<input type="checkbox" id="mod-item-info-sync-all" checked style="margin-top:3px;">'
+                + '<span>Aynı isimli <b>tüm</b> envanter ve pazar eşyalarına uygula</span></label>'
+                + '<button class="primary-btn" type="button" onclick="modSaveItemInfo()">💾 Kaydet</button>'
+                + '<button class="back-btn" type="button" onclick="modEditItemInfoBack()">← Geri</button>'
+            );
+            window._modInfoCtx = ctx;
+        }
+
+        function modEditItemInfoBack() {
+            const ctx = window._modInfoCtx || {};
+            if (ctx.listingId) openMarketItemInfo(ctx.listingId);
+            else if (ctx.owner != null && ctx.invIndex != null && ctx.owner === getCurrentUser()) openInventoryItem(ctx.invIndex);
+            else closeModal();
+        }
+
+        function modSaveItemInfo() {
+            if (!isModerator()) return;
+            const ctx = window._modInfoCtx || {};
+            const ta = document.getElementById('mod-item-info-text');
+            const syncEl = document.getElementById('mod-item-info-sync-all');
+            const text = (ta && ta.value != null) ? String(ta.value).trim().slice(0, 2000) : '';
+            const syncAll = syncEl ? !!syncEl.checked : true;
+
+            let itemName = ctx.itemName || '';
+            if (ctx.listingId) {
+                const listing = loadMarket().find(function(l) { return l && l.id === ctx.listingId; });
+                if (listing) itemName = normalizeItem(listing.item).name;
+            } else if (ctx.owner != null && ctx.invIndex != null) {
+                const u = loadUsers()[ctx.owner];
+                if (u && u.inventory && u.inventory[ctx.invIndex]) itemName = normalizeItem(u.inventory[ctx.invIndex]).name;
+            }
+            if (!itemName) { toast('İsim bulunamadı.', 'error'); return; }
+
+            if (syncAll) {
+                // Market
+                const market = loadMarket();
+                market.forEach(function(l) {
+                    if (!l || !l.item) return;
+                    if (normalizeItem(l.item).name === itemName) {
+                        l.item = setItemInfoOnObject(l.item, text);
+                    }
+                });
+                saveMarket(market);
+                // Inventories
+                const users = loadUsers();
+                Object.keys(users).forEach(function(uname) {
+                    const inv = users[uname] && users[uname].inventory;
+                    if (!Array.isArray(inv)) return;
+                    let dirty = false;
+                    users[uname].inventory = inv.map(function(raw) {
+                        if (normalizeItem(raw).name === itemName) {
+                            dirty = true;
+                            return setItemInfoOnObject(raw, text);
+                        }
+                        return raw;
+                    });
+                    if (dirty) {
+                        bumpInvVersion(users[uname]);
+                        saveUser(uname, users[uname]);
+                    }
+                });
+            } else if (ctx.listingId) {
+                const market = loadMarket();
+                const listing = market.find(function(l) { return l && l.id === ctx.listingId; });
+                if (listing) {
+                    listing.item = setItemInfoOnObject(listing.item, text);
+                    saveMarket(market);
+                }
+            } else if (ctx.owner != null && ctx.invIndex != null) {
+                const users = loadUsers();
+                const u = users[ctx.owner];
+                if (u && u.inventory && u.inventory[ctx.invIndex]) {
+                    u.inventory[ctx.invIndex] = setItemInfoOnObject(u.inventory[ctx.invIndex], text);
+                    bumpInvVersion(u);
+                    saveUser(ctx.owner, u);
+                }
+            }
+
+            try { pushModLog('item_info', (getCurrentUser() || 'mod') + ' → ' + itemName); } catch (e) {}
+            toast(syncAll ? 'Bilgi kaydedildi (tüm kopyalar)' : 'Bilgi kaydedildi');
+            modEditItemInfoBack();
+        }
+
+        function itemInfoBoxHtml(item) {
+            // Kart üzerinde kısa ipucu; detay için Bilgi butonu
+            if (!getItemInfoText(item)) return '';
+            return '<div style="margin-top:6px;font-size:11px;color:#4aa3ff;font-weight:600;">ℹ️ Bilgi var</div>';
+        }
+
+
+
+        
 
         function itemThumb(item, size) {
             size = size || 48;
@@ -6656,103 +6944,11 @@
 
 
 
-        function toggleInvInfo(id, ev) {
-            if (ev) { ev.stopPropagation(); ev.preventDefault(); }
-            const wrap = document.getElementById(id);
-            if (!wrap) return;
-            const open = wrap.classList.toggle('open');
-            const chev = wrap.querySelector('.inv-info-chevron');
-            const label = wrap.querySelector('.inv-info-label');
-            if (label) label.textContent = open ? 'ℹ️ BİLGİ' : 'ℹ️ BİLGİ';
-            if (chev) chev.textContent = open ? '▲' : '▼';
-        }
+        
 
-        function toggleInvCard(index, ev) {
-            if (ev) {
-                const t = ev.target;
-                if (t && (t.tagName === 'BUTTON' || t.closest && t.closest('button'))) return;
-            }
-            const card = document.getElementById('inv-card-' + index);
-            if (!card) {
-                // fallback modal
-                if (typeof openInventoryItem === 'function') openInventoryItem(index);
-                return;
-            }
-            const wasOpen = card.classList.contains('expanded');
-            // close others
-            document.querySelectorAll('.inv-card.expanded').forEach(function(el) {
-                el.classList.remove('expanded');
-                const h = el.querySelector('.inv-toggle-hint');
-                if (h) h.textContent = h.getAttribute('data-closed') || 'Detay için dokun';
-            });
-            if (!wasOpen) {
-                card.classList.add('expanded');
-                const h = card.querySelector('.inv-toggle-hint');
-                if (h) h.textContent = h.getAttribute('data-open') || 'Kapat ▲';
-            }
-        }
+        
 
-        function openInventoryItem(index) {
-            const me = getCurrentUser();
-            const user = getUser(me);
-            if (!user || !user.inventory || !user.inventory[index]) {
-                toast('Eşya bulunamadı.', 'error');
-                return;
-            }
-            const it = normalizeItem(user.inventory[index]);
-            const rs = rarityStyle(it.rarity);
-            const bStyle = rarityBorderStyle(it.rarity);
-            const nameColor = (rs.special === 'rainbow' || rs.special === 'galaxy') ? 'var(--text)' : rs.color;
-            const _mvp = (typeof getCharMarketPrice === 'function' ? getCharMarketPrice(it) : 0) || it.marketValue || 0;
-            const tradeN = (typeof getItemTradeCount === 'function') ? getItemTradeCount(it.name) : 0;
-
-            let imgHtml = '';
-            if (it.image) {
-                const safeImg = escapeHtml(it.image).replace(/'/g, "\\'");
-                const safeName = escapeHtml(it.name).replace(/'/g, "\\'");
-                imgHtml = '<img class="inv-detail-img" src="' + escapeHtml(it.image) + '" alt="" style="' + bStyle + 'cursor:pointer;" onclick="openImagePreview(\'' + safeImg + '\', \'' + safeName + '\', \'inv\')" onerror="this.style.display=\'none\'">';
-            } else {
-                imgHtml = '<div class="inv-detail-img" style="background:rgba(255,0,204,0.12);' + bStyle + 'display:flex;align-items:center;justify-content:center;font-size:64px;">' + (it.category === 'kart' ? '🃏' : '📦') + '</div>';
-            }
-
-            const infoBlock = (it.info && String(it.info).trim())
-                ? ('<div style="margin:14px 0;padding:14px;background:rgba(0,180,255,0.1);border:1px solid rgba(0,180,255,0.4);border-radius:14px;text-align:left;">'
-                   + '<div style="font-size:12px;color:#4aa3ff;font-weight:700;margin-bottom:8px;letter-spacing:0.5px;">ℹ️ BİLGİ</div>'
-                   + '<div style="font-size:14px;line-height:1.55;color:var(--text);word-break:break-word;white-space:pre-wrap;">' + escapeHtml(String(it.info).trim()) + '</div></div>')
-                : '<div style="margin:14px 0;padding:14px;background:rgba(0,0,0,0.25);border:1px dashed var(--border);border-radius:14px;color:var(--text-muted);font-size:13px;text-align:center;">Bu eşya için ek bilgi yok.</div>';
-
-            let actions = '';
-            try {
-                if (typeof isStickerCategory === 'function' && isStickerCategory(it.category)) {
-                    if (it.pendingStickerRequest) {
-                        actions += '<button disabled class="primary-btn" style="opacity:0.6;">⏳ Talep bekleniyor</button>';
-                    } else {
-                        actions += '<button class="primary-btn" onclick="startUseSticker(' + index + ')">🎨 Çıkartma Kullan</button>';
-                    }
-                }
-                if (typeof isEggCategory === 'function' && isEggCategory(it.category)) {
-                    actions += '<button class="primary-btn" onclick="hatchEggFromInventory(' + index + ')">🥚 Yumurtayı Kır</button>';
-                }
-            } catch (e) {}
-            actions += '<button class="primary-btn" onclick="shareCharacterToChat(' + index + ')">✨ Paylaş (DM)</button>';
-            actions += '<button class="danger-btn" onclick="deleteInventoryItem(' + index + ')">🗑 Sil</button>';
-            actions += '<button class="back-btn" onclick="showInventory(window._invFilter || \'all\')">← Envantere Dön</button>';
-
-            openModal('ℹ️ ' + escapeHtml(it.name),
-                '<div style="text-align:center;">' + imgHtml
-                + '<div style="font-size:22px;font-weight:700;color:' + nameColor + ';margin:8px 0 10px;word-break:break-word;">' + escapeHtml(it.name) + '</div>'
-                + '<div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-bottom:12px;">'
-                + rarityBadgeHtml(it.rarity) + categoryBadgeHtml(it.category) + '</div></div>'
-                + '<div class="info-card">'
-                + '<div class="info-row"><span class="label">Kategori</span><span class="value">' + escapeHtml(it.category || '—') + '</span></div>'
-                + '<div class="info-row"><span class="label">Nadirlik</span><span class="value">' + escapeHtml(String(it.rarity || '—')) + '</span></div>'
-                + '<div class="info-row"><span class="label">Piyasa değeri</span><span class="value" style="color:#ffd54f;">' + (_mvp > 0 ? '$' + Number(_mvp).toLocaleString('tr-TR') : '—') + '</span></div>'
-                + '<div class="info-row"><span class="label">El değişimi</span><span class="value">' + tradeN + '</span></div>'
-                + '</div>'
-                + infoBlock
-                + '<div style="display:flex;flex-direction:column;gap:8px;margin-top:4px;">' + actions + '</div>'
-            );
-        }
+        
 
 
         function showInventory(filterCat) {
@@ -7115,110 +7311,11 @@
         }
 
 
-        function openMarketItemInfo(listingId) {
-            const market = loadMarket();
-            const listing = market.find(function(l) { return l && l.id === listingId; });
-            if (!listing) { toast('İlan bulunamadı.', 'error'); return; }
-            const it = normalizeItem(listing.item);
-            const rs = rarityStyle(it.rarity);
-            const bStyle = rarityBorderStyle(it.rarity);
-            const nameColor = (rs.special === 'rainbow' || rs.special === 'galaxy') ? 'var(--text)' : rs.color;
-            const tradeN = (typeof getItemTradeCount === 'function') ? getItemTradeCount(it.name) : 0;
-            const imgHtml = it.image
-                ? '<img class="inv-detail-img" src="' + escapeHtml(it.image) + '" alt="" style="' + bStyle + '" onerror="this.style.display=\'none\'">'
-                : '<div class="inv-detail-img" style="background:rgba(255,0,204,0.12);' + bStyle + 'display:flex;align-items:center;justify-content:center;font-size:64px;">📦</div>';
-            const infoBlock = (it.info && String(it.info).trim())
-                ? ('<div style="margin:14px 0;padding:14px;background:rgba(0,180,255,0.1);border:1px solid rgba(0,180,255,0.4);border-radius:14px;text-align:left;">'
-                   + '<div style="font-size:12px;color:#4aa3ff;font-weight:700;margin-bottom:8px;">ℹ️ BİLGİ</div>'
-                   + '<div style="font-size:14px;line-height:1.55;word-break:break-word;white-space:pre-wrap;">' + escapeHtml(String(it.info).trim()) + '</div></div>')
-                : '<div style="margin:14px 0;padding:14px;background:rgba(0,0,0,0.25);border:1px dashed var(--border);border-radius:14px;color:var(--text-muted);font-size:13px;text-align:center;">Bu ilan için ek bilgi yok.</div>';
-            let modBtn = '';
-            if (isModerator()) {
-                modBtn = '<button class="mod-btn" onclick="modEditMarketItemInfo(\'' + String(listingId).replace(/'/g, "\\'") + '\')">✏️ Bilgiyi Düzenle (Mod)</button>';
-            }
-            openModal('ℹ️ ' + escapeHtml(it.name),
-                '<div style="text-align:center;">' + imgHtml
-                + '<div style="font-size:20px;font-weight:700;color:' + nameColor + ';margin:8px 0;word-break:break-word;">' + escapeHtml(it.name) + '</div>'
-                + '<div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-bottom:10px;">' + rarityBadgeHtml(it.rarity) + categoryBadgeHtml(it.category) + '</div></div>'
-                + '<div class="info-card">'
-                + '<div class="info-row"><span class="label">Satıcı</span><span class="value">' + escapeHtml(listing.seller || '—') + '</span></div>'
-                + '<div class="info-row"><span class="label">İlan fiyatı</span><span class="value" style="color:var(--success);">$' + Number(listing.price || 0).toLocaleString('tr-TR') + '</span></div>'
-                + '<div class="info-row"><span class="label">Piyasa</span><span class="value" style="color:#ffd54f;">' + ((it.marketValue || 0) > 0 ? '$' + Number(it.marketValue).toLocaleString('tr-TR') : '—') + '</span></div>'
-                + '<div class="info-row"><span class="label">El değişimi</span><span class="value">' + tradeN + '</span></div>'
-                + '</div>'
-                + infoBlock
-                + '<div style="display:flex;flex-direction:column;gap:8px;margin-top:8px;">'
-                + modBtn
-                + '<button class="back-btn" onclick="openMarket()">← Pazara Dön</button></div>'
-            );
-        }
+        
 
-        function modEditMarketItemInfo(listingId) {
-            if (!isModerator()) { toast('Sadece moderatör.', 'error'); return; }
-            const market = loadMarket();
-            const listing = market.find(function(l) { return l && l.id === listingId; });
-            if (!listing) { toast('İlan yok.', 'error'); return; }
-            const it = normalizeItem(listing.item);
-            const cur = it.info || '';
-            openModal('✏️ Bilgi düzenle — ' + escapeHtml(it.name), `
-                <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Bu metin pazardaki ilanda görünür. İstersen aynı isimli tüm envanter/pazar eşyalarına da uygula.</p>
-                <div class="form-group"><label>Bilgi metni</label>
-                <textarea id="mod-item-info" rows="6" style="width:100%;padding:12px;background:rgba(0,0,0,0.35);border:1px solid var(--border);border-radius:12px;color:var(--text);font-family:inherit;font-size:14px;line-height:1.45;resize:vertical;">${escapeHtml(cur)}</textarea></div>
-                <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin:10px 0 14px;cursor:pointer;">
-                    <input type="checkbox" id="mod-item-info-sync" checked> Aynı isimli tüm eşyalara uygula (envanter + pazar)
-                </label>
-                <button class="primary-btn" onclick="modSaveMarketItemInfo('${String(listingId).replace(/'/g, "\\'")}')">💾 Kaydet</button>
-                <button class="back-btn" onclick="openMarketItemInfo('${String(listingId).replace(/'/g, "\\'")}')">← Geri</button>
-            `);
-        }
+        
 
-        function modSaveMarketItemInfo(listingId) {
-            if (!isModerator()) return;
-            const ta = document.getElementById('mod-item-info');
-            const syncEl = document.getElementById('mod-item-info-sync');
-            const text = (ta && ta.value != null) ? String(ta.value).trim() : '';
-            const sync = syncEl ? !!syncEl.checked : true;
-            const market = loadMarket();
-            const listing = market.find(function(l) { return l && l.id === listingId; });
-            if (!listing) { toast('İlan yok.', 'error'); return; }
-            const itemName = normalizeItem(listing.item).name;
-
-            if (sync && itemName) {
-                // all market listings with same name
-                market.forEach(function(l) {
-                    if (!l || !l.item) return;
-                    const n = normalizeItem(l.item);
-                    if (n.name === itemName) {
-                        l.item = Object.assign({}, typeof l.item === 'object' ? l.item : {}, n, { info: text });
-                    }
-                });
-                // all user inventories
-                const users = loadUsers();
-                Object.keys(users).forEach(function(uname) {
-                    const inv = users[uname] && users[uname].inventory;
-                    if (!Array.isArray(inv)) return;
-                    let dirty = false;
-                    users[uname].inventory = inv.map(function(raw) {
-                        const n = normalizeItem(raw);
-                        if (n.name === itemName) {
-                            dirty = true;
-                            return Object.assign({}, typeof raw === 'object' ? raw : {}, n, { info: text });
-                        }
-                        return raw;
-                    });
-                    if (dirty) {
-                        bumpInvVersion(users[uname]);
-                        saveUser(uname, users[uname]);
-                    }
-                });
-            } else {
-                listing.item = Object.assign({}, typeof listing.item === 'object' ? listing.item : {}, normalizeItem(listing.item), { info: text });
-            }
-            saveMarket(market);
-            try { pushModLog('item_info', (getCurrentUser() || 'mod') + ' bilgi güncelledi: ' + itemName); } catch (e) {}
-            toast('Bilgi kaydedildi' + (sync ? ' (tüm kopyalar)' : ''));
-            openMarketItemInfo(listingId);
-        }
+        
 
         function confirmSellItem() {
             const me = getCurrentUser();
