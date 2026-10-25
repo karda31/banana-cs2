@@ -1798,7 +1798,7 @@
                 const st = u.quests[q.id] || { progress: 0, done: false, claimed: false };
                 let btn = '';
                 if (st.claimed) btn = '<span style="color:var(--text-muted);font-size:12px;">Alındı</span>';
-                else if (st.done) btn = '<button class="primary-btn" style="padding:6px 12px;font-size:12px;" onclick="claimQuestReward(\\'' + q.id + '\\')">Ödül al</button>';
+                else if (st.done) btn = '<button class="primary-btn" style="padding:6px 12px;font-size:12px;" onclick="claimQuestReward(\'' + q.id + '\')">Ödül al</button>';
                 else btn = '<span style="color:var(--text-muted);font-size:12px;">' + (st.progress||0) + '/' + q.target + '</span>';
                 return '<div class="info-row" style="align-items:center;"><span class="label">' + escapeHtml(q.label) + '</span><span class="value">' + btn + '</span></div>';
             }).join('');
@@ -1891,58 +1891,8 @@
         }
 
         function modResolveReport(reportId, action) {
-            if (!isModerator()) return;
-            const reports = loadReports();
-            const r = reports.find(function(x) { return x.id === reportId; });
-            if (!r || r.resolved) { toast('Rapor yok / çözülmüş', 'error'); return; }
-            r.resolved = true;
-            r.resolvedBy = getCurrentUser();
-            r.resolvedAt = new Date().toISOString();
-            r.action = action || 'dismiss';
-            saveReports(reports);
-            if (action === 'warn' && r.seller) modWarnUser(r.seller);
-            else if (action === 'fine' && r.seller) modFineUser(r.seller);
-            else if (action === 'rep' && r.seller) {
-                adjustReputation(r.seller, -5, 'şikayet sonucu');
-                toast('Satıcı itibar −5');
-            } else if (action === 'dismiss') {
-                toast('Rapor kapatıldı');
-            }
-            pushNotif(r.reporter, 'Şikayetin incelendi (' + (action||'kapatıldı') + ').', 'info');
-            openModReportsPanel();
-        }
-
-        function openModReportsPanel() {
-            if (!isModerator()) return;
-            const reports = (loadReports() || []).slice().reverse();
-            const open = reports.filter(function(r) { return !r.resolved; });
-            const closed = reports.filter(function(r) { return r.resolved; }).slice(0, 15);
-            function row(r, active) {
-                const when = r.at ? new Date(r.at).toLocaleString('tr-TR') : '';
-                let acts = '';
-                if (active) {
-                    acts = `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;">
-                        <button class="mod-btn" style="padding:6px 10px;font-size:12px;" onclick="modResolveReport('${r.id}','warn')">Uyarı</button>
-                        <button class="mod-btn" style="padding:6px 10px;font-size:12px;" onclick="modResolveReport('${r.id}','fine')">Ceza $</button>
-                        <button class="mod-btn" style="padding:6px 10px;font-size:12px;" onclick="modResolveReport('${r.id}','rep')">İtibar −5</button>
-                        <button class="back-btn" style="padding:6px 10px;font-size:12px;" onclick="modResolveReport('${r.id}','dismiss')">Kapat</button>
-                    </div>`;
-                }
-                return `<div class="shop-card" style="margin-bottom:10px;">
-                    <div style="font-size:13px;"><b>${escapeHtml(r.itemName||'?')}</b> · $${Number(r.price||0).toLocaleString('tr-TR')}</div>
-                    <div style="font-size:12px;color:var(--text-muted);">Satıcı: ${escapeHtml(r.seller||'')} · Şikayetçi: ${escapeHtml(r.reporter||'')}</div>
-                    <div style="font-size:12px;">Sebep: ${escapeHtml(r.reason||'')} ${r.detail ? '— ' + escapeHtml(r.detail) : ''}</div>
-                    <div style="font-size:11px;color:var(--text-muted);">${when}${r.resolved ? ' · ✓ ' + escapeHtml(r.action||'') : ''}</div>
-                    ${acts}
-                </div>`;
-            }
-            openModal('⚠️ Şikayetler', `
-                <p style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">Açık: ${open.length}</p>
-                ${open.map(function(r){return row(r,true);}).join('') || '<p style="color:var(--text-muted);">Açık şikayet yok.</p>'}
-                <div class="section-label" style="margin-top:14px;">Son çözülenler</div>
-                ${closed.map(function(r){return row(r,false);}).join('') || ''}
-                <button class="back-btn" onclick="openModerator()">← Moderatör</button>
-            `);
+            /* implementation later in file */
+            if (typeof showMarketReports === "function") { /* wait */ }
         }
 
         // ---- Clan weekly goal ----
@@ -2006,18 +1956,8 @@
         }
 
         // ---- Trade confirm delay ----
-        window._pendingTradeAccept = window._pendingTradeAccept || {};
         function requestTradeAcceptWithDelay(tradeId) {
-            const me = getCurrentUser();
-            const key = tradeId + '::' + me;
-            const now = Date.now();
-            if (!window._pendingTradeAccept[key] || now - window._pendingTradeAccept[key] > 12000) {
-                window._pendingTradeAccept[key] = now;
-                toast('10 sn içinde tekrar Onayla — yanlış tık koruması');
-                return false;
-            }
-            delete window._pendingTradeAccept[key];
-            return true;
+            return confirm('Takası onaylamak istediğine emin misin?\n(Yanlış tık koruması)');
         }
 
         function saveProfileRole() {
@@ -6834,13 +6774,15 @@
             const user = getUser(me);
             if (!user) return;
             try {
-                const gate = canListOnMarket(me);
-                if (!gate.ok) { toast(gate.msg, 'error'); return; }
-                const market = loadMarket();
-                const mine = market.filter(function(l) { return l && l.seller === me; }).length;
-                if (gate.maxListings && mine >= gate.maxListings) {
-                    toast('İtibar limitin: en fazla ' + gate.maxListings + ' ilan.', 'error');
-                    return;
+                if (!isModerator(me)) {
+                    const gate = canListOnMarket(me);
+                    if (!gate.ok) { toast(gate.msg, 'error'); return; }
+                    const market = loadMarket();
+                    const mine = market.filter(function(l) { return l && l.seller === me; }).length;
+                    if (gate.maxListings && mine >= gate.maxListings) {
+                        toast('İtibar limitin: en fazla ' + gate.maxListings + ' ilan.', 'error');
+                        return;
+                    }
                 }
             } catch (e) {}
             const inv = user.inventory || [];
