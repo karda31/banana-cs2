@@ -1252,7 +1252,210 @@
             box-shadow: none;
         }
 
-    </style>
+    
+        /* ===== MOBILE THEME ===== */
+        body.is-mobile {
+            -webkit-tap-highlight-color: rgba(255,0,204,0.25);
+            overscroll-behavior-y: contain;
+        }
+        body.is-mobile .title-bar {
+            padding: 10px 12px;
+            padding-top: max(10px, env(safe-area-inset-top));
+        }
+        body.is-mobile .title-bar-left span { font-size: 13px; }
+        body.is-mobile .clock { font-size: 11px; }
+        body.is-mobile .folder-grid {
+            grid-template-columns: repeat(2, 1fr) !important;
+            gap: 10px !important;
+            padding: 0 4px;
+        }
+        body.is-mobile .folder {
+            padding: 16px 8px 12px !important;
+            border-radius: 16px;
+            min-height: 108px;
+        }
+        body.is-mobile .folder-icon { font-size: 34px !important; }
+        body.is-mobile .folder-name { font-size: 13px !important; }
+        body.is-mobile .folder-desc { font-size: 10px !important; }
+        body.is-mobile .modal-overlay {
+            align-items: flex-end !important;
+            padding: 0 !important;
+        }
+        body.is-mobile .modal-content {
+            width: 100% !important;
+            max-width: 100% !important;
+            max-height: 92vh !important;
+            border-radius: 22px 22px 0 0 !important;
+            padding: 18px 14px calc(18px + env(safe-area-inset-bottom)) !important;
+            margin: 0 !important;
+        }
+        body.is-mobile .modal-content::before {
+            content: '';
+            display: block;
+            width: 42px;
+            height: 4px;
+            background: rgba(255,255,255,0.25);
+            border-radius: 4px;
+            margin: 0 auto 14px;
+        }
+        body.is-mobile .primary-btn,
+        body.is-mobile .mod-btn,
+        body.is-mobile .back-btn,
+        body.is-mobile .danger-btn {
+            min-height: 48px;
+            font-size: 15px;
+            border-radius: 14px;
+            touch-action: manipulation;
+        }
+        body.is-mobile .info-row {
+            flex-wrap: wrap;
+            gap: 4px 8px;
+            padding: 10px 0;
+        }
+        body.is-mobile .info-row .value {
+            text-align: left;
+            width: 100%;
+            font-size: 14px;
+        }
+        body.is-mobile .auth-box {
+            padding: 28px 18px;
+            margin: 12px;
+            border-radius: 18px;
+        }
+        body.is-mobile .daily-btn-float {
+            right: 12px;
+            bottom: calc(72px + env(safe-area-inset-bottom));
+            border-radius: 16px;
+            min-height: 44px;
+            box-shadow: 0 8px 28px rgba(255,0,204,0.35);
+        }
+        body.is-mobile #music-player {
+            left: 8px;
+            bottom: calc(72px + env(safe-area-inset-bottom));
+            max-width: calc(100vw - 100px);
+        }
+        body.is-mobile .shop-drawer { width: min(100vw, 100%); }
+        body.is-mobile .inv-grid {
+            grid-template-columns: repeat(2, 1fr) !important;
+            gap: 10px !important;
+        }
+        body.is-mobile .user-badge {
+            max-width: 110px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            font-size: 11px;
+            padding: 4px 8px;
+        }
+        body.is-mobile .notif-btn { width: 40px; height: 40px; }
+        .inv-card {
+            cursor: pointer;
+            transition: transform 0.15s ease, box-shadow 0.15s ease;
+            -webkit-tap-highlight-color: rgba(255,0,204,0.3);
+        }
+        .inv-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(255,0,204,0.2);
+        }
+        .inv-card:active { transform: scale(0.97); }
+
+        .inv-card .inv-detail-panel {
+            display: none;
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid rgba(255,0,204,0.25);
+            text-align: left;
+            animation: invDetailIn 0.2s ease;
+        }
+        .inv-card.expanded .inv-detail-panel { display: block; }
+
+        .inv-info-toggle {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            padding: 8px 10px;
+            background: rgba(0,180,255,0.12);
+            border: 1px solid rgba(0,180,255,0.35);
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 700;
+            color: #4aa3ff;
+            user-select: none;
+            -webkit-tap-highlight-color: rgba(0,180,255,0.25);
+            margin-top: 6px;
+        }
+        .inv-info-toggle:active { opacity: 0.85; }
+        .inv-info-body {
+            display: none;
+            margin-top: 6px;
+            padding: 10px;
+            background: rgba(0,180,255,0.08);
+            border: 1px solid rgba(0,180,255,0.28);
+            border-radius: 10px;
+            font-size: 12px;
+            line-height: 1.5;
+            color: var(--text);
+            word-break: break-word;
+            text-align: left;
+            animation: invDetailIn 0.18s ease;
+        }
+        .inv-info-wrap.open .inv-info-body { display: block; }
+        .inv-info-wrap.open .inv-info-chevron { transform: rotate(180deg); }
+        .inv-info-chevron {
+            display: inline-block;
+            transition: transform 0.2s ease;
+            font-size: 11px;
+            opacity: 0.9;
+        }
+
+        .inv-card .inv-toggle-hint { font-size: 11px; margin-top: 6px; color: var(--text-muted); }
+        .inv-card.expanded .inv-toggle-hint { color: var(--accent-soft); }
+        @keyframes invDetailIn {
+            from { opacity: 0; transform: translateY(-6px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .inv-detail-panel .inv-info-text {
+            padding: 8px 10px;
+            background: rgba(0,180,255,0.1);
+            border: 1px solid rgba(0,180,255,0.35);
+            border-radius: 10px;
+            font-size: 12px;
+            line-height: 1.45;
+            margin-bottom: 8px;
+            word-break: break-word;
+        }
+        .inv-detail-panel button {
+            width: 100%;
+            margin-top: 6px;
+            padding: 8px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 600;
+            font-family: inherit;
+            border: 1px solid var(--border);
+            background: rgba(255,0,204,0.12);
+            color: var(--accent-soft);
+        }
+        .inv-detail-panel button.inv-del {
+            background: rgba(255,61,113,0.2);
+            border-color: rgba(255,61,113,0.4);
+            color: #ff3d71;
+        }
+
+        .inv-detail-img {
+            width: 100%;
+            max-width: 220px;
+            aspect-ratio: 1;
+            object-fit: cover;
+            border-radius: 18px;
+            margin: 0 auto 12px;
+            display: block;
+        }
+
+</style>
 </head>
 <body>
     <div class="title-bar">
@@ -6357,10 +6560,11 @@
             };
         }
 
-        function itemInfoBoxHtml(item) {
+        function itemInfoBoxHtml(item, uid) {
             const it = normalizeItem(item);
             if (!it.info || !String(it.info).trim()) return '';
-            return '<div style="margin-top:8px;padding:8px 10px;background:rgba(0,180,255,0.1);border:1px solid rgba(0,180,255,0.35);border-radius:10px;text-align:left;font-size:12px;line-height:1.45;color:var(--text);word-break:break-word;"><div style="font-size:10px;color:#4aa3ff;font-weight:700;margin-bottom:3px;letter-spacing:0.5px;">ℹ️ BİLGİ</div>' + escapeHtml(String(it.info).trim()) + '</div>';
+            const id = 'inv-info-box-' + (uid != null ? uid : Math.random().toString(36).slice(2, 8));
+            return '<div class="inv-info-wrap" id="' + id + '" style="margin-top:8px;"><div class="inv-info-toggle" onclick="toggleInvInfo(\'' + id + '\', event)"><span class="inv-info-label">ℹ️ BİLGİ</span><span class="inv-info-chevron">▼</span></div><div class="inv-info-body">' + escapeHtml(String(it.info).trim()) + '</div></div>';
         }
 
         function itemThumb(item, size) {
@@ -6449,6 +6653,108 @@
             openPrivateChat(other);
         }
 
+
+
+
+        function toggleInvInfo(id, ev) {
+            if (ev) { ev.stopPropagation(); ev.preventDefault(); }
+            const wrap = document.getElementById(id);
+            if (!wrap) return;
+            const open = wrap.classList.toggle('open');
+            const chev = wrap.querySelector('.inv-info-chevron');
+            const label = wrap.querySelector('.inv-info-label');
+            if (label) label.textContent = open ? 'ℹ️ BİLGİ' : 'ℹ️ BİLGİ';
+            if (chev) chev.textContent = open ? '▲' : '▼';
+        }
+
+        function toggleInvCard(index, ev) {
+            if (ev) {
+                const t = ev.target;
+                if (t && (t.tagName === 'BUTTON' || t.closest && t.closest('button'))) return;
+            }
+            const card = document.getElementById('inv-card-' + index);
+            if (!card) {
+                // fallback modal
+                if (typeof openInventoryItem === 'function') openInventoryItem(index);
+                return;
+            }
+            const wasOpen = card.classList.contains('expanded');
+            // close others
+            document.querySelectorAll('.inv-card.expanded').forEach(function(el) {
+                el.classList.remove('expanded');
+                const h = el.querySelector('.inv-toggle-hint');
+                if (h) h.textContent = h.getAttribute('data-closed') || 'Detay için dokun';
+            });
+            if (!wasOpen) {
+                card.classList.add('expanded');
+                const h = card.querySelector('.inv-toggle-hint');
+                if (h) h.textContent = h.getAttribute('data-open') || 'Kapat ▲';
+            }
+        }
+
+        function openInventoryItem(index) {
+            const me = getCurrentUser();
+            const user = getUser(me);
+            if (!user || !user.inventory || !user.inventory[index]) {
+                toast('Eşya bulunamadı.', 'error');
+                return;
+            }
+            const it = normalizeItem(user.inventory[index]);
+            const rs = rarityStyle(it.rarity);
+            const bStyle = rarityBorderStyle(it.rarity);
+            const nameColor = (rs.special === 'rainbow' || rs.special === 'galaxy') ? 'var(--text)' : rs.color;
+            const _mvp = (typeof getCharMarketPrice === 'function' ? getCharMarketPrice(it) : 0) || it.marketValue || 0;
+            const tradeN = (typeof getItemTradeCount === 'function') ? getItemTradeCount(it.name) : 0;
+
+            let imgHtml = '';
+            if (it.image) {
+                const safeImg = escapeHtml(it.image).replace(/'/g, "\\'");
+                const safeName = escapeHtml(it.name).replace(/'/g, "\\'");
+                imgHtml = '<img class="inv-detail-img" src="' + escapeHtml(it.image) + '" alt="" style="' + bStyle + 'cursor:pointer;" onclick="openImagePreview(\'' + safeImg + '\', \'' + safeName + '\', \'inv\')" onerror="this.style.display=\'none\'">';
+            } else {
+                imgHtml = '<div class="inv-detail-img" style="background:rgba(255,0,204,0.12);' + bStyle + 'display:flex;align-items:center;justify-content:center;font-size:64px;">' + (it.category === 'kart' ? '🃏' : '📦') + '</div>';
+            }
+
+            const infoBlock = (it.info && String(it.info).trim())
+                ? ('<div style="margin:14px 0;padding:14px;background:rgba(0,180,255,0.1);border:1px solid rgba(0,180,255,0.4);border-radius:14px;text-align:left;">'
+                   + '<div style="font-size:12px;color:#4aa3ff;font-weight:700;margin-bottom:8px;letter-spacing:0.5px;">ℹ️ BİLGİ</div>'
+                   + '<div style="font-size:14px;line-height:1.55;color:var(--text);word-break:break-word;white-space:pre-wrap;">' + escapeHtml(String(it.info).trim()) + '</div></div>')
+                : '<div style="margin:14px 0;padding:14px;background:rgba(0,0,0,0.25);border:1px dashed var(--border);border-radius:14px;color:var(--text-muted);font-size:13px;text-align:center;">Bu eşya için ek bilgi yok.</div>';
+
+            let actions = '';
+            try {
+                if (typeof isStickerCategory === 'function' && isStickerCategory(it.category)) {
+                    if (it.pendingStickerRequest) {
+                        actions += '<button disabled class="primary-btn" style="opacity:0.6;">⏳ Talep bekleniyor</button>';
+                    } else {
+                        actions += '<button class="primary-btn" onclick="startUseSticker(' + index + ')">🎨 Çıkartma Kullan</button>';
+                    }
+                }
+                if (typeof isEggCategory === 'function' && isEggCategory(it.category)) {
+                    actions += '<button class="primary-btn" onclick="hatchEggFromInventory(' + index + ')">🥚 Yumurtayı Kır</button>';
+                }
+            } catch (e) {}
+            actions += '<button class="primary-btn" onclick="shareCharacterToChat(' + index + ')">✨ Paylaş (DM)</button>';
+            actions += '<button class="danger-btn" onclick="deleteInventoryItem(' + index + ')">🗑 Sil</button>';
+            actions += '<button class="back-btn" onclick="showInventory(window._invFilter || \'all\')">← Envantere Dön</button>';
+
+            openModal('ℹ️ ' + escapeHtml(it.name),
+                '<div style="text-align:center;">' + imgHtml
+                + '<div style="font-size:22px;font-weight:700;color:' + nameColor + ';margin:8px 0 10px;word-break:break-word;">' + escapeHtml(it.name) + '</div>'
+                + '<div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-bottom:12px;">'
+                + rarityBadgeHtml(it.rarity) + categoryBadgeHtml(it.category) + '</div></div>'
+                + '<div class="info-card">'
+                + '<div class="info-row"><span class="label">Kategori</span><span class="value">' + escapeHtml(it.category || '—') + '</span></div>'
+                + '<div class="info-row"><span class="label">Nadirlik</span><span class="value">' + escapeHtml(String(it.rarity || '—')) + '</span></div>'
+                + '<div class="info-row"><span class="label">Piyasa değeri</span><span class="value" style="color:#ffd54f;">' + (_mvp > 0 ? '$' + Number(_mvp).toLocaleString('tr-TR') : '—') + '</span></div>'
+                + '<div class="info-row"><span class="label">El değişimi</span><span class="value">' + tradeN + '</span></div>'
+                + '</div>'
+                + infoBlock
+                + '<div style="display:flex;flex-direction:column;gap:8px;margin-top:4px;">' + actions + '</div>'
+            );
+        }
+
+
         function showInventory(filterCat) {
             window._inventoryOpen = true;
             window._profileOpen = false;
@@ -6502,7 +6808,7 @@
             if (filtered.length === 0) {
                 list += '<p style="color:var(--text-muted);text-align:center;padding:20px 0;">Bu kategoride eşya yok.<br><span style="font-size:12px;">Koleksiyon kartlarını moderatör verebilir; pazarda satabilirsin.</span></p>';
             } else {
-                list += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:14px;">';
+                list += '<div class="inv-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:14px;">';
                 filtered.forEach(function(row) {
                     const i = row.index;
                     const it = row.it;
@@ -6510,23 +6816,18 @@
                     const bStyle = rarityBorderStyle(it.rarity);
                     const nameColor = (rs.special === 'rainbow' || rs.special === 'galaxy') ? 'var(--text)' : rs.color;
                     const imgBlock = it.image
-                        ? `<img src="${escapeHtml(it.image)}" alt="${escapeHtml(it.name)}" onclick="openImagePreview('${escapeHtml(it.image).replace(/'/g, "\\'")}', '${escapeHtml(it.name).replace(/'/g, "\\'")}', 'inv')" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:14px;${bStyle}cursor:pointer;background:#0a0014;" onerror="this.style.display='none'">`
-                        : `<div style="width:100%;aspect-ratio:1;border-radius:14px;background:rgba(255,0,204,0.1);${bStyle}display:flex;align-items:center;justify-content:center;font-size:42px;">${it.category === 'kart' ? '🃏' : '📦'}</div>`;
+                        ? `<img src="${escapeHtml(it.image)}" alt="${escapeHtml(it.name)}" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:14px;${bStyle}background:#0a0014;pointer-events:none;" onerror="this.style.display='none'">`
+                        : `<div style="width:100%;aspect-ratio:1;border-radius:14px;background:rgba(255,0,204,0.1);${bStyle}display:flex;align-items:center;justify-content:center;font-size:42px;pointer-events:none;">${it.category === 'kart' ? '🃏' : '📦'}</div>`;
                     const _mvp = getCharMarketPrice(it) || it.marketValue || 0;
-                    const mvTxt = (_mvp > 0) ? `<div style="margin-top:4px;color:#ffd54f;font-size:12px;font-weight:600;">💰 Piyasa: $${Number(_mvp).toLocaleString('tr-TR')}</div>` : `<div style="margin-top:4px;color:var(--text-muted);font-size:11px;">💰 Piyasa: —</div>`;
-                    const infoBox = itemInfoBoxHtml(it);
+                    const mvTxt = (_mvp > 0) ? `<div style="margin-top:4px;color:#ffd54f;font-size:12px;font-weight:600;">💰 $${Number(_mvp).toLocaleString('tr-TR')}</div>` : '';
                     list += `
-                        <div style="background:rgba(0,0,0,0.28);${bStyle}border-radius:16px;padding:10px;text-align:center;">
+                        <div class="inv-card" style="background:rgba(0,0,0,0.28);${bStyle}border-radius:16px;padding:10px;text-align:center;">
                             ${imgBlock}
                             <div style="margin-top:10px;font-weight:600;font-size:14px;line-height:1.3;word-break:break-word;color:${nameColor};">${escapeHtml(it.name)}</div>
                             <div style="margin-top:6px;">${rarityBadgeHtml(it.rarity)}</div>
                             <div style="margin-top:4px;">${categoryBadgeHtml(it.category)}</div>
                             ${mvTxt}
-                            ${infoBox}
-                            ${isStickerCategory(it.category) ? (it.pendingStickerRequest ? `<button disabled style="margin-top:8px;width:100%;padding:6px;background:rgba(255,193,7,0.12);border:1px solid rgba(255,193,7,0.45);color:var(--warning);border-radius:8px;cursor:not-allowed;font-size:12px;font-weight:600;">⏳ Talep bekleniyor</button>` : `<button onclick="startUseSticker(${i})" style="margin-top:8px;width:100%;padding:6px;background:rgba(0,230,118,0.15);border:1px solid rgba(0,230,118,0.4);color:var(--success);border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;">🎨 Çıkartma Kullan</button>`) : ''}
-                            ${isEggCategory(it.category) ? `<button onclick="hatchEggFromInventory(${i})" style="margin-top:8px;width:100%;padding:6px;background:rgba(255,193,7,0.15);border:1px solid rgba(255,193,7,0.45);color:var(--warning);border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;">🥚 Yumurtayı Kır</button>` : ''}
-                            <button onclick="shareCharacterToChat(${i})" style="margin-top:8px;width:100%;padding:6px;background:rgba(255,0,204,0.15);border:1px solid var(--border);color:var(--accent-soft);border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;">✨ Paylaş (DM)</button>
-                            <button onclick="deleteInventoryItem(${i})" style="margin-top:6px;width:100%;padding:6px;background:rgba(255,61,113,0.2);border:1px solid rgba(255,61,113,0.4);color:#ff3d71;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;">🗑 Sil</button>
+                            <button type="button" onclick="openInventoryItem(${i})" style="margin-top:10px;width:100%;padding:9px 8px;background:rgba(0,180,255,0.15);border:1px solid rgba(0,180,255,0.45);color:#4aa3ff;border-radius:10px;cursor:pointer;font-size:13px;font-weight:700;font-family:inherit;">ℹ️ Bilgi</button>
                         </div>
                     `;
                 });
@@ -6580,7 +6881,7 @@
                 let actionBtn = '';
                 const isServer = isServerSeller(listing.seller);
                 if (isMine) {
-                    actionBtn = `<button onclick="cancelListing('${listing.id}')" style="width:100%;margin-top:8px;padding:8px;background:rgba(255,61,113,0.2);border:1px solid rgba(255,61,113,0.4);color:#ff3d71;border-radius:10px;cursor:pointer;font-size:13px;font-weight:600;">İlanı Kaldır</button>`;
+                    actionBtn = `<button onclick="openMarketItemInfo('${listing.id}')" style="width:100%;margin-top:8px;padding:7px;background:rgba(0,180,255,0.12);border:1px solid rgba(0,180,255,0.4);color:#4aa3ff;border-radius:10px;cursor:pointer;font-size:12px;font-weight:700;">ℹ️ Bilgi</button><button onclick="cancelListing('${listing.id}')" style="width:100%;margin-top:8px;padding:8px;background:rgba(255,61,113,0.2);border:1px solid rgba(255,61,113,0.4);color:#ff3d71;border-radius:10px;cursor:pointer;font-size:13px;font-weight:600;">İlanı Kaldır</button>`;
                 } else if (isServer && isModerator(me)) {
                     actionBtn = `
                         <button onclick="buyListing('${listing.id}')" style="width:100%;margin-top:8px;padding:8px;background:var(--accent);border:none;color:#1a001f;border-radius:10px;cursor:pointer;font-size:13px;font-weight:600;">Satın Al</button>
@@ -6592,6 +6893,7 @@
                     actionBtn = `
                         <button onclick="buyListing('${listing.id}')" style="width:100%;margin-top:8px;padding:8px;background:var(--accent);border:none;color:#1a001f;border-radius:10px;cursor:pointer;font-size:13px;font-weight:600;">Satın Al</button>
                         <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">El değişimi: ${getItemTradeCount((normalizeItem(listing.item).name)||'')} · Satıcı itibar ${getReputation(listing.seller)}</div>
+                        <button onclick="openMarketItemInfo('${listing.id}')" style="width:100%;margin-top:6px;padding:7px;background:rgba(0,180,255,0.12);border:1px solid rgba(0,180,255,0.4);color:#4aa3ff;border-radius:10px;cursor:pointer;font-size:12px;font-weight:700;">ℹ️ Bilgi</button>
                         <button onclick="reportListing('${listing.id}')" style="width:100%;margin-top:6px;padding:7px;background:rgba(255,193,7,0.12);border:1px solid rgba(255,193,7,0.35);color:#ffc107;border-radius:10px;cursor:pointer;font-size:12px;font-weight:600;">⚠️ Şikayet Et</button>
                     `;
                 }
@@ -6602,7 +6904,7 @@
                         <div style="margin-top:10px;font-weight:600;font-size:14px;line-height:1.3;word-break:break-word;color:${nameColor};">${escapeHtml(it.name)}</div>
                         <div style="margin-top:6px;">${rarityBadgeHtml(it.rarity)}</div>
                         <div style="margin-top:4px;">${categoryBadgeHtml(it.category)}</div>
-                        ${itemInfoBoxHtml(it)}
+                        ${(it.info && String(it.info).trim()) ? '<div style="margin-top:6px;font-size:11px;color:#4aa3ff;">ℹ️ Bilgi var</div>' : ''}
                         <div style="color:var(--success);font-family:Orbitron,sans-serif;font-size:13px;margin-top:6px;">İlan: $${Number(listing.price).toLocaleString('tr-TR')}${isServerSeller(listing.seller) && listing.stock > 1 ? ' · stok ' + listing.stock : ''}</div>
                         <div style="color:#ffd54f;font-size:12px;font-weight:700;margin-top:4px;">Orijinal piyasa: $${Number(getCharMarketPrice(it) || it.marketValue || 0).toLocaleString('tr-TR')}</div>
                         <div style="color:var(--text-muted);font-size:11px;margin-top:2px;display:flex;align-items:center;justify-content:center;gap:4px;flex-wrap:wrap;">Satıcı: ${isServerSeller(listing.seller) ? '<span style="color:#00e676;font-weight:700;">🖥️ SERVER</span>' : formatDisplayName(listing.seller)}${isMine ? ' (sen)' : ''}</div>
@@ -6810,6 +7112,112 @@
                 <button class="primary-btn" onclick="confirmSellItem()">İLANI YAYINLA</button>
                 <button class="back-btn" onclick="openMarket()">← Pazara Dön</button>
             `);
+        }
+
+
+        function openMarketItemInfo(listingId) {
+            const market = loadMarket();
+            const listing = market.find(function(l) { return l && l.id === listingId; });
+            if (!listing) { toast('İlan bulunamadı.', 'error'); return; }
+            const it = normalizeItem(listing.item);
+            const rs = rarityStyle(it.rarity);
+            const bStyle = rarityBorderStyle(it.rarity);
+            const nameColor = (rs.special === 'rainbow' || rs.special === 'galaxy') ? 'var(--text)' : rs.color;
+            const tradeN = (typeof getItemTradeCount === 'function') ? getItemTradeCount(it.name) : 0;
+            const imgHtml = it.image
+                ? '<img class="inv-detail-img" src="' + escapeHtml(it.image) + '" alt="" style="' + bStyle + '" onerror="this.style.display=\'none\'">'
+                : '<div class="inv-detail-img" style="background:rgba(255,0,204,0.12);' + bStyle + 'display:flex;align-items:center;justify-content:center;font-size:64px;">📦</div>';
+            const infoBlock = (it.info && String(it.info).trim())
+                ? ('<div style="margin:14px 0;padding:14px;background:rgba(0,180,255,0.1);border:1px solid rgba(0,180,255,0.4);border-radius:14px;text-align:left;">'
+                   + '<div style="font-size:12px;color:#4aa3ff;font-weight:700;margin-bottom:8px;">ℹ️ BİLGİ</div>'
+                   + '<div style="font-size:14px;line-height:1.55;word-break:break-word;white-space:pre-wrap;">' + escapeHtml(String(it.info).trim()) + '</div></div>')
+                : '<div style="margin:14px 0;padding:14px;background:rgba(0,0,0,0.25);border:1px dashed var(--border);border-radius:14px;color:var(--text-muted);font-size:13px;text-align:center;">Bu ilan için ek bilgi yok.</div>';
+            let modBtn = '';
+            if (isModerator()) {
+                modBtn = '<button class="mod-btn" onclick="modEditMarketItemInfo(\'' + String(listingId).replace(/'/g, "\\'") + '\')">✏️ Bilgiyi Düzenle (Mod)</button>';
+            }
+            openModal('ℹ️ ' + escapeHtml(it.name),
+                '<div style="text-align:center;">' + imgHtml
+                + '<div style="font-size:20px;font-weight:700;color:' + nameColor + ';margin:8px 0;word-break:break-word;">' + escapeHtml(it.name) + '</div>'
+                + '<div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-bottom:10px;">' + rarityBadgeHtml(it.rarity) + categoryBadgeHtml(it.category) + '</div></div>'
+                + '<div class="info-card">'
+                + '<div class="info-row"><span class="label">Satıcı</span><span class="value">' + escapeHtml(listing.seller || '—') + '</span></div>'
+                + '<div class="info-row"><span class="label">İlan fiyatı</span><span class="value" style="color:var(--success);">$' + Number(listing.price || 0).toLocaleString('tr-TR') + '</span></div>'
+                + '<div class="info-row"><span class="label">Piyasa</span><span class="value" style="color:#ffd54f;">' + ((it.marketValue || 0) > 0 ? '$' + Number(it.marketValue).toLocaleString('tr-TR') : '—') + '</span></div>'
+                + '<div class="info-row"><span class="label">El değişimi</span><span class="value">' + tradeN + '</span></div>'
+                + '</div>'
+                + infoBlock
+                + '<div style="display:flex;flex-direction:column;gap:8px;margin-top:8px;">'
+                + modBtn
+                + '<button class="back-btn" onclick="openMarket()">← Pazara Dön</button></div>'
+            );
+        }
+
+        function modEditMarketItemInfo(listingId) {
+            if (!isModerator()) { toast('Sadece moderatör.', 'error'); return; }
+            const market = loadMarket();
+            const listing = market.find(function(l) { return l && l.id === listingId; });
+            if (!listing) { toast('İlan yok.', 'error'); return; }
+            const it = normalizeItem(listing.item);
+            const cur = it.info || '';
+            openModal('✏️ Bilgi düzenle — ' + escapeHtml(it.name), `
+                <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Bu metin pazardaki ilanda görünür. İstersen aynı isimli tüm envanter/pazar eşyalarına da uygula.</p>
+                <div class="form-group"><label>Bilgi metni</label>
+                <textarea id="mod-item-info" rows="6" style="width:100%;padding:12px;background:rgba(0,0,0,0.35);border:1px solid var(--border);border-radius:12px;color:var(--text);font-family:inherit;font-size:14px;line-height:1.45;resize:vertical;">${escapeHtml(cur)}</textarea></div>
+                <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin:10px 0 14px;cursor:pointer;">
+                    <input type="checkbox" id="mod-item-info-sync" checked> Aynı isimli tüm eşyalara uygula (envanter + pazar)
+                </label>
+                <button class="primary-btn" onclick="modSaveMarketItemInfo('${String(listingId).replace(/'/g, "\\'")}')">💾 Kaydet</button>
+                <button class="back-btn" onclick="openMarketItemInfo('${String(listingId).replace(/'/g, "\\'")}')">← Geri</button>
+            `);
+        }
+
+        function modSaveMarketItemInfo(listingId) {
+            if (!isModerator()) return;
+            const ta = document.getElementById('mod-item-info');
+            const syncEl = document.getElementById('mod-item-info-sync');
+            const text = (ta && ta.value != null) ? String(ta.value).trim() : '';
+            const sync = syncEl ? !!syncEl.checked : true;
+            const market = loadMarket();
+            const listing = market.find(function(l) { return l && l.id === listingId; });
+            if (!listing) { toast('İlan yok.', 'error'); return; }
+            const itemName = normalizeItem(listing.item).name;
+
+            if (sync && itemName) {
+                // all market listings with same name
+                market.forEach(function(l) {
+                    if (!l || !l.item) return;
+                    const n = normalizeItem(l.item);
+                    if (n.name === itemName) {
+                        l.item = Object.assign({}, typeof l.item === 'object' ? l.item : {}, n, { info: text });
+                    }
+                });
+                // all user inventories
+                const users = loadUsers();
+                Object.keys(users).forEach(function(uname) {
+                    const inv = users[uname] && users[uname].inventory;
+                    if (!Array.isArray(inv)) return;
+                    let dirty = false;
+                    users[uname].inventory = inv.map(function(raw) {
+                        const n = normalizeItem(raw);
+                        if (n.name === itemName) {
+                            dirty = true;
+                            return Object.assign({}, typeof raw === 'object' ? raw : {}, n, { info: text });
+                        }
+                        return raw;
+                    });
+                    if (dirty) {
+                        bumpInvVersion(users[uname]);
+                        saveUser(uname, users[uname]);
+                    }
+                });
+            } else {
+                listing.item = Object.assign({}, typeof listing.item === 'object' ? listing.item : {}, normalizeItem(listing.item), { info: text });
+            }
+            saveMarket(market);
+            try { pushModLog('item_info', (getCurrentUser() || 'mod') + ' bilgi güncelledi: ' + itemName); } catch (e) {}
+            toast('Bilgi kaydedildi' + (sync ? ' (tüm kopyalar)' : ''));
+            openMarketItemInfo(listingId);
         }
 
         function confirmSellItem() {
@@ -11960,7 +12368,23 @@ Lütfen daha sonra tekrar gelin.</textarea>
         }
 
 
-        // Otomatik seed kaldırıldı — her yüklemede veri ezilmesin
+    
+        (function initMobileTheme() {
+            function apply() {
+                try {
+                    const mobile = window.matchMedia('(max-width: 768px)').matches
+                        || window.matchMedia('(pointer: coarse)').matches
+                        || /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '');
+                    document.body.classList.toggle('is-mobile', !!mobile);
+                    document.documentElement.classList.toggle('is-mobile', !!mobile);
+                } catch (e) {}
+            }
+            apply();
+            try { window.matchMedia('(max-width: 768px)').addEventListener('change', apply); }
+            catch (e) { window.addEventListener('resize', apply); }
+        })();
+
+    // Otomatik seed kaldırıldı — her yüklemede veri ezilmesin
 
     </script>
 </body>
