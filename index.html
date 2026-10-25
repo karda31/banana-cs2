@@ -1457,6 +1457,12 @@
 
 
         .item-info-screen { }
+        
+        .item-inline-info, .item-inline-info-mkt {
+            text-align: left;
+            animation: invDetailIn 0.18s ease;
+        }
+
         .item-info-box {
             margin: 14px 0;
             padding: 14px;
@@ -6698,6 +6704,46 @@
             );
         }
 
+
+        function toggleInlineItemInfo(index) {
+            const panel = document.getElementById('inv-info-' + index);
+            const btn = document.getElementById('inv-info-btn-' + index);
+            if (!panel) return;
+            const open = panel.hasAttribute('hidden');
+            // close other open panels
+            document.querySelectorAll('.item-inline-info').forEach(function(el) {
+                el.setAttribute('hidden', '');
+            });
+            document.querySelectorAll('[id^="inv-info-btn-"]').forEach(function(b) {
+                b.textContent = 'ℹ️ Bilgi';
+            });
+            document.querySelectorAll('[id^="mkt-info-btn-"]').forEach(function(b) {
+                b.textContent = 'ℹ️ Bilgi';
+            });
+            document.querySelectorAll('.item-inline-info-mkt').forEach(function(el) {
+                el.setAttribute('hidden', '');
+            });
+            if (open) {
+                panel.removeAttribute('hidden');
+                if (btn) btn.textContent = '▲ Bilgiyi gizle';
+            }
+        }
+
+        function toggleInlineMarketInfo(listingId) {
+            const panel = document.getElementById('mkt-info-' + listingId);
+            const btn = document.getElementById('mkt-info-btn-' + listingId);
+            if (!panel) return;
+            const open = panel.hasAttribute('hidden');
+            document.querySelectorAll('.item-inline-info').forEach(function(el) { el.setAttribute('hidden', ''); });
+            document.querySelectorAll('.item-inline-info-mkt').forEach(function(el) { el.setAttribute('hidden', ''); });
+            document.querySelectorAll('[id^="inv-info-btn-"]').forEach(function(b) { b.textContent = 'ℹ️ Bilgi'; });
+            document.querySelectorAll('[id^="mkt-info-btn-"]').forEach(function(b) { b.textContent = 'ℹ️ Bilgi'; });
+            if (open) {
+                panel.removeAttribute('hidden');
+                if (btn) btn.textContent = '▲ Bilgiyi gizle';
+            }
+        }
+
         function openInventoryItem(index) {
             const me = getCurrentUser();
             const user = getUser(me);
@@ -6869,6 +6915,8 @@
             let backBtn = '<button class="back-btn" onclick="closeModal()">← Geri</button>';
             if (backAction === 'inv') {
                 backBtn = '<button class="back-btn" onclick="showInventory()">← Envantere Dön</button>';
+            } else if (backAction === 'market') {
+                backBtn = '<button class="back-btn" onclick="openMarket()">← Pazara Dön</button>';
             } else if (backAction && backAction.indexOf('mod:') === 0) {
                 const u = backAction.slice(4);
                 backBtn = '<button class="back-btn" onclick="modViewInventory(\'' + u + '\')">← Envantere Dön</button>';
@@ -7011,11 +7059,27 @@
                     const rs = rarityStyle(it.rarity);
                     const bStyle = rarityBorderStyle(it.rarity);
                     const nameColor = (rs.special === 'rainbow' || rs.special === 'galaxy') ? 'var(--text)' : rs.color;
+                    const safeImg = escapeHtml(it.image || '').replace(/'/g, "\\'");
+                    const safeName = escapeHtml(it.name || '').replace(/'/g, "\\'");
                     const imgBlock = it.image
-                        ? `<img src="${escapeHtml(it.image)}" alt="${escapeHtml(it.name)}" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:14px;${bStyle}background:#0a0014;pointer-events:none;" onerror="this.style.display='none'">`
-                        : `<div style="width:100%;aspect-ratio:1;border-radius:14px;background:rgba(255,0,204,0.1);${bStyle}display:flex;align-items:center;justify-content:center;font-size:42px;pointer-events:none;">${it.category === 'kart' ? '🃏' : '📦'}</div>`;
+                        ? `<img src="${escapeHtml(it.image)}" alt="${escapeHtml(it.name)}" onclick="event.stopPropagation();openImagePreview('${safeImg}', '${safeName}', 'inv')" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:14px;${bStyle}cursor:zoom-in;background:#0a0014;" onerror="this.style.display='none'">`
+                        : `<div style="width:100%;aspect-ratio:1;border-radius:14px;background:rgba(255,0,204,0.1);${bStyle}display:flex;align-items:center;justify-content:center;font-size:42px;">${it.category === 'kart' ? '🃏' : '📦'}</div>`;
                     const _mvp = getCharMarketPrice(it) || it.marketValue || 0;
                     const mvTxt = (_mvp > 0) ? `<div style="margin-top:4px;color:#ffd54f;font-size:12px;font-weight:600;">💰 $${Number(_mvp).toLocaleString('tr-TR')}</div>` : '';
+                    const infoText = getItemInfoText(it);
+                    const infoPanel = infoText
+                        ? `<div id="inv-info-${i}" class="item-inline-info" hidden><div class="item-info-box" style="margin:8px 0 0;"><div class="item-info-box-title">ℹ️ Bilgi</div><div class="item-info-box-body">${escapeHtml(infoText)}</div></div></div>`
+                        : `<div id="inv-info-${i}" class="item-inline-info" hidden><div class="item-info-empty" style="margin:8px 0 0;">Ek bilgi yok.</div></div>`;
+                    let extraBtns = '';
+                    try {
+                        if (typeof isStickerCategory === 'function' && isStickerCategory(it.category)) {
+                            if (it.pendingStickerRequest) extraBtns += `<button disabled style="margin-top:6px;width:100%;padding:7px;opacity:0.6;border-radius:10px;font-size:12px;">⏳ Talep bekleniyor</button>`;
+                            else extraBtns += `<button type="button" onclick="event.stopPropagation();startUseSticker(${i})" style="margin-top:6px;width:100%;padding:7px;background:rgba(0,230,118,0.15);border:1px solid rgba(0,230,118,0.4);color:var(--success);border-radius:10px;cursor:pointer;font-size:12px;font-weight:600;">🎨 Çıkartma</button>`;
+                        }
+                        if (typeof isEggCategory === 'function' && isEggCategory(it.category)) {
+                            extraBtns += `<button type="button" onclick="event.stopPropagation();hatchEggFromInventory(${i})" style="margin-top:6px;width:100%;padding:7px;background:rgba(255,193,7,0.15);border:1px solid rgba(255,193,7,0.45);color:var(--warning);border-radius:10px;cursor:pointer;font-size:12px;font-weight:600;">🥚 Kır</button>`;
+                        }
+                    } catch (e) {}
                     list += `
                         <div class="inv-card" style="background:rgba(0,0,0,0.28);${bStyle}border-radius:16px;padding:10px;text-align:center;">
                             ${imgBlock}
@@ -7023,7 +7087,11 @@
                             <div style="margin-top:6px;">${rarityBadgeHtml(it.rarity)}</div>
                             <div style="margin-top:4px;">${categoryBadgeHtml(it.category)}</div>
                             ${mvTxt}
-                            <button type="button" onclick="openInventoryItem(${i})" style="margin-top:10px;width:100%;padding:9px 8px;background:rgba(0,180,255,0.15);border:1px solid rgba(0,180,255,0.45);color:#4aa3ff;border-radius:10px;cursor:pointer;font-size:13px;font-weight:700;font-family:inherit;">ℹ️ Bilgi</button>
+                            ${infoPanel}
+                            <button type="button" id="inv-info-btn-${i}" onclick="event.stopPropagation();toggleInlineItemInfo(${i})" style="margin-top:10px;width:100%;padding:9px 8px;background:rgba(0,180,255,0.15);border:1px solid rgba(0,180,255,0.45);color:#4aa3ff;border-radius:10px;cursor:pointer;font-size:13px;font-weight:700;font-family:inherit;">ℹ️ Bilgi</button>
+                            ${extraBtns}
+                            <button type="button" onclick="event.stopPropagation();shareCharacterToChat(${i})" style="margin-top:6px;width:100%;padding:7px;background:rgba(255,0,204,0.15);border:1px solid var(--border);color:var(--accent-soft);border-radius:10px;cursor:pointer;font-size:12px;font-weight:600;">✨ Paylaş</button>
+                            <button type="button" onclick="event.stopPropagation();deleteInventoryItem(${i})" style="margin-top:6px;width:100%;padding:7px;background:rgba(255,61,113,0.2);border:1px solid rgba(255,61,113,0.4);color:#ff3d71;border-radius:10px;cursor:pointer;font-size:12px;font-weight:600;">🗑 Sil</button>
                         </div>
                     `;
                 });
@@ -7070,14 +7138,20 @@
                 const bStyle = rarityBorderStyle(it.rarity);
                 const nameColor = (rs.special === 'rainbow' || rs.special === 'galaxy') ? 'var(--text)' : rs.color;
                 const isMine = listing.seller === me;
+                const safeImg = escapeHtml(it.image || '').replace(/'/g, "\'");
+                const safeName = escapeHtml(it.name || '').replace(/'/g, "\'");
                 const imgBlock = it.image
-                    ? `<img src="${escapeHtml(it.image)}" alt="${escapeHtml(it.name)}" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:14px;${bStyle}background:#0a0014;" onerror="this.style.display='none'">`
+                    ? `<img src="${escapeHtml(it.image)}" alt="${escapeHtml(it.name)}" onclick="openImagePreview('${safeImg}', '${safeName}', 'market')" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:14px;${bStyle}cursor:zoom-in;background:#0a0014;" onerror="this.style.display='none'">`
                     : `<div style="width:100%;aspect-ratio:1;border-radius:14px;background:rgba(255,0,204,0.1);${bStyle}display:flex;align-items:center;justify-content:center;font-size:42px;">${isCharacterItem(it) ? '⚔️' : '📦'}</div>`;
+                const mInfoText = getItemInfoText(it);
+                const mInfoPanel = mInfoText
+                    ? `<div id="mkt-info-${listing.id}" class="item-inline-info-mkt" hidden><div class="item-info-box" style="margin:8px 0 0;text-align:left;"><div class="item-info-box-title">ℹ️ Bilgi</div><div class="item-info-box-body">${escapeHtml(mInfoText)}</div></div>${isModerator() ? `<button type="button" onclick="modEditItemInfo({listingId:'${listing.id}'})" style="margin-top:8px;width:100%;padding:8px;border-radius:10px;cursor:pointer;font-size:12px;font-weight:600;background:rgba(255,0,204,0.15);border:1px solid var(--border);color:var(--accent-soft);">✏️ Bilgiyi düzenle</button>` : ''}</div>`
+                    : `<div id="mkt-info-${listing.id}" class="item-inline-info-mkt" hidden><div class="item-info-empty" style="margin:8px 0 0;">Ek bilgi yok.</div>${isModerator() ? `<button type="button" onclick="modEditItemInfo({listingId:'${listing.id}'})" style="margin-top:8px;width:100%;padding:8px;border-radius:10px;cursor:pointer;font-size:12px;font-weight:600;background:rgba(255,0,204,0.15);border:1px solid var(--border);color:var(--accent-soft);">✏️ Bilgi ekle</button>` : ''}</div>`;
 
                 let actionBtn = '';
                 const isServer = isServerSeller(listing.seller);
                 if (isMine) {
-                    actionBtn = `<button onclick="openMarketItemInfo('${listing.id}')" style="width:100%;margin-top:8px;padding:7px;background:rgba(0,180,255,0.12);border:1px solid rgba(0,180,255,0.4);color:#4aa3ff;border-radius:10px;cursor:pointer;font-size:12px;font-weight:700;">ℹ️ Bilgi</button><button onclick="cancelListing('${listing.id}')" style="width:100%;margin-top:8px;padding:8px;background:rgba(255,61,113,0.2);border:1px solid rgba(255,61,113,0.4);color:#ff3d71;border-radius:10px;cursor:pointer;font-size:13px;font-weight:600;">İlanı Kaldır</button>`;
+                    actionBtn = `<button onclick="toggleInlineMarketInfo('${listing.id}')" id="mkt-info-btn-${listing.id}" style="width:100%;margin-top:8px;padding:7px;background:rgba(0,180,255,0.12);border:1px solid rgba(0,180,255,0.4);color:#4aa3ff;border-radius:10px;cursor:pointer;font-size:12px;font-weight:700;">ℹ️ Bilgi</button><button onclick="cancelListing('${listing.id}')" style="width:100%;margin-top:8px;padding:8px;background:rgba(255,61,113,0.2);border:1px solid rgba(255,61,113,0.4);color:#ff3d71;border-radius:10px;cursor:pointer;font-size:13px;font-weight:600;">İlanı Kaldır</button>`;
                 } else if (isServer && isModerator(me)) {
                     actionBtn = `
                         <button onclick="buyListing('${listing.id}')" style="width:100%;margin-top:8px;padding:8px;background:var(--accent);border:none;color:#1a001f;border-radius:10px;cursor:pointer;font-size:13px;font-weight:600;">Satın Al</button>
@@ -7089,7 +7163,7 @@
                     actionBtn = `
                         <button onclick="buyListing('${listing.id}')" style="width:100%;margin-top:8px;padding:8px;background:var(--accent);border:none;color:#1a001f;border-radius:10px;cursor:pointer;font-size:13px;font-weight:600;">Satın Al</button>
                         <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">El değişimi: ${getItemTradeCount((normalizeItem(listing.item).name)||'')} · Satıcı itibar ${getReputation(listing.seller)}</div>
-                        <button onclick="openMarketItemInfo('${listing.id}')" style="width:100%;margin-top:6px;padding:7px;background:rgba(0,180,255,0.12);border:1px solid rgba(0,180,255,0.4);color:#4aa3ff;border-radius:10px;cursor:pointer;font-size:12px;font-weight:700;">ℹ️ Bilgi</button>
+                        <button onclick="toggleInlineMarketInfo('${listing.id}')" id="mkt-info-btn-${listing.id}" style="width:100%;margin-top:6px;padding:7px;background:rgba(0,180,255,0.12);border:1px solid rgba(0,180,255,0.4);color:#4aa3ff;border-radius:10px;cursor:pointer;font-size:12px;font-weight:700;">ℹ️ Bilgi</button>
                         <button onclick="reportListing('${listing.id}')" style="width:100%;margin-top:6px;padding:7px;background:rgba(255,193,7,0.12);border:1px solid rgba(255,193,7,0.35);color:#ffc107;border-radius:10px;cursor:pointer;font-size:12px;font-weight:600;">⚠️ Şikayet Et</button>
                     `;
                 }
@@ -7100,7 +7174,7 @@
                         <div style="margin-top:10px;font-weight:600;font-size:14px;line-height:1.3;word-break:break-word;color:${nameColor};">${escapeHtml(it.name)}</div>
                         <div style="margin-top:6px;">${rarityBadgeHtml(it.rarity)}</div>
                         <div style="margin-top:4px;">${categoryBadgeHtml(it.category)}</div>
-                        ${(it.info && String(it.info).trim()) ? '<div style="margin-top:6px;font-size:11px;color:#4aa3ff;">ℹ️ Bilgi var</div>' : ''}
+                        ${mInfoPanel}
                         <div style="color:var(--success);font-family:Orbitron,sans-serif;font-size:13px;margin-top:6px;">İlan: $${Number(listing.price).toLocaleString('tr-TR')}${isServerSeller(listing.seller) && listing.stock > 1 ? ' · stok ' + listing.stock : ''}</div>
                         <div style="color:#ffd54f;font-size:12px;font-weight:700;margin-top:4px;">Orijinal piyasa: $${Number(getCharMarketPrice(it) || it.marketValue || 0).toLocaleString('tr-TR')}</div>
                         <div style="color:var(--text-muted);font-size:11px;margin-top:2px;display:flex;align-items:center;justify-content:center;gap:4px;flex-wrap:wrap;">Satıcı: ${isServerSeller(listing.seller) ? '<span style="color:#00e676;font-weight:700;">🖥️ SERVER</span>' : formatDisplayName(listing.seller)}${isMine ? ' (sen)' : ''}</div>
