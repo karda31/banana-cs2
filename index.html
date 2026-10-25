@@ -1101,20 +1101,6 @@
         .rep-high { background: rgba(0,230,118,0.2); color: #00e676; border: 1px solid rgba(0,230,118,0.4); }
         .rep-mid { background: rgba(255,193,7,0.15); color: #ffc107; border: 1px solid rgba(255,193,7,0.35); }
         .rep-low { background: rgba(255,61,113,0.15); color: #ff3d71; border: 1px solid rgba(255,61,113,0.4); }
-        #activity-feed-btn {
-            display: none;
-            align-items: center;
-            justify-content: center;
-            width: 36px; height: 36px;
-            border-radius: 10px;
-            background: rgba(255,0,204,0.1);
-            border: 1px solid var(--border);
-            color: var(--text);
-            font-size: 16px;
-            cursor: pointer;
-        }
-        #activity-feed-btn.show { display: flex; }
-
         /* ===== FEATURE PACK UI ===== */
         #announce-banner {
             display: none;
@@ -1276,7 +1262,6 @@
         </div>
         <div class="title-bar-right">
             <span class="online-count" id="online-count" title="Çevrimiçi">● 0</span>
-            <button id="activity-feed-btn" onclick="openActivityFeed()" title="Şehir akışı">📡</button>
             <button class="notif-btn" id="notif-btn" onclick="openNotifications()" title="Bildirimler">
                 🔔
                 <span class="notif-badge" id="notif-badge">0</span>
@@ -1464,6 +1449,11 @@
                     <div class="folder-name">Petler</div>
                     <div class="folder-desc">Yumurta & arkadaşlar</div>
                 </div>
+                <div class="folder" onclick="openQuestsPanel()">
+                    <div class="folder-icon">🎯</div>
+                    <div class="folder-name">Görevler</div>
+                    <div class="folder-desc">Günlük hedefler</div>
+                </div>
                 <div class="folder" onclick="openNews()">
                     <div class="folder-icon">📰</div>
                     <div class="folder-name">Haberler</div>
@@ -1598,49 +1588,15 @@
         }
 
         function pushActivity(text, type) {
-            try {
-                const entry = {
-                    id: 'act_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
-                    text: String(text || '').slice(0, 120),
-                    type: type || 'info',
-                    at: new Date().toISOString()
-                };
-                _activityFeedCache = _activityFeedCache || [];
-                _activityFeedCache.unshift(entry);
-                if (_activityFeedCache.length > 40) _activityFeedCache = _activityFeedCache.slice(0, 40);
-                try { localStorage.setItem('swordcity_activity_v1', JSON.stringify(_activityFeedCache)); } catch (e) {}
-                if (typeof firebaseReady !== 'undefined' && firebaseReady && typeof fbSet === 'function') {
-                    fbSet('activity_feed', _activityFeedCache);
-                }
-            } catch (e) {}
+            /* şehir akışı kaldırıldı */
         }
 
         async function loadActivityFeedAsync() {
-            if (firebaseReady) {
-                try {
-                    const d = await fbGet('activity_feed');
-                    _activityFeedCache = Array.isArray(d) ? d : (d ? Object.values(d) : []);
-                } catch (e) {}
-            } else {
-                try { _activityFeedCache = JSON.parse(localStorage.getItem('swordcity_activity_v1') || '[]'); } catch (e) { _activityFeedCache = []; }
-            }
-            return _activityFeedCache;
+            return [];
         }
 
         function openActivityFeed() {
-            const list = (_activityFeedCache || []).slice(0, 25);
-            let rows = list.map(function(e) {
-                const when = e.at ? new Date(e.at).toLocaleString('tr-TR') : '';
-                return `<div class="user-list-item" style="cursor:default;flex-direction:column;align-items:flex-start;gap:4px;">
-                    <div style="font-size:13px;">${escapeHtml(e.text || '')}</div>
-                    <div style="font-size:11px;color:var(--text-muted);">${when}</div>
-                </div>`;
-            }).join('') || '<p style="color:var(--text-muted);text-align:center;padding:16px;">Henüz olay yok. Şehir uyanınca burada görünecek.</p>';
-            openModal('📡 Şehir Akışı', `
-                <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Son pazar, takas, level ve klan olayları — canlı.</p>
-                ${rows}
-                <button class="back-btn" onclick="closeModal()">Kapat</button>
-            `);
+            /* şehir akışı kaldırıldı */
         }
 
         // ---- Reputation ----
@@ -1662,7 +1618,7 @@
         function repBadgeHtml(username) {
             const s = getReputation(username);
             const L = repLabel(s);
-            return '<span class="rep-badge ' + L.cls + '" title="İtibar: ' + s + '/100">' + L.text + ' ' + s + '</span>';
+            return '<span class="rep-badge ' + L.cls + '" title="İtibar: ' + s + '/100">' + s + '</span>';
         }
 
         function adjustReputation(username, delta, reason) {
@@ -1695,6 +1651,387 @@
             pushNotif(username, '⚖️ İtibar skorun güncellendi: ' + n + '/100', 'info');
             toast('İtibar: ' + n);
             modSelectUser(username);
+        }
+
+        // ============================================================
+        // FEATURE PACK: itibar etkisi, cezalar, klan hedefi, işlem
+        // geçmişi, görevler, rol kartı, haber notları, rastgele günlük
+        // ============================================================
+        const JOB_OPTIONS = ['','Sivil','Tüccar','Tefeci','Koruma','Kurye','Tamirci','Avukat','Gazeteci','İşsiz'];
+        const QUEST_DEFS = [
+            { id: 'q_trade', label: '1 takas tamamla', target: 1, key: 'trades' },
+            { id: 'q_sell', label: '1 pazar satışı yap', target: 1, key: 'sells' },
+            { id: 'q_msg', label: 'Bir arkadaşa mesaj at', target: 1, key: 'msgs' }
+        ];
+        const RANDOM_DAILY_POOL = [
+            { t: 'money', min: 500, max: 3500, label: 'nakit' },
+            { t: 'gold', min: 5, max: 40, label: 'gold' },
+            { t: 'tp', min: 3, max: 15, label: 'TP' },
+            { t: 'emerald', min: 1, max: 5, label: 'emerald' },
+            { t: 'rep', min: 1, max: 3, label: 'itibar' },
+            { t: 'money', min: 200, max: 1200, label: 'nakit' },
+            { t: 'gold', min: 10, max: 25, label: 'gold' },
+            { t: 'diamond', min: 1, max: 2, label: 'diamond' }
+        ];
+
+        function todayKeyLocal() {
+            try { return todayKey(); } catch (e) {
+                const d = new Date();
+                return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+            }
+        }
+
+        function pushTxHistory(username, text, kind) {
+            if (!username) return;
+            const users = loadUsers();
+            if (!users[username]) return;
+            ensureUserFields(users[username]);
+            const entry = { t: text, k: kind || 'info', at: new Date().toISOString() };
+            users[username].txHistory = users[username].txHistory || [];
+            users[username].txHistory.unshift(entry);
+            if (users[username].txHistory.length > 25) users[username].txHistory = users[username].txHistory.slice(0, 25);
+            saveUser(username, users[username]);
+        }
+
+        function bumpItemTradeCount(item) {
+            try {
+                const it = normalizeItem(item);
+                const name = it.name || '';
+                if (!name) return 0;
+                let map = {};
+                try { map = JSON.parse(localStorage.getItem('swordcity_item_trades_v1') || '{}'); } catch (e) { map = {}; }
+                map[name] = (Number(map[name]) || 0) + 1;
+                try { localStorage.setItem('swordcity_item_trades_v1', JSON.stringify(map)); } catch (e) {}
+                if (typeof firebaseReady !== 'undefined' && firebaseReady) {
+                    try { fbSet('item_trade_counts/' + encodeURIComponent(name), map[name]); } catch (e) {}
+                }
+                return map[name];
+            } catch (e) { return 0; }
+        }
+
+        function getItemTradeCount(itemName) {
+            try {
+                const map = JSON.parse(localStorage.getItem('swordcity_item_trades_v1') || '{}');
+                return Number(map[itemName]) || 0;
+            } catch (e) { return 0; }
+        }
+
+        function canListOnMarket(username) {
+            const r = getReputation(username);
+            if (r < 20) return { ok: false, msg: 'İtibar 20 altı — pazar ilanı yasak.' };
+            if (r < 30) return { ok: true, maxListings: 2, taxMult: 1.15, msg: 'Düşük itibar: en fazla 2 ilan, vergi +%15' };
+            if (r >= 80) return { ok: true, maxListings: 20, taxMult: 0.85, msg: 'Güvenilir satıcı: vergi −%15' };
+            return { ok: true, maxListings: 10, taxMult: 1, msg: '' };
+        }
+
+        function canStartHighValueTrade(username, value) {
+            const r = getReputation(username);
+            if (r < 30 && value >= 50000) {
+                return { ok: false, msg: 'İtibar 30 altı — $50.000+ takas yapılamaz.' };
+            }
+            return { ok: true };
+        }
+
+        function ensureQuests(user) {
+            ensureUserFields(user);
+            const day = todayKeyLocal();
+            if (user.questDay !== day) {
+                user.questDay = day;
+                user.quests = {};
+                QUEST_DEFS.forEach(function(q) {
+                    user.quests[q.id] = { progress: 0, done: false, claimed: false };
+                });
+            }
+            QUEST_DEFS.forEach(function(q) {
+                if (!user.quests[q.id]) user.quests[q.id] = { progress: 0, done: false, claimed: false };
+            });
+            return user;
+        }
+
+        function bumpQuest(username, key, n) {
+            if (!username) return;
+            const users = loadUsers();
+            if (!users[username]) return;
+            ensureQuests(users[username]);
+            let changed = false;
+            QUEST_DEFS.forEach(function(q) {
+                if (q.key !== key) return;
+                const st = users[username].quests[q.id];
+                if (st.claimed || st.done) return;
+                st.progress = Math.min(q.target, (st.progress || 0) + (n || 1));
+                if (st.progress >= q.target) {
+                    st.done = true;
+                    pushNotif(username, '✅ Görev tamam: ' + q.label + ' — ödülünü al!', 'success');
+                }
+                changed = true;
+            });
+            if (changed) saveUser(username, users[username]);
+        }
+
+        function claimQuestReward(qid) {
+            const me = getCurrentUser();
+            if (!me) return;
+            const users = loadUsers();
+            ensureQuests(users[me]);
+            const q = QUEST_DEFS.find(function(x) { return x.id === qid; });
+            if (!q) return;
+            const st = users[me].quests[qid];
+            if (!st || !st.done || st.claimed) { toast('Bu görev ödülü alınamaz.', 'error'); return; }
+            st.claimed = true;
+            users[me].balance = (Number(users[me].balance) || 0) + 750;
+            let r = typeof users[me].reputation === 'number' ? users[me].reputation : 50;
+            users[me].reputation = Math.min(100, r + 1);
+            saveUser(me, users[me]);
+            pushNotif(me, '🎯 Görev ödülü: $750 + 1 itibar (' + q.label + ')', 'success');
+            toast('Ödül alındı: $750 +1 itibar');
+            openQuestsPanel();
+        }
+
+        function openQuestsPanel() {
+            const me = getCurrentUser();
+            if (!me) return;
+            const users = loadUsers();
+            ensureQuests(users[me]);
+            saveUser(me, users[me]);
+            const u = users[me];
+            let rows = QUEST_DEFS.map(function(q) {
+                const st = u.quests[q.id] || { progress: 0, done: false, claimed: false };
+                let btn = '';
+                if (st.claimed) btn = '<span style="color:var(--text-muted);font-size:12px;">Alındı</span>';
+                else if (st.done) btn = '<button class="primary-btn" style="padding:6px 12px;font-size:12px;" onclick="claimQuestReward(\\'' + q.id + '\\')">Ödül al</button>';
+                else btn = '<span style="color:var(--text-muted);font-size:12px;">' + (st.progress||0) + '/' + q.target + '</span>';
+                return '<div class="info-row" style="align-items:center;"><span class="label">' + escapeHtml(q.label) + '</span><span class="value">' + btn + '</span></div>';
+            }).join('');
+            openModal('🎯 Günlük Görevler', `
+                <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Her gün sıfırlanır. Tamamlayınca $750 + 1 itibar.</p>
+                ${rows}
+                <button class="back-btn" onclick="closeModal()">Kapat</button>
+            `);
+        }
+
+        function rollRandomDaily(user) {
+            const day = todayKeyLocal();
+            if (user.lastRandomDaily === day) return null;
+            user.lastRandomDaily = day;
+            const pick = RANDOM_DAILY_POOL[Math.floor(Math.random() * RANDOM_DAILY_POOL.length)];
+            const amount = pick.min + Math.floor(Math.random() * (pick.max - pick.min + 1));
+            if (pick.t === 'money') user.balance = (Number(user.balance)||0) + amount;
+            else if (pick.t === 'gold') user.gold = (Number(user.gold)||0) + amount;
+            else if (pick.t === 'emerald') user.emerald = (Number(user.emerald)||0) + amount;
+            else if (pick.t === 'diamond') user.diamond = (Number(user.diamond)||0) + amount;
+            else if (pick.t === 'tp') applyTpAndLevel(user, amount);
+            else if (pick.t === 'rep') {
+                let r = typeof user.reputation === 'number' ? user.reputation : 50;
+                user.reputation = Math.min(100, r + amount);
+            }
+            return { label: pick.label, amount: amount, t: pick.t };
+        }
+
+        function modWarnUser(username) {
+            if (!isModerator()) return;
+            const reason = prompt(username + ' için uyarı sebebi:', 'Kural ihlali');
+            if (reason === null) return;
+            const users = loadUsers();
+            if (!users[username]) return;
+            ensureUserFields(users[username]);
+            users[username].warnings = (Number(users[username].warnings)||0) + 1;
+            const w = users[username].warnings;
+            saveUser(username, users[username]);
+            pushNotif(username, '⚠️ Moderasyon uyarısı (' + w + '): ' + reason, 'danger');
+            pushModLog('warn', username + ' uyarı #' + w + ' — ' + reason);
+            if (w >= 3) {
+                adjustReputation(username, -10, '3+ uyarı');
+                toast('3+ uyarı: itibar −10 uygulandı');
+            } else toast('Uyarı verildi (#' + w + ')');
+            modSelectUser(username);
+        }
+
+        function modFineUser(username) {
+            if (!isModerator()) return;
+            const raw = prompt(username + ' para cezası ($):', '5000');
+            if (raw === null) return;
+            const n = Math.floor(Number(raw));
+            if (isNaN(n) || n <= 0) { toast('Geçersiz tutar', 'error'); return; }
+            const users = loadUsers();
+            if (!users[username]) return;
+            ensureUserFields(users[username]);
+            users[username].balance = Math.max(0, (Number(users[username].balance)||0) - n);
+            saveUser(username, users[username]);
+            pushNotif(username, '💸 Para cezası: −$' + n.toLocaleString('tr-TR'), 'danger');
+            pushModLog('fine', username + ' −$' + n);
+            pushTxHistory(username, 'Para cezası −$' + n, 'fine');
+            toast('Ceza uygulandı');
+            modSelectUser(username);
+        }
+
+        function modAddTag(username) {
+            if (!isModerator()) return;
+            const tag = prompt('Etiket (örn: Aranan, Borçlu, Temizlik):', '');
+            if (!tag || !tag.trim()) return;
+            const users = loadUsers();
+            if (!users[username]) return;
+            ensureUserFields(users[username]);
+            const t = tag.trim().slice(0, 24);
+            if (users[username].modTags.indexOf(t) === -1) users[username].modTags.push(t);
+            if (users[username].modTags.length > 8) users[username].modTags = users[username].modTags.slice(0, 8);
+            saveUser(username, users[username]);
+            pushModLog('tag', username + ' +tag ' + t);
+            toast('Etiket eklendi');
+            modSelectUser(username);
+        }
+
+        function modClearTags(username) {
+            if (!isModerator()) return;
+            const users = loadUsers();
+            if (!users[username]) return;
+            users[username].modTags = [];
+            saveUser(username, users[username]);
+            toast('Etiketler temizlendi');
+            modSelectUser(username);
+        }
+
+        function modResolveReport(reportId, action) {
+            if (!isModerator()) return;
+            const reports = loadReports();
+            const r = reports.find(function(x) { return x.id === reportId; });
+            if (!r || r.resolved) { toast('Rapor yok / çözülmüş', 'error'); return; }
+            r.resolved = true;
+            r.resolvedBy = getCurrentUser();
+            r.resolvedAt = new Date().toISOString();
+            r.action = action || 'dismiss';
+            saveReports(reports);
+            if (action === 'warn' && r.seller) modWarnUser(r.seller);
+            else if (action === 'fine' && r.seller) modFineUser(r.seller);
+            else if (action === 'rep' && r.seller) {
+                adjustReputation(r.seller, -5, 'şikayet sonucu');
+                toast('Satıcı itibar −5');
+            } else if (action === 'dismiss') {
+                toast('Rapor kapatıldı');
+            }
+            pushNotif(r.reporter, 'Şikayetin incelendi (' + (action||'kapatıldı') + ').', 'info');
+            openModReportsPanel();
+        }
+
+        function openModReportsPanel() {
+            if (!isModerator()) return;
+            const reports = (loadReports() || []).slice().reverse();
+            const open = reports.filter(function(r) { return !r.resolved; });
+            const closed = reports.filter(function(r) { return r.resolved; }).slice(0, 15);
+            function row(r, active) {
+                const when = r.at ? new Date(r.at).toLocaleString('tr-TR') : '';
+                let acts = '';
+                if (active) {
+                    acts = `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;">
+                        <button class="mod-btn" style="padding:6px 10px;font-size:12px;" onclick="modResolveReport('${r.id}','warn')">Uyarı</button>
+                        <button class="mod-btn" style="padding:6px 10px;font-size:12px;" onclick="modResolveReport('${r.id}','fine')">Ceza $</button>
+                        <button class="mod-btn" style="padding:6px 10px;font-size:12px;" onclick="modResolveReport('${r.id}','rep')">İtibar −5</button>
+                        <button class="back-btn" style="padding:6px 10px;font-size:12px;" onclick="modResolveReport('${r.id}','dismiss')">Kapat</button>
+                    </div>`;
+                }
+                return `<div class="shop-card" style="margin-bottom:10px;">
+                    <div style="font-size:13px;"><b>${escapeHtml(r.itemName||'?')}</b> · $${Number(r.price||0).toLocaleString('tr-TR')}</div>
+                    <div style="font-size:12px;color:var(--text-muted);">Satıcı: ${escapeHtml(r.seller||'')} · Şikayetçi: ${escapeHtml(r.reporter||'')}</div>
+                    <div style="font-size:12px;">Sebep: ${escapeHtml(r.reason||'')} ${r.detail ? '— ' + escapeHtml(r.detail) : ''}</div>
+                    <div style="font-size:11px;color:var(--text-muted);">${when}${r.resolved ? ' · ✓ ' + escapeHtml(r.action||'') : ''}</div>
+                    ${acts}
+                </div>`;
+            }
+            openModal('⚠️ Şikayetler', `
+                <p style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">Açık: ${open.length}</p>
+                ${open.map(function(r){return row(r,true);}).join('') || '<p style="color:var(--text-muted);">Açık şikayet yok.</p>'}
+                <div class="section-label" style="margin-top:14px;">Son çözülenler</div>
+                ${closed.map(function(r){return row(r,false);}).join('') || ''}
+                <button class="back-btn" onclick="openModerator()">← Moderatör</button>
+            `);
+        }
+
+        // ---- Clan weekly goal ----
+        function clanWeekKey() {
+            const d = new Date();
+            const onejan = new Date(d.getFullYear(), 0, 1);
+            const week = Math.ceil((((d - onejan) / 86400000) + onejan.getDay() + 1) / 7);
+            return d.getFullYear() + '-W' + week;
+        }
+
+        function loadClanGoals() {
+            try { return JSON.parse(localStorage.getItem('swordcity_clan_goals_v1') || '{}'); } catch (e) { return {}; }
+        }
+        function saveClanGoals(g) {
+            try { localStorage.setItem('swordcity_clan_goals_v1', JSON.stringify(g)); } catch (e) {}
+            if (typeof firebaseReady !== 'undefined' && firebaseReady) {
+                try { fbSet('clan_goals', g); } catch (e) {}
+            }
+        }
+        function bumpClanGoal(clanId, field, n) {
+            if (!clanId) return;
+            const g = loadClanGoals();
+            const wk = clanWeekKey();
+            if (!g[wk]) g[wk] = {};
+            if (!g[wk][clanId]) g[wk][clanId] = { sells: 0, trades: 0, tp: 0 };
+            g[wk][clanId][field] = (Number(g[wk][clanId][field]) || 0) + (n || 1);
+            saveClanGoals(g);
+        }
+        function getUserClanId(username) {
+            try {
+                const clans = (typeof loadClans === 'function') ? loadClans() : [];
+                const list = Array.isArray(clans) ? clans : Object.values(clans || {});
+                for (let i = 0; i < list.length; i++) {
+                    const c = list[i];
+                    if (!c) continue;
+                    const members = c.members || c.memberList || [];
+                    if (Array.isArray(members) && members.map(String).map(function(x){return x.toLowerCase();}).indexOf(String(username).toLowerCase()) >= 0) {
+                        return c.id || c.name || null;
+                    }
+                    if (c.leader && String(c.leader).toLowerCase() === String(username).toLowerCase()) return c.id || c.name;
+                }
+            } catch (e) {}
+            return null;
+        }
+        function clanGoalHtml(clanId) {
+            const g = loadClanGoals();
+            const wk = clanWeekKey();
+            const st = (g[wk] && g[wk][clanId]) ? g[wk][clanId] : { sells: 0, trades: 0, tp: 0 };
+            const targets = { sells: 5, trades: 5, tp: 100 };
+            function bar(v, t, label) {
+                const pct = Math.min(100, Math.floor((v / t) * 100));
+                return `<div style="margin:6px 0;"><div style="font-size:12px;display:flex;justify-content:space-between;"><span>${label}</span><span>${v}/${t}</span></div>
+                <div style="height:8px;background:rgba(0,0,0,0.35);border-radius:6px;overflow:hidden;"><div style="height:100%;width:${pct}%;background:var(--accent);"></div></div></div>`;
+            }
+            return `<div class="shop-card"><div style="font-size:13px;color:var(--accent-soft);margin-bottom:6px;">🏆 Haftalık klan hedefi (${wk})</div>
+                ${bar(st.sells||0, targets.sells, 'Pazar satışı')}
+                ${bar(st.trades||0, targets.trades, 'Takas')}
+                ${bar(st.tp||0, targets.tp, 'TP')}
+                <p style="font-size:11px;color:var(--text-muted);margin-top:6px;">Hedefleri dolduran klanlar unvan + klan prestiji kazanır (manuel ödül).</p>
+            </div>`;
+        }
+
+        // ---- Trade confirm delay ----
+        window._pendingTradeAccept = window._pendingTradeAccept || {};
+        function requestTradeAcceptWithDelay(tradeId) {
+            const me = getCurrentUser();
+            const key = tradeId + '::' + me;
+            const now = Date.now();
+            if (!window._pendingTradeAccept[key] || now - window._pendingTradeAccept[key] > 12000) {
+                window._pendingTradeAccept[key] = now;
+                toast('10 sn içinde tekrar Onayla — yanlış tık koruması');
+                return false;
+            }
+            delete window._pendingTradeAccept[key];
+            return true;
+        }
+
+        function saveProfileRole() {
+            const me = getCurrentUser();
+            if (!me) return;
+            const job = ((document.getElementById('pf-job') || {}).value || '').slice(0, 32);
+            const bio = ((document.getElementById('pf-bio') || {}).value || '').trim().slice(0, 140);
+            const users = loadUsers();
+            ensureUserFields(users[me]);
+            users[me].job = job;
+            users[me].bio = bio;
+            saveUser(me, users[me]);
+            toast('Rol kartı kaydedildi');
+            showProfile();
         }
 
         // ---- Weekly leaderboard ----
@@ -1956,12 +2293,20 @@
             applyTpAndLevel(users[me], tp);
             users[me].lastDailyClaim = todayKey();
             users[me].dailyStreak = streak;
+            let rndMsg = '';
+            try {
+                const rnd = rollRandomDaily(users[me]);
+                if (rnd) {
+                    rndMsg = ' · 🎲 rastgele +' + rnd.amount + ' ' + rnd.label;
+                    pushNotif(me, '🎲 Günlük sürpriz: +' + rnd.amount + ' ' + rnd.label, 'success');
+                }
+            } catch (e) {}
             saveUser(me, users[me]);
             try { addWeeklyStat(me, 'tp', tp); } catch (e) {}
             try { pushActivity('🎁 ' + me + ' günlük ödül aldı (seri ' + streak + ')', 'daily'); } catch (e) {}
-            pushNotif(me, '🎁 Günlük ödül: +' + gold + ' gold, +' + tp + ' TP, $' + money + ' · seri ' + streak, 'success');
-            pushModLog('daily_claim', me + ' günlük ödül aldı (seri ' + streak + ')');
-            toast('🎁 Ödül alındı! Seri: ' + streak);
+            pushNotif(me, '🎁 Günlük ödül: +' + gold + ' gold, +' + tp + ' TP, $' + money + ' · seri ' + streak + rndMsg, 'success');
+            pushModLog('daily_claim', me + ' günlük ödül aldı (seri ' + streak + ')' + rndMsg);
+            toast('🎁 Ödül alındı! Seri: ' + streak + rndMsg);
             updateDailyButton();
             openDailyReward();
             try { if (window._profileOpen) showProfile(); } catch (e) {}
@@ -3557,10 +3902,7 @@
                     try { openMarket(); } catch (e) {}
                 }
             });
-            db.ref('activity_feed').on('value', snap => {
-                const v = snap.val();
-                _activityFeedCache = Array.isArray(v) ? v : (v ? Object.values(v) : []);
-            });
+            
             db.ref('weekly_stats').on('value', snap => {
                 const v = snap.val();
                 _weeklyStatsCache = (v && typeof v === 'object') ? v : {};
@@ -3947,6 +4289,14 @@
             if (typeof user.customTitle === 'undefined') user.customTitle = '';
             if (typeof user.customTitleColor === 'undefined') user.customTitleColor = '';
             if (typeof user.reputation !== 'number') user.reputation = 50;
+            if (typeof user.job === 'undefined') user.job = '';
+            if (typeof user.bio === 'undefined') user.bio = '';
+            if (!Array.isArray(user.modTags)) user.modTags = [];
+            if (typeof user.warnings !== 'number') user.warnings = 0;
+            if (!Array.isArray(user.txHistory)) user.txHistory = [];
+            if (typeof user.questDay === 'undefined') user.questDay = '';
+            if (!user.quests || typeof user.quests !== 'object') user.quests = {};
+            if (typeof user.lastRandomDaily === 'undefined') user.lastRandomDaily = '';
             return user;
         }
 
@@ -4883,6 +5233,8 @@
                 chats[cid].messages = chats[cid].messages.slice(-200);
             }
             saveChats(chats);
+            try { bumpQuest(me, 'msgs', 1); } catch (e) {}
+
             setTyping(other, false);
             pushNotif(other, '💬 ' + me + ': ' + text.slice(0, 60), 'info');
             openPrivateChat(other);
@@ -4989,8 +5341,7 @@
             document.getElementById('notif-badge').classList.remove('show');
             document.getElementById('shop-tab').classList.remove('show');
             try { var db=document.getElementById('daily-btn'); if(db) db.classList.remove('show'); } catch(e){}
-            try { var af=document.getElementById('activity-feed-btn'); if(af) af.classList.remove('show'); } catch(e){}
-            try { var oc=document.getElementById('online-count'); if(oc) oc.textContent='● 0'; } catch(e){}
+                        try { var oc=document.getElementById('online-count'); if(oc) oc.textContent='● 0'; } catch(e){}
             try { var ab=document.getElementById('announce-banner'); if(ab) ab.classList.remove('show'); } catch(e){}
             toggleShop(false);
             const modFolder = document.getElementById('mod-folder');
@@ -5020,9 +5371,6 @@
             try { updateDailyButton(); } catch (e) {}
             try { loadAnnounceAsync(); } catch (e) {}
             try {
-                const fb = document.getElementById('activity-feed-btn');
-                if (fb) fb.classList.add('show');
-                loadActivityFeedAsync();
                 loadWeeklyStatsAsync();
                 updateOnlineCountUI();
             } catch (e) {}
@@ -5124,6 +5472,7 @@
             const _ev = (typeof getActiveEvent === 'function') ? getActiveEvent() : null;
             let html = `
                 ${_ev && _ev.title ? '<div class="info-card" style="border-color:var(--warning);margin-bottom:10px;"><b style="color:var(--warning);">🎉 Event:</b> ' + escapeHtml(_ev.title) + ' — ' + escapeHtml(_ev.desc || '') + '</div>' : ''}
+                ${myClan ? clanGoalHtml(myClan.id || myClan.name) : ''}
                 ${myClan ? '<button class="primary-btn" onclick="openClanChat()" style="margin-bottom:10px;">💬 Klan Sohbeti</button>' : ''}
                 <div class="info-card" style="background:linear-gradient(135deg,rgba(125,60,255,.18),rgba(255,0,204,.08));border:1px solid rgba(170,100,255,.35);">
                     <div style="display:flex;align-items:center;gap:12px;">
@@ -5661,8 +6010,10 @@
             window._marketOpen = false;
             window._bankOpen = false;
             const me = getCurrentUser();
-            const user = getUser(me);
+            let user = getUser(me);
             if (!user) return;
+            user = ensureUserFields(user);
+            try { ensureQuests(user); } catch (e) {}
 
             const date = user.createdAt
                 ? new Date(user.createdAt).toLocaleDateString('tr-TR')
@@ -5725,13 +6076,30 @@
                         <span class="value">${date}</span>
                     </div>
                     <div class="info-row"><span class="label">Unvan</span><span class="value">${titleChipHtml(user)}${user.customTitle ? ' <span style="font-size:11px;color:var(--text-muted);">(özel)</span>' : ''}</span></div>
-                    <div class="info-row"><span class="label">İtibar</span><span class="value">${repBadgeHtml(me)} (${getReputation(user)}/100)</span></div>
+                    <div class="info-row"><span class="label">İtibar</span><span class="value">${repBadgeHtml(me)}/100${getReputation(me) >= 80 ? ' <span class="rarity-badge" style="background:#00e676;color:#0a0014;">Güvenilir</span>' : (getReputation(me) < 30 ? ' <span class="rarity-badge" style="background:#ff3d71;color:#fff;">Düşük</span>' : '')}</span></div>
+                    <div class="info-row"><span class="label">Uyarı</span><span class="value">${user.warnings || 0}</span></div>
+                    <div class="info-row"><span class="label">Meslek</span><span class="value">${escapeHtml(user.job || '—')}</span></div>
+                    <div class="info-row"><span class="label">Bio</span><span class="value" style="max-width:220px;text-align:right;font-size:12px;">${escapeHtml(user.bio || '—')}</span></div>
+                    <div class="info-row"><span class="label">Etiketler</span><span class="value">${(user.modTags && user.modTags.length) ? user.modTags.map(function(t){return '<span class="rarity-badge" style="background:rgba(255,61,113,0.25);color:#ff8fab;margin:2px;">'+escapeHtml(t)+'</span>';}).join(' ') : '—'}</span></div>
                     <div class="info-row"><span class="label">Durum</span><span class="value">${escapeHtml((user.statusEmoji ? user.statusEmoji + ' ' : '') + (user.statusText || '—'))}</span></div>
                     <div class="info-row"><span class="label">Günlük seri</span><span class="value">${user.dailyStreak || 0} gün</span></div>
+                </div>
+                <div class="shop-card" style="margin:10px 0;">
+                    <div style="font-size:13px;color:var(--accent-soft);margin-bottom:8px;">🎭 Rol kartı</div>
+                    <div class="form-group"><label>Meslek</label>
+                    <select id="pf-job">${JOB_OPTIONS.map(function(j){return '<option value="'+j+'"'+(user.job===j?' selected':'')+'>'+(j||'— seç —')+'</option>';}).join('')}</select></div>
+                    <div class="form-group"><label>Bio (140)</label>
+                    <textarea id="pf-bio" rows="2" maxlength="140" style="width:100%;padding:10px;background:rgba(0,0,0,0.35);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:inherit;">${escapeHtml(user.bio||'')}</textarea></div>
+                    <button class="primary-btn" onclick="saveProfileRole()">Kaydet</button>
+                </div>
+                <div class="shop-card" style="margin:10px 0;">
+                    <div style="font-size:13px;color:var(--accent-soft);margin-bottom:6px;">📜 Son işlemler</div>
+                    ${(user.txHistory||[]).slice(0,8).map(function(h){return '<div style="font-size:12px;padding:4px 0;border-bottom:1px solid rgba(255,0,204,0.12);">'+escapeHtml(h.t||'')+' <span style="color:var(--text-muted);font-size:10px;">'+(h.at?new Date(h.at).toLocaleString('tr-TR'):'')+'</span></div>';}).join('') || '<p style="color:var(--text-muted);font-size:12px;">Henüz işlem yok.</p>'}
                 </div>
                 <button class="primary-btn" onclick="toggleInventoryPrivacy()">${user.inventoryPrivate ? '🔓 Envanteri Herkese Aç' : '🔒 Envanteri Gizle'}</button>
                 <button class="primary-btn" onclick="openSetStatus()" style="margin-top:8px;">💬 Durum Mesajı</button>
                 <button class="primary-btn" onclick="openDailyReward()" style="margin-top:8px;">🎁 Günlük Ödül</button>
+                <button class="primary-btn" onclick="openQuestsPanel()" style="margin-top:8px;">🎯 Günlük Görevler</button>
                 <button class="primary-btn" onclick="openChangeUsername()" style="margin-top:8px;background:rgba(74,163,255,0.2);border:1px solid rgba(74,163,255,0.45);color:#4aa3ff;">✏️ İsim Değiştir</button>
                 <button class="back-btn" onclick="openChangePassword()" style="margin-top:8px;">🔑 Şifre Değiştir</button>
             `);
@@ -6283,6 +6651,7 @@
                 } else {
                     actionBtn = `
                         <button onclick="buyListing('${listing.id}')" style="width:100%;margin-top:8px;padding:8px;background:var(--accent);border:none;color:#1a001f;border-radius:10px;cursor:pointer;font-size:13px;font-weight:600;">Satın Al</button>
+                        <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">El değişimi: ${getItemTradeCount((normalizeItem(listing.item).name)||'')} · Satıcı itibar ${getReputation(listing.seller)}</div>
                         <button onclick="reportListing('${listing.id}')" style="width:100%;margin-top:6px;padding:7px;background:rgba(255,193,7,0.12);border:1px solid rgba(255,193,7,0.35);color:#ffc107;border-radius:10px;cursor:pointer;font-size:12px;font-weight:600;">⚠️ Şikayet Et</button>
                     `;
                 }
@@ -6464,6 +6833,16 @@
             const me = getCurrentUser();
             const user = getUser(me);
             if (!user) return;
+            try {
+                const gate = canListOnMarket(me);
+                if (!gate.ok) { toast(gate.msg, 'error'); return; }
+                const market = loadMarket();
+                const mine = market.filter(function(l) { return l && l.seller === me; }).length;
+                if (gate.maxListings && mine >= gate.maxListings) {
+                    toast('İtibar limitin: en fazla ' + gate.maxListings + ' ilan.', 'error');
+                    return;
+                }
+            } catch (e) {}
             const inv = user.inventory || [];
 
             if (!inv.length) {
@@ -6634,8 +7013,14 @@
                     addWeeklyStat(listing.seller, 'sales', price);
                     adjustReputation(listing.seller, 1, 'pazar satışı');
                     pushActivity('🏪 ' + listing.seller + ' sattı: ' + boughtItem.name + ' ($' + price.toLocaleString('tr-TR') + ')', 'market');
+                    try { bumpQuest(listing.seller, 'sells', 1); } catch (e2) {}
+                    try { bumpClanGoal(getUserClanId(listing.seller), 'sells', 1); } catch (e2) {}
+                    try { pushTxHistory(listing.seller, 'Sattı: ' + boughtItem.name + ' $' + price, 'sell'); } catch (e2) {}
+                    try { pushTxHistory(me, 'Aldı: ' + boughtItem.name + ' $' + price, 'buy'); } catch (e2) {}
+                    try { bumpItemTradeCount(boughtItem); } catch (e2) {}
                 } else {
                     pushActivity('🛒 ' + me + ' SERVER\'dan aldı: ' + boughtItem.name, 'market');
+                    try { pushTxHistory(me, 'SERVER\'dan aldı: ' + boughtItem.name, 'buy'); } catch (e2) {}
                 }
             } catch (e) {}
 
@@ -6859,6 +7244,8 @@
 
         function acceptTradeRequest(tradeId) {
             const me = getCurrentUser();
+            if (!requestTradeAcceptWithDelay(tradeId)) return;
+
             const trades = loadTrades();
             const t = trades.find(function(x) { return x.id === tradeId; });
             if (!t || t.status !== 'request' || t.to !== me) {
@@ -7236,6 +7623,13 @@
                     pushModLog('trade_done', a + ' ↔ ' + b);
                     adjustReputation(a, 2, 'takas tamam');
                     adjustReputation(b, 2, 'takas tamam');
+                    try { bumpQuest(a, 'trades', 1); bumpQuest(b, 'trades', 1); } catch (e) {}
+                    try { bumpClanGoal(getUserClanId(a), 'trades', 1); bumpClanGoal(getUserClanId(b), 'trades', 1); } catch (e) {}
+                    try { pushTxHistory(a, 'Takas tamam: ' + b, 'trade'); pushTxHistory(b, 'Takas tamam: ' + a, 'trade'); } catch (e) {}
+                    try {
+                        const sideItems = [].concat((t.a && t.a.items) || [], (t.b && t.b.items) || []);
+                        sideItems.forEach(function(it) { bumpItemTradeCount(it); });
+                    } catch (e) {}
                     addWeeklyStat(a, 'trades', 1);
                     addWeeklyStat(b, 'trades', 1);
                     pushActivity('🔄 ' + a + ' ↔ ' + b + ' takas tamamladı', 'trade');
@@ -8475,7 +8869,10 @@
                             ${r.detail ? `<p style="margin-top:8px;font-size:13px;line-height:1.4;color:var(--text-muted);">${escapeHtml(r.detail)}</p>` : ''}
                             <div style="display:flex;flex-direction:column;gap:6px;margin-top:10px;">
                                 <button class="danger-btn" style="margin-top:0;" onclick="modRemoveReportedListing('${r.id}')">🗑 İlanı Pazardan Sil</button>
-                                <button class="mod-btn" style="margin-top:0;" onclick="modResolveReport('${r.id}')">✅ Şikayeti Kapat</button>
+                                <button class="mod-btn" style="margin-top:0;" onclick="modResolveReport('${r.id}','warn')">⚠️ Uyarı + kapat</button>
+                                <button class="mod-btn" style="margin-top:0;" onclick="modResolveReport('${r.id}','fine')">💸 Ceza + kapat</button>
+                                <button class="mod-btn" style="margin-top:0;" onclick="modResolveReport('${r.id}','rep')">📉 İtibar −5 + kapat</button>
+                                <button class="mod-btn" style="margin-top:0;" onclick="modResolveReport('${r.id}','dismiss')">✅ Sadece kapat</button>
                             </div>
                         </div>
                     `;
@@ -8487,13 +8884,27 @@
             `);
         }
 
-        function modResolveReport(reportId) {
+        function modResolveReport(reportId, action) {
+            if (!isModerator()) return;
             const reports = loadReports();
             const r = reports.find(function(x) { return x.id === reportId; });
-            if (!r) return;
+            if (!r || r.resolved) { toast('Rapor yok / çözülmüş', 'error'); return; }
             r.resolved = true;
+            r.resolvedBy = getCurrentUser();
+            r.resolvedAt = new Date().toISOString();
+            r.action = action || 'dismiss';
             saveReports(reports);
-            toast('Şikayet kapatıldı.');
+            if (action === 'warn' && r.seller) {
+                try { modWarnUser(r.seller); } catch (e) {}
+            } else if (action === 'fine' && r.seller) {
+                try { modFineUser(r.seller); } catch (e) {}
+            } else if (action === 'rep' && r.seller) {
+                adjustReputation(r.seller, -5, 'şikayet sonucu');
+                toast('Satıcı itibar −5');
+            } else {
+                toast('Şikayet kapatıldı.');
+            }
+            try { pushNotif(r.reporter, 'Şikayetin incelendi (' + (action || 'kapatıldı') + ').', 'info'); } catch (e) {}
             showMarketReports();
         }
 
@@ -8650,7 +9061,7 @@
                     </div>
                     <div class="info-row">
                         <span class="label">İtibar</span>
-                        <span class="value">${repBadgeHtml(username)} (${getReputation(u)}/100)</span>
+                        <span class="value">${repBadgeHtml(username)}/100</span>
                     </div>
                     <div class="info-row">
                         <span class="label">Prime</span>
@@ -8686,6 +9097,18 @@
                 </button>
                 <button class="mod-btn" onclick="modSetReputation('${username}')">
                     <span style="font-size:20px;">⚖️</span> İtibar Ayarla
+                </button>
+                <button class="mod-btn" onclick="modWarnUser('${username}')">
+                    <span style="font-size:20px;">⚠️</span> Uyarı Ver
+                </button>
+                <button class="mod-btn" onclick="modFineUser('${username}')">
+                    <span style="font-size:20px;">💸</span> Para Cezası
+                </button>
+                <button class="mod-btn" onclick="modAddTag('${username}')">
+                    <span style="font-size:20px;">🏷️</span> Etiket Ekle
+                </button>
+                <button class="mod-btn" onclick="modClearTags('${username}')">
+                    <span style="font-size:20px;">🧹</span> Etiketleri Temizle
                 </button>
                 <button class="mod-btn" onclick="modGiveMoney('${username}')">
                     <span style="font-size:20px;">💰</span> Para Ver
@@ -10935,8 +11358,18 @@ Lütfen daha sonra tekrar gelin.</textarea>
             const list = await loadNewsList();
             const isMod = isModerator(me);
             let html = '';
+            html += `<div class="shop-card" style="margin-bottom:12px;">
+                <div style="font-size:13px;color:var(--accent-soft);margin-bottom:6px;">📌 Son güncelleme · Bilinen durum</div>
+                <div style="font-size:12px;line-height:1.45;">
+                    <b>25 Eki 2026:</b> İtibar sadece sayı; şehir akışı kaldırıldı.<br>
+                    İtibar ekonomiye bağlandı (düşük itibar ilan limiti).<br>
+                    Günlük görevler + rastgele günlük sürpriz eklendi.<br>
+                    Rapor → uyarı / ceza / itibar zinciri; rol kartı; işlem geçmişi.
+                </div>
+                <div style="font-size:11px;color:var(--text-muted);margin-top:8px;">Bilinen sorunlar: Bakım ekranı ara sıra açılabilir; takas onayında 10 sn koruma vardır.</div>
+            </div>`;
             if (!list.length) {
-                html = '<p style="color:var(--text-muted);text-align:center;padding:16px;">Henüz haber yok.</p>';
+                html += '<p style="color:var(--text-muted);text-align:center;padding:16px;">Henüz haber yok.</p>';
             } else {
                 html = list.map(function(n) {
                     const id = escapeHtml(n.id || '');
