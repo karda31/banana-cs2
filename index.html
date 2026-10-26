@@ -30,16 +30,23 @@
 
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
-        /* Özel site imleci — neon magenta */
-        html, body, button, a, input, textarea, select, label, .folder, .shop-tab, .notif-btn {
-            cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Cpath fill='%23ff00cc' stroke='%23ff66e0' stroke-width='1.2' d='M4 2l1 22 6.5-6.5L18 26l3-1.5-6.5-9H26z'/%3E%3Cpath fill='%23ff66e0' opacity='0.35' d='M4 2l1 22 6.5-6.5L18 26l3-1.5-6.5-9H26z' transform='translate(1,1)'/%3E%3C/svg%3E") 2 2, auto;
+        /* ── Özel imleç (Sword City neon tema) ── */
+        /* Varsayılan: sivri neon ok + glow */
+        html, body {
+            cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='36' height='36' viewBox='0 0 36 36'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0%25' stop-color='%23ff66e0'/%3E%3Cstop offset='100%25' stop-color='%23ff00cc'/%3E%3C/linearGradient%3E%3Cfilter id='glow'%3E%3CfeGaussianBlur stdDeviation='1.2' result='b'/%3E%3CfeMerge%3E%3CfeMergeNode in='b'/%3E%3CfeMergeNode in='SourceGraphic'/%3E%3C/feMerge%3E%3C/filter%3E%3C/defs%3E%3Cpath filter='url(%23glow)' fill='url(%23g)' stroke='%23f0e6ff' stroke-width='0.8' d='M5 3 L6.2 26.5 L12.8 19.5 L19.5 30.5 L23 28.5 L16 17.5 L26.5 16.5 Z'/%3E%3C/svg%3E") 3 2, auto;
         }
+        /* Tıklanabilir: hedef halkası */
         a, button, .folder, .shop-tab, .notif-btn, .primary-btn, .back-btn, .danger-btn, .mod-btn,
-        [onclick], [role="button"], label[for], select, summary {
-            cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Cpath fill='none' stroke='%23ff00cc' stroke-width='2' d='M10 8c0-3.3 2.7-6 6-6s6 2.7 6 6c0 2.2-1.2 4.1-3 5.2V16h2v3h-2v2h2v3h-2v3h-3v-3h-2v3h-3v-3h-2v-3h2v-2h-2v-3h2v-2.8c-1.8-1.1-3-3-3-5.2z'/%3E%3Ccircle cx='16' cy='8' r='3.2' fill='%23ff66e0'/%3E%3C/svg%3E") 12 4, pointer !important;
+        [onclick], [role="button"], label[for], select, summary, .user-badge {
+            cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='36' height='36' viewBox='0 0 36 36'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0%25' stop-color='%23ff66e0'/%3E%3Cstop offset='100%25' stop-color='%23aa00ff'/%3E%3C/linearGradient%3E%3Cfilter id='glow'%3E%3CfeGaussianBlur stdDeviation='1.1' result='b'/%3E%3CfeMerge%3E%3CfeMergeNode in='b'/%3E%3CfeMergeNode in='SourceGraphic'/%3E%3C/feMerge%3E%3C/filter%3E%3C/defs%3E%3Ccircle cx='18' cy='18' r='14' fill='none' stroke='%23ff00cc' stroke-width='1.5' opacity='0.45' filter='url(%23glow)'/%3E%3Ccircle cx='18' cy='18' r='5.5' fill='url(%23g)' stroke='%23f0e6ff' stroke-width='0.9' filter='url(%23glow)'/%3E%3Ccircle cx='18' cy='18' r='2' fill='%23f0e6ff'/%3E%3C/svg%3E") 18 18, pointer !important;
         }
-        input[type="text"], input[type="password"], input[type="number"], input[type="search"], textarea {
-            cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='32' viewBox='0 0 24 32'%3E%3Cpath stroke='%23ff66e0' stroke-width='2' d='M12 2v28'/%3E%3Cpath stroke='%23ff00cc' stroke-width='2' d='M7 2h10M7 30h10'/%3E%3C/svg%3E") 12 16, text;
+        /* Yazı: neon I-beam */
+        input[type="text"], input[type="password"], input[type="number"], input[type="search"], input[type="email"], textarea {
+            cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='36' viewBox='0 0 28 36'%3E%3Cdefs%3E%3Cfilter id='glow'%3E%3CfeGaussianBlur stdDeviation='0.9' result='b'/%3E%3CfeMerge%3E%3CfeMergeNode in='b'/%3E%3CfeMergeNode in='SourceGraphic'/%3E%3C/feMerge%3E%3C/filter%3E%3C/defs%3E%3Cpath filter='url(%23glow)' stroke='%23ff66e0' stroke-width='2.2' stroke-linecap='round' d='M14 4 V32'/%3E%3Cpath filter='url(%23glow)' stroke='%23ff00cc' stroke-width='2' stroke-linecap='round' d='M8 4 H20 M8 32 H20'/%3E%3C/svg%3E") 14 18, text;
+        }
+        /* Kapalı / yasak */
+        [disabled], button:disabled, .disabled {
+            cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='11' fill='none' stroke='%23ff3d71' stroke-width='2.2'/%3E%3Cpath stroke='%23ff3d71' stroke-width='2.2' stroke-linecap='round' d='M9 9 L23 23'/%3E%3C/svg%3E") 16 16, not-allowed !important;
         }
 
         body {
