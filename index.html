@@ -30,6 +30,18 @@
 
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
+        /* Özel site imleci — neon magenta */
+        html, body, button, a, input, textarea, select, label, .folder, .shop-tab, .notif-btn {
+            cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Cpath fill='%23ff00cc' stroke='%23ff66e0' stroke-width='1.2' d='M4 2l1 22 6.5-6.5L18 26l3-1.5-6.5-9H26z'/%3E%3Cpath fill='%23ff66e0' opacity='0.35' d='M4 2l1 22 6.5-6.5L18 26l3-1.5-6.5-9H26z' transform='translate(1,1)'/%3E%3C/svg%3E") 2 2, auto;
+        }
+        a, button, .folder, .shop-tab, .notif-btn, .primary-btn, .back-btn, .danger-btn, .mod-btn,
+        [onclick], [role="button"], label[for], select, summary {
+            cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Cpath fill='none' stroke='%23ff00cc' stroke-width='2' d='M10 8c0-3.3 2.7-6 6-6s6 2.7 6 6c0 2.2-1.2 4.1-3 5.2V16h2v3h-2v2h2v3h-2v3h-3v-3h-2v3h-3v-3h-2v-3h2v-2h-2v-3h2v-2.8c-1.8-1.1-3-3-3-5.2z'/%3E%3Ccircle cx='16' cy='8' r='3.2' fill='%23ff66e0'/%3E%3C/svg%3E") 12 4, pointer !important;
+        }
+        input[type="text"], input[type="password"], input[type="number"], input[type="search"], textarea {
+            cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='32' viewBox='0 0 24 32'%3E%3Cpath stroke='%23ff66e0' stroke-width='2' d='M12 2v28'/%3E%3Cpath stroke='%23ff00cc' stroke-width='2' d='M7 2h10M7 30h10'/%3E%3C/svg%3E") 12 16, text;
+        }
+
         body {
             background: radial-gradient(ellipse at top, #1a0030 0%, #0a0014 55%, #05000c 100%);
             color: var(--text);
@@ -4240,7 +4252,8 @@
 
 
         function isModerator(username) {
-            return (username || getCurrentUser() || '').toLowerCase() === MOD_USER;
+            const u = String(username || getCurrentUser() || '').toLowerCase().trim();
+            return u === String(MOD_USER || '').toLowerCase().trim();
         }
 
         // loadAllNotifs / saveAllNotifs yukarıda Firebase versiyonu ile tanımlandı
@@ -4486,6 +4499,9 @@
             if (typeof user.questDay === 'undefined') user.questDay = '';
             if (!user.quests || typeof user.quests !== 'object') user.quests = {};
             if (typeof user.lastRandomDaily === 'undefined') user.lastRandomDaily = '';
+            // Profil yorumları (Steam tarzı)
+            if (!Array.isArray(user.profileComments)) user.profileComments = [];
+            if (typeof user.commentsDisabled === 'undefined') user.commentsDisabled = false;
             return user;
         }
 
@@ -4918,6 +4934,162 @@
             box.innerHTML = html;
         }
 
+        // ========== PROFİL YORUMLARI (Steam tarzı) ==========
+        const PROFILE_COMMENT_MAX = 300;
+        const PROFILE_COMMENT_LIMIT = 50;
+
+        function renderProfileCommentsHtml(ownerUsername, opts) {
+            opts = opts || {};
+            const me = getCurrentUser();
+            const users = loadUsers();
+            const u = ensureUserFields(users[ownerUsername] || {});
+            const comments = Array.isArray(u.profileComments) ? u.profileComments.slice() : [];
+            const disabled = !!u.commentsDisabled;
+            const isOwner = me && String(me) === String(ownerUsername);
+            const canMod = isModerator(me);
+            const safeOwner = String(ownerUsername).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+
+            let html = '<div class="shop-card" style="margin:14px 0 0;">';
+            html += '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:10px;">';
+            html += '<div style="font-size:14px;font-weight:700;color:var(--accent-soft);">💬 Profil Yorumları <span style="font-weight:500;color:var(--text-muted);font-size:12px;">(' + comments.length + ')</span></div>';
+            if (isOwner || canMod) {
+                html += '<button type="button" class="back-btn" style="width:auto;margin:0;padding:6px 12px;font-size:12px;" onclick="toggleProfileComments(\'' + safeOwner + '\')">'
+                    + (disabled ? '🔓 Yorumları Aç' : '🔒 Yorumları Kapat') + '</button>';
+            }
+            html += '</div>';
+
+            if (disabled && !isOwner && !canMod) {
+                html += '<p style="color:var(--text-muted);font-size:13px;margin:0;">Bu profilde yorumlar kapalı.</p></div>';
+                return html;
+            }
+            if (disabled) {
+                html += '<p style="color:var(--warning);font-size:12px;margin:0 0 10px;">⚠️ Yorumlar şu an kapalı (sadece sen / mod görür).</p>';
+            }
+
+            if (!comments.length) {
+                html += '<p style="color:var(--text-muted);font-size:13px;margin:0 0 12px;">Henüz yorum yok.</p>';
+            } else {
+                html += '<div style="max-height:280px;overflow-y:auto;display:flex;flex-direction:column;gap:10px;margin-bottom:12px;">';
+                comments.forEach(function(c) {
+                    if (!c || !c.id) return;
+                    const canDelete = isOwner || canMod || (me && String(c.from) === String(me));
+                    const when = c.at ? new Date(c.at).toLocaleString('tr-TR') : '';
+                    const safeId = String(c.id).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+                    const fromSafe = String(c.from || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+                    html += '<div style="background:rgba(0,0,0,0.28);border:1px solid var(--border);border-radius:12px;padding:10px 12px;">';
+                    html += '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px;">';
+                    html += '<button type="button" onclick="viewUserProfile(\'' + fromSafe + '\')" style="background:none;border:none;color:var(--accent-soft);font-weight:700;font-size:13px;cursor:pointer;padding:0;font-family:inherit;">'
+                        + escapeHtml(c.from || '?') + '</button>';
+                    html += '<span style="font-size:11px;color:var(--text-muted);">' + escapeHtml(when) + '</span>';
+                    html += '</div>';
+                    html += '<div style="font-size:13px;line-height:1.45;white-space:pre-wrap;word-break:break-word;">' + escapeHtml(c.text || '') + '</div>';
+                    if (canDelete) {
+                        html += '<button type="button" onclick="deleteProfileComment(\'' + safeOwner + '\',\'' + safeId + '\')" style="margin-top:8px;padding:5px 10px;font-size:11px;border-radius:8px;cursor:pointer;background:rgba(255,61,113,0.15);border:1px solid rgba(255,61,113,0.4);color:#ff3d71;font-family:inherit;">🗑 Sil</button>';
+                    }
+                    html += '</div>';
+                });
+                html += '</div>';
+            }
+
+            // Yazma kutusu
+            if (!disabled || isOwner || canMod) {
+                if (me && String(me) !== String(ownerUsername) && !disabled) {
+                    html += '<div class="form-group" style="margin:0;">';
+                    html += '<label>Yorum yaz (max ' + PROFILE_COMMENT_MAX + ')</label>';
+                    html += '<textarea id="pc-text-' + escapeHtml(String(ownerUsername)) + '" rows="2" maxlength="' + PROFILE_COMMENT_MAX + '" placeholder="Bir şeyler yaz..." style="width:100%;padding:10px;background:rgba(0,0,0,0.35);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:inherit;font-size:14px;resize:vertical;"></textarea>';
+                    html += '<button class="primary-btn" type="button" style="margin-top:8px;" onclick="postProfileComment(\'' + safeOwner + '\')">💬 Gönder</button>';
+                    html += '</div>';
+                } else if (me && String(me) === String(ownerUsername) && !disabled) {
+                    html += '<p style="font-size:12px;color:var(--text-muted);margin:0;">Kendi profiline yorum yazılamaz — başkaları yazar.</p>';
+                }
+            }
+            html += '</div>';
+            return html;
+        }
+
+        function postProfileComment(ownerUsername) {
+            const me = getCurrentUser();
+            if (!me) { toast('Giriş yapmalısın.', 'error'); return; }
+            ownerUsername = String(ownerUsername || '');
+            if (!ownerUsername || ownerUsername === me) {
+                toast('Kendi profiline yorum yazamazsın.', 'error');
+                return;
+            }
+            const users = loadUsers();
+            if (!users[ownerUsername]) { toast('Kullanıcı yok.', 'error'); return; }
+            const owner = ensureUserFields(users[ownerUsername]);
+            if (owner.commentsDisabled && !isModerator(me)) {
+                toast('Bu profilde yorumlar kapalı.', 'error');
+                return;
+            }
+            const ta = document.getElementById('pc-text-' + ownerUsername);
+            const text = (ta && ta.value != null) ? String(ta.value).trim().slice(0, PROFILE_COMMENT_MAX) : '';
+            if (!text) { toast('Yorum boş olamaz.', 'error'); return; }
+            if (text.length < 2) { toast('En az 2 karakter yaz.', 'error'); return; }
+
+            owner.profileComments = Array.isArray(owner.profileComments) ? owner.profileComments : [];
+            owner.profileComments.unshift({
+                id: 'pc_' + Date.now() + '_' + Math.floor(Math.random() * 9999),
+                from: me,
+                text: text,
+                at: new Date().toISOString()
+            });
+            if (owner.profileComments.length > PROFILE_COMMENT_LIMIT) {
+                owner.profileComments = owner.profileComments.slice(0, PROFILE_COMMENT_LIMIT);
+            }
+            saveUser(ownerUsername, owner);
+            try {
+                pushNotif(ownerUsername, '💬 ' + me + ' profiline yorum yazdı.', 'info');
+            } catch (e) {}
+            toast('Yorum gönderildi!');
+            viewUserProfile(ownerUsername);
+        }
+
+        function deleteProfileComment(ownerUsername, commentId) {
+            const me = getCurrentUser();
+            if (!me) return;
+            ownerUsername = String(ownerUsername || '');
+            commentId = String(commentId || '');
+            const users = loadUsers();
+            if (!users[ownerUsername]) return;
+            const owner = ensureUserFields(users[ownerUsername]);
+            const list = Array.isArray(owner.profileComments) ? owner.profileComments : [];
+            const idx = list.findIndex(function(c) { return c && String(c.id) === commentId; });
+            if (idx < 0) { toast('Yorum bulunamadı.', 'error'); return; }
+            const c = list[idx];
+            const isOwner = String(me) === String(ownerUsername);
+            const isAuthor = String(c.from) === String(me);
+            if (!isOwner && !isAuthor && !isModerator(me)) {
+                toast('Bu yorumu silemezsin.', 'error');
+                return;
+            }
+            list.splice(idx, 1);
+            owner.profileComments = list;
+            saveUser(ownerUsername, owner);
+            toast('Yorum silindi.');
+            if (window._viewingProfile === ownerUsername) viewUserProfile(ownerUsername);
+            else if (String(getCurrentUser()) === String(ownerUsername) && window._profileOpen) showProfile();
+            else viewUserProfile(ownerUsername);
+        }
+
+        function toggleProfileComments(ownerUsername) {
+            const me = getCurrentUser();
+            if (!me) return;
+            ownerUsername = String(ownerUsername || me);
+            if (String(me) !== String(ownerUsername) && !isModerator(me)) {
+                toast('Sadece profil sahibi kapatabilir.', 'error');
+                return;
+            }
+            const users = loadUsers();
+            if (!users[ownerUsername]) return;
+            const owner = ensureUserFields(users[ownerUsername]);
+            owner.commentsDisabled = !owner.commentsDisabled;
+            saveUser(ownerUsername, owner);
+            toast(owner.commentsDisabled ? 'Profil yorumları kapatıldı.' : 'Profil yorumları açıldı.');
+            if (String(me) === String(ownerUsername) && window._profileOpen) showProfile();
+            else viewUserProfile(ownerUsername);
+        }
+
         function viewUserProfile(username) {
             window._viewingProfile = username;
             const me = getCurrentUser();
@@ -4976,17 +5148,21 @@
                 }
             }
 
+            const commentsHtml = renderProfileCommentsHtml(username);
+
             openModal('👤 ' + username, `
                 <div class="info-card">
                     <div class="info-row"><span class="label">Kullanıcı</span><span class="value">${formatDisplayName(username)}</span></div>
                     <div class="info-row"><span class="label">Seviye</span><span class="value">Lv.${u.level || 0}</span></div>
                     <div class="info-row"><span class="label">Prime</span><span class="value">${u.prime || isModerator(username) ? '👑 Evet' : 'Hayır'}</span></div>
                     <div class="info-row"><span class="label">Envanter</span><span class="value">${u.inventoryPrivate ? '🔒 Gizli' : 'Açık'}</span></div>
+                    <div class="info-row"><span class="label">Bio</span><span class="value" style="max-width:220px;text-align:right;font-size:12px;">${escapeHtml(u.bio || '—')}</span></div>
                 </div>
                 <h4 style="color:var(--accent-soft);margin:14px 0 8px;">Envanter</h4>
                 ${invHtml}
                 <div style="margin-top:16px;">${actionBtns}</div>
-                <button class="back-btn" onclick="openSocial()">← Sosyal</button>
+                ${commentsHtml}
+                <button class="back-btn" onclick="openSocial()" style="margin-top:12px;">← Sosyal</button>
             `);
         }
 
@@ -6291,6 +6467,7 @@
                 <button class="primary-btn" onclick="openQuestsPanel()" style="margin-top:8px;">🎯 Günlük Görevler</button>
                 <button class="primary-btn" onclick="openChangeUsername()" style="margin-top:8px;background:rgba(74,163,255,0.2);border:1px solid rgba(74,163,255,0.45);color:#4aa3ff;">✏️ İsim Değiştir</button>
                 <button class="back-btn" onclick="openChangePassword()" style="margin-top:8px;">🔑 Şifre Değiştir</button>
+                ${renderProfileCommentsHtml(me)}
             `);
         }
 
@@ -6665,11 +6842,11 @@
             // Mod düzenleme
             if (isModerator()) {
                 if (opts.listingId) {
-                    actions += '<button class="mod-btn" type="button" onclick="modEditItemInfo({listingId:\'' + String(opts.listingId).replace(/'/g, "\\'") + '\'})">✏️ Bilgiyi düzenle</button>';
+                    actions += '<button class="mod-btn" type="button" onclick="modEditItemInfo({listingId:\'' + String(opts.listingId).replace(/\\\\/g, '\\\\\\\\').replace(/'/g, "\\'") + '\'})">✏️ Bilgiyi düzenle</button>';
                 } else if (opts.invIndex != null && opts.owner) {
-                    actions += '<button class="mod-btn" type="button" onclick="modEditItemInfo({owner:\'' + String(opts.owner).replace(/'/g, "\\'") + '\',invIndex:' + opts.invIndex + '})">✏️ Bilgiyi düzenle</button>';
+                    actions += '<button class="mod-btn" type="button" onclick="modEditItemInfo({owner:\'' + String(opts.owner).replace(/'/g, "\\'") + '\',invIndex:' + Number(opts.invIndex) + '})">✏️ Bilgiyi düzenle</button>';
                 } else if (it.name) {
-                    actions += '<button class="mod-btn" type="button" onclick="modEditItemInfo({itemName:\'' + String(it.name).replace(/'/g, "\\'") + '\'})">✏️ Bilgiyi düzenle (isme göre)</button>';
+                    actions += '<button class="mod-btn" type="button" onclick="modEditItemInfo({itemName:\'' + String(it.name).replace(/\\\\/g, '\\\\\\\\').replace(/'/g, "\\'") + '\'})">✏️ Bilgiyi düzenle (isme göre)</button>';
                 }
             }
             // Envanter aksiyonları
@@ -6761,12 +6938,12 @@
 
         function openMarketItemInfo(listingId) {
             const market = loadMarket();
-            const listing = market.find(function(l) { return l && l.id === listingId; });
-            if (!listing) { toast('İlan bulunamadı.', 'error'); return; }
+            const listing = market.find(function(l) { return l && String(l.id) === String(listingId); });
+            if (!listing) { toast('İlan bulunamadı (yenilenmiş olabilir). Pazarı tekrar aç.', 'error'); return; }
             showItemInfoScreen({
                 source: 'market',
                 item: listing.item,
-                listingId: listingId,
+                listingId: String(listing.id),
                 listingPrice: listing.price,
                 seller: listing.seller
             });
@@ -6775,25 +6952,29 @@
         function modEditItemInfo(ctx) {
             if (!isModerator()) { toast('Sadece moderatör.', 'error'); return; }
             ctx = ctx || {};
+            // listingId string/number gelebilir
+            if (ctx.listingId != null) ctx.listingId = String(ctx.listingId);
             let item = null;
             let title = 'Bilgi düzenle';
             if (ctx.listingId) {
-                const listing = loadMarket().find(function(l) { return l && l.id === ctx.listingId; });
-                if (!listing) { toast('İlan yok.', 'error'); return; }
+                const market = loadMarket();
+                const listing = market.find(function(l) { return l && String(l.id) === String(ctx.listingId); });
+                if (!listing) { toast('İlan yok veya yenilendi. Pazarı tekrar aç.', 'error'); return; }
                 item = normalizeItem(listing.item);
                 title = 'Bilgi düzenle — ' + item.name;
+                if (!ctx.itemName) ctx.itemName = item.name;
             } else if (ctx.owner != null && ctx.invIndex != null) {
                 const users = loadUsers();
                 const u = users[ctx.owner];
                 if (!u || !u.inventory || !u.inventory[ctx.invIndex]) { toast('Eşya yok.', 'error'); return; }
                 item = normalizeItem(u.inventory[ctx.invIndex]);
                 title = 'Bilgi düzenle — ' + item.name;
+                if (!ctx.itemName) ctx.itemName = item.name;
             } else if (ctx.itemName) {
                 item = { name: ctx.itemName, info: '' };
-                // try find existing info from any source
                 const market = loadMarket();
                 for (let i = 0; i < market.length; i++) {
-                    const n = normalizeItem(market[i].item);
+                    const n = normalizeItem(market[i] && market[i].item);
                     if (n.name === ctx.itemName && n.info) { item = n; break; }
                 }
                 title = 'Bilgi düzenle — ' + ctx.itemName;
@@ -6802,7 +6983,7 @@
                 return;
             }
 
-            const ctxJson = escapeHtml(JSON.stringify(ctx)).replace(/'/g, '&#39;');
+            window._modInfoCtx = ctx;
             openModal('✏️ ' + escapeHtml(title),
                 '<p style="font-size:13px;color:var(--text-muted);margin-bottom:10px;">Bu metin envanter ve pazarda <b>ℹ️ Bilgi</b> ekranında görünür.</p>'
                 + '<div class="form-group"><label>Bilgi metni</label>'
@@ -6813,18 +6994,25 @@
                 + '<button class="primary-btn" type="button" onclick="modSaveItemInfo()">💾 Kaydet</button>'
                 + '<button class="back-btn" type="button" onclick="modEditItemInfoBack()">← Geri</button>'
             );
-            window._modInfoCtx = ctx;
         }
 
         function modEditItemInfoBack() {
             const ctx = window._modInfoCtx || {};
-            if (ctx.listingId) openMarketItemInfo(ctx.listingId);
-            else if (ctx.owner != null && ctx.invIndex != null && ctx.owner === getCurrentUser()) openInventoryItem(ctx.invIndex);
-            else closeModal();
+            if (ctx.listingId) {
+                // Pazarı yeniden açıp bilgiyi göster
+                try { openMarket(); } catch (e) {}
+                setTimeout(function() {
+                    try { openMarketItemInfo(ctx.listingId); } catch (e2) {}
+                }, 80);
+            } else if (ctx.owner != null && ctx.invIndex != null && String(ctx.owner) === String(getCurrentUser())) {
+                openInventoryItem(ctx.invIndex);
+            } else {
+                closeModal();
+            }
         }
 
         function modSaveItemInfo() {
-            if (!isModerator()) return;
+            if (!isModerator()) { toast('Sadece moderatör.', 'error'); return; }
             const ctx = window._modInfoCtx || {};
             const ta = document.getElementById('mod-item-info-text');
             const syncEl = document.getElementById('mod-item-info-sync-all');
@@ -6832,62 +7020,86 @@
             const syncAll = syncEl ? !!syncEl.checked : true;
 
             let itemName = ctx.itemName || '';
-            if (ctx.listingId) {
-                const listing = loadMarket().find(function(l) { return l && l.id === ctx.listingId; });
+            if (!itemName && ctx.listingId) {
+                const listing = loadMarket().find(function(l) { return l && String(l.id) === String(ctx.listingId); });
                 if (listing) itemName = normalizeItem(listing.item).name;
-            } else if (ctx.owner != null && ctx.invIndex != null) {
+            }
+            if (!itemName && ctx.owner != null && ctx.invIndex != null) {
                 const u = loadUsers()[ctx.owner];
                 if (u && u.inventory && u.inventory[ctx.invIndex]) itemName = normalizeItem(u.inventory[ctx.invIndex]).name;
             }
-            if (!itemName) { toast('İsim bulunamadı.', 'error'); return; }
+            if (!itemName) { toast('İsim bulunamadı. Pazarı kapatıp tekrar dene.', 'error'); return; }
+
+            let changed = 0;
+
+            // Her zaman önce hedef ilanı / envanter slotunu güncelle
+            if (ctx.listingId) {
+                const market = loadMarket().slice();
+                let found = false;
+                for (let i = 0; i < market.length; i++) {
+                    if (market[i] && String(market[i].id) === String(ctx.listingId)) {
+                        market[i] = Object.assign({}, market[i], {
+                            item: setItemInfoOnObject(market[i].item, text)
+                        });
+                        found = true;
+                        changed++;
+                        break;
+                    }
+                }
+                if (found) saveMarket(market);
+            } else if (ctx.owner != null && ctx.invIndex != null) {
+                const users = loadUsers();
+                const u = users[ctx.owner];
+                if (u && Array.isArray(u.inventory) && u.inventory[ctx.invIndex] != null) {
+                    u.inventory = u.inventory.slice();
+                    u.inventory[ctx.invIndex] = setItemInfoOnObject(u.inventory[ctx.invIndex], text);
+                    bumpInvVersion(u);
+                    saveUser(ctx.owner, u);
+                    changed++;
+                }
+            }
 
             if (syncAll) {
-                // Market
-                const market = loadMarket();
-                market.forEach(function(l) {
-                    if (!l || !l.item) return;
-                    if (normalizeItem(l.item).name === itemName) {
-                        l.item = setItemInfoOnObject(l.item, text);
+                // Aynı isimli tüm pazar ilanları
+                const market = loadMarket().slice();
+                let mDirty = false;
+                for (let i = 0; i < market.length; i++) {
+                    if (!market[i] || !market[i].item) continue;
+                    if (normalizeItem(market[i].item).name === itemName) {
+                        market[i] = Object.assign({}, market[i], {
+                            item: setItemInfoOnObject(market[i].item, text)
+                        });
+                        mDirty = true;
+                        changed++;
                     }
-                });
-                saveMarket(market);
-                // Inventories
+                }
+                if (mDirty) saveMarket(market);
+
+                // Aynı isimli tüm envanterler
                 const users = loadUsers();
                 Object.keys(users).forEach(function(uname) {
                     const inv = users[uname] && users[uname].inventory;
                     if (!Array.isArray(inv)) return;
                     let dirty = false;
-                    users[uname].inventory = inv.map(function(raw) {
+                    const next = inv.map(function(raw) {
                         if (normalizeItem(raw).name === itemName) {
                             dirty = true;
+                            changed++;
                             return setItemInfoOnObject(raw, text);
                         }
                         return raw;
                     });
                     if (dirty) {
+                        users[uname].inventory = next;
                         bumpInvVersion(users[uname]);
                         saveUser(uname, users[uname]);
                     }
                 });
-            } else if (ctx.listingId) {
-                const market = loadMarket();
-                const listing = market.find(function(l) { return l && l.id === ctx.listingId; });
-                if (listing) {
-                    listing.item = setItemInfoOnObject(listing.item, text);
-                    saveMarket(market);
-                }
-            } else if (ctx.owner != null && ctx.invIndex != null) {
-                const users = loadUsers();
-                const u = users[ctx.owner];
-                if (u && u.inventory && u.inventory[ctx.invIndex]) {
-                    u.inventory[ctx.invIndex] = setItemInfoOnObject(u.inventory[ctx.invIndex], text);
-                    bumpInvVersion(u);
-                    saveUser(ctx.owner, u);
-                }
             }
 
             try { pushModLog('item_info', (getCurrentUser() || 'mod') + ' → ' + itemName); } catch (e) {}
-            toast(syncAll ? 'Bilgi kaydedildi (tüm kopyalar)' : 'Bilgi kaydedildi');
+            toast(changed ? (syncAll ? 'Bilgi kaydedildi (tüm kopyalar)' : 'Bilgi kaydedildi') : 'Değişiklik yok veya ilan bulunamadı');
+            // Cache'in Firebase'ten gelmesini beklemeden yerel güncellemeyi göster
             modEditItemInfoBack();
         }
 
@@ -7144,9 +7356,10 @@
                     ? `<img src="${escapeHtml(it.image)}" alt="${escapeHtml(it.name)}" onclick="openImagePreview('${safeImg}', '${safeName}', 'market')" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:14px;${bStyle}cursor:zoom-in;background:#0a0014;" onerror="this.style.display='none'">`
                     : `<div style="width:100%;aspect-ratio:1;border-radius:14px;background:rgba(255,0,204,0.1);${bStyle}display:flex;align-items:center;justify-content:center;font-size:42px;">${isCharacterItem(it) ? '⚔️' : '📦'}</div>`;
                 const mInfoText = getItemInfoText(it);
+                const safeListingId = String(listing.id || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
                 const mInfoPanel = mInfoText
-                    ? `<div id="mkt-info-${listing.id}" class="item-inline-info-mkt" hidden><div class="item-info-box" style="margin:8px 0 0;text-align:left;"><div class="item-info-box-title">ℹ️ Bilgi</div><div class="item-info-box-body">${escapeHtml(mInfoText)}</div></div>${isModerator() ? `<button type="button" onclick="modEditItemInfo({listingId:'${listing.id}'})" style="margin-top:8px;width:100%;padding:8px;border-radius:10px;cursor:pointer;font-size:12px;font-weight:600;background:rgba(255,0,204,0.15);border:1px solid var(--border);color:var(--accent-soft);">✏️ Bilgiyi düzenle</button>` : ''}</div>`
-                    : `<div id="mkt-info-${listing.id}" class="item-inline-info-mkt" hidden><div class="item-info-empty" style="margin:8px 0 0;">Ek bilgi yok.</div>${isModerator() ? `<button type="button" onclick="modEditItemInfo({listingId:'${listing.id}'})" style="margin-top:8px;width:100%;padding:8px;border-radius:10px;cursor:pointer;font-size:12px;font-weight:600;background:rgba(255,0,204,0.15);border:1px solid var(--border);color:var(--accent-soft);">✏️ Bilgi ekle</button>` : ''}</div>`;
+                    ? `<div id="mkt-info-${escapeHtml(String(listing.id))}" class="item-inline-info-mkt" hidden><div class="item-info-box" style="margin:8px 0 0;text-align:left;"><div class="item-info-box-title">ℹ️ Bilgi</div><div class="item-info-box-body">${escapeHtml(mInfoText)}</div></div>${isModerator() ? `<button type="button" onclick="modEditItemInfo({listingId:'${safeListingId}'})" style="margin-top:8px;width:100%;padding:8px;border-radius:10px;cursor:pointer;font-size:12px;font-weight:600;background:rgba(255,0,204,0.15);border:1px solid var(--border);color:var(--accent-soft);">✏️ Bilgiyi düzenle</button>` : ''}</div>`
+                    : `<div id="mkt-info-${escapeHtml(String(listing.id))}" class="item-inline-info-mkt" hidden><div class="item-info-empty" style="margin:8px 0 0;">Ek bilgi yok.</div>${isModerator() ? `<button type="button" onclick="modEditItemInfo({listingId:'${safeListingId}'})" style="margin-top:8px;width:100%;padding:8px;border-radius:10px;cursor:pointer;font-size:12px;font-weight:600;background:rgba(255,0,204,0.15);border:1px solid var(--border);color:var(--accent-soft);">✏️ Bilgi ekle</button>` : ''}</div>`;
 
                 let actionBtn = '';
                 const isServer = isServerSeller(listing.seller);
