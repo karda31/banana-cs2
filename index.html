@@ -3551,12 +3551,13 @@
                         merged[field] = a[field];
                     }
                 }
-                pickField('balance', true);
+                // Bakiye / para birimleri: SADECE updatedAt — invVersion ezmesin (mod canlı bakiye)
+                pickField('balance', false);
                 pickField('level', true);
                 pickField('tp', true);
-                pickField('gold', true);
-                pickField('emerald', true);
-                pickField('diamond', true);
+                pickField('gold', false);
+                pickField('emerald', false);
+                pickField('diamond', false);
                 pickField('prime', true);
                 pickField('createdAt', false);
                 pickField('achievements', true);
@@ -3570,7 +3571,7 @@
                 out[k] = merged;
             });
 
-            // Oturumdaki kullanıcıyı ekstra koru: local daha yeni/eşitse remote ezmesin
+            // Oturumdaki kullanıcıyı ekstra koru — ama bakiyeyi remote (mod) güncellemesi ezebilsin
             try {
                 const me = (typeof getCurrentUser === 'function') ? getCurrentUser() : null;
                 if (me && local[me] && out[me]) {
@@ -3580,8 +3581,15 @@
                     const tme = Date.parse(mer.updatedAt || 0) || 0;
                     const vla = Number(loc.invVersion) || 0;
                     const vme = Number(mer.invVersion) || 0;
+                    // Para alanları: sadece local updatedAt DAHA YENİyse local kazanır
+                    if (tla > tme) {
+                        ['balance','gold','emerald','diamond'].forEach(function(f) {
+                            if (loc[f] !== undefined) mer[f] = loc[f];
+                        });
+                    }
+                    // Diğer alanlar / envanter: önceki koruma
                     if (tla >= tme || vla >= vme) {
-                        ['balance','level','tp','gold','emerald','diamond','prime','createdAt','txCount','card','password','inventoryPrivate'].forEach(function(f) {
+                        ['level','tp','prime','createdAt','txCount','card','password','inventoryPrivate'].forEach(function(f) {
                             if (loc[f] !== undefined) mer[f] = loc[f];
                         });
                         if (Array.isArray(loc.inventory) && vla >= vme) {
@@ -3591,7 +3599,6 @@
                         if (loc.achievements) mer.achievements = loc.achievements;
                         if (Array.isArray(loc.customAchievements)) mer.customAchievements = loc.customAchievements.slice();
                         if (Array.isArray(loc.friends)) mer.friends = loc.friends.slice();
-                        // updatedAt local daha yeniyse onu koru
                         if (tla >= tme && loc.updatedAt) mer.updatedAt = loc.updatedAt;
                     }
                 }
@@ -3623,7 +3630,7 @@
             } else {
                 _usersCache = local && Object.keys(local).length ? local : (_usersCache || {});
             }
-            // Oturum kullanıcısının localStorage kaydı daha yeniyse onu geri koy (sıfırlanmayı engelle)
+            // Oturum kullanıcısının localStorage kaydı daha yeniyse geri koy — bakiye hariç remote (mod) günceli koru
             try {
                 const me = (typeof getCurrentUser === 'function') ? getCurrentUser() : (localStorage.getItem(SESSION_KEY) || '');
                 if (me && local[me] && _usersCache[me]) {
@@ -3633,8 +3640,13 @@
                     const tcu = Date.parse(cur.updatedAt || 0) || 0;
                     const vla = Number(loc.invVersion) || 0;
                     const vcu = Number(cur.invVersion) || 0;
+                    if (tla > tcu) {
+                        ['balance','gold','emerald','diamond'].forEach(function(f) {
+                            if (loc[f] !== undefined) cur[f] = loc[f];
+                        });
+                    }
                     if (tla >= tcu || vla >= vcu) {
-                        ['balance','level','tp','gold','emerald','diamond','prime','createdAt','txCount','card','password','inventoryPrivate','achievements'].forEach(function(f) {
+                        ['level','tp','prime','createdAt','txCount','card','password','inventoryPrivate','achievements'].forEach(function(f) {
                             if (loc[f] !== undefined) cur[f] = loc[f];
                         });
                         if (Array.isArray(loc.inventory) && vla >= vcu) {
@@ -4081,6 +4093,28 @@
                         try { viewUserProfile(u); } catch (e) {}
                     }
                 }
+                // Kendi bakiyem değiştiyse banka / profil / envanter anında yenilensin
+                try {
+                    const meLive = getCurrentUser && getCurrentUser();
+                    if (meLive) {
+                        const prevMe = prev[meLive] || {};
+                        const nextMe = (_usersCache || {})[meLive] || {};
+                        const balChanged = Number(prevMe.balance) !== Number(nextMe.balance);
+                        const curChanged = Number(prevMe.gold) !== Number(nextMe.gold) || Number(prevMe.emerald) !== Number(nextMe.emerald) || Number(prevMe.diamond) !== Number(nextMe.diamond);
+                        if (balChanged || curChanged) {
+                            try { if (window._bankOpen) openBank(); } catch (e) {}
+                            try { if (window._profileOpen) showProfile(); } catch (e) {}
+                            try { if (window._inventoryOpen) showInventory(window._invFilter || 'all'); } catch (e) {}
+                            if (balChanged && typeof nextMe.balance === 'number') {
+                                try {
+                                    if (!window._skipBalToast) {
+                                        toast('💰 Bakiyen güncellendi: $' + Number(nextMe.balance).toLocaleString('tr-TR'));
+                                    }
+                                } catch (e) {}
+                            }
+                        }
+                    }
+                } catch (e) {}
                 // Kendi profil / envanter / banka açıkken TP-level değişince anında güncelle
                 try {
                     if (window._inventoryOpen) showInventory(window._invFilter || 'all');
@@ -10468,6 +10502,9 @@
             if (num >= 100000) users[username].achievements.hundredK = true;
             // Tek kullanıcı kaydı — updatedAt taze, Firebase ezilmesin
             saveUser(username, users[username]);
+            try {
+                pushNotif(username, '💰 Bakiyen moderatör tarafından güncellendi: $' + num.toLocaleString('tr-TR'), num < 0 ? 'danger' : 'success');
+            } catch (e) {}
             if (num < 0) {
                 toast('📉 ' + username + ' borcu: $' + num.toLocaleString('tr-TR'));
             } else {
