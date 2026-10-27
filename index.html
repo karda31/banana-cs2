@@ -1801,7 +1801,7 @@
     <div id="toast" class="toast"></div>
 
     <!-- Moderatorspecial gift FAB (sol alt, müzik üstü) -->
-    <button type="button" id="mod-gift-fab" title="Moderatör Görevleri & Hediye" onclick="openModGiftPanel()">
+    <button type="button" id="mod-gift-fab" title="Özel Görevler & Hediye" onclick="openModGiftPanel()">
         🎁
         <span id="mod-gift-badge">!</span>
     </button>
@@ -1981,106 +1981,159 @@
             { t: 'diamond', min: 1, max: 2, label: 'diamond' }
         ];
 
-        // ===== MODERATÖR GÜNLÜK GÖREVLERİ + RESİMLİ HEDİYE =====
-        const MOD_QUEST_DEFS = [
-            { id: 'mq_warn', label: '1 uyarı ver', target: 1, key: 'warn' },
-            { id: 'mq_fine', label: '1 para cezası uygula', target: 1, key: 'fine' },
-            { id: 'mq_announce', label: '1 duyuru yayınla', target: 1, key: 'announce' },
-            { id: 'mq_log', label: 'Herhangi 3 moderasyon işlemi yap', target: 3, key: 'any' }
-        ];
-        // Resimli hediye (her gün görevler bitince alınabilir)
-        const MOD_GIFT_ITEM = {
-            name: '🍌 Altın Muz Hediye',
-            image: 'https://steamdb.com/assets/images/skins/cs2/stickers/sticker-banana.png',
-            rarity: 'limited',
-            category: 'esya',
-            marketValue: 99999,
-            info: 'Moderatör günlük görevlerini tamamlayanın özel resimli hediyesi. Sınırlı.'
-        };
+        // ===== OYUNCU GÖREVLERİ (Moderatör düzenler) + RESİMLİ HEDİYE =====
+        let _customQuestsCache = null;
 
-        function ensureModQuests(user) {
-            if (!user) return user;
-            const day = todayKeyLocal();
-            if (user.modQuestDay !== day) {
-                user.modQuestDay = day;
-                user.modQuests = {};
-                MOD_QUEST_DEFS.forEach(function(q) {
-                    user.modQuests[q.id] = { progress: 0, done: false, claimed: false };
-                });
-                user.modGiftClaimed = false;
+        function loadCustomQuests() {
+            if (_customQuestsCache) return _customQuestsCache;
+            try {
+                const raw = localStorage.getItem('swordcity_custom_quests_v1');
+                if (raw) _customQuestsCache = JSON.parse(raw);
+            } catch (e) {}
+            if (!_customQuestsCache || typeof _customQuestsCache !== 'object') {
+                _customQuestsCache = {
+                    version: 1,
+                    active: true,
+                    quests: [
+                        { id: 'cq_trade', label: '1 takas tamamla', target: 1, key: 'trades', enabled: true },
+                        { id: 'cq_sell', label: '1 pazar satışı yap', target: 1, key: 'sells', enabled: true },
+                        { id: 'cq_msg', label: 'Bir arkadaşa mesaj at', target: 1, key: 'msgs', enabled: true }
+                    ],
+                    gift: {
+                        name: '🍌 Altın Muz Hediye',
+                        image: 'https://steamdb.com/assets/images/skins/cs2/stickers/sticker-banana.png',
+                        rarity: 'limited',
+                        category: 'esya',
+                        marketValue: 99999,
+                        info: 'Moderatör görevlerini tamamlayanın özel resimli hediyesi.',
+                        money: 2500,
+                        rep: 2
+                    }
+                };
             }
-            if (!user.modQuests) user.modQuests = {};
-            MOD_QUEST_DEFS.forEach(function(q) {
-                if (!user.modQuests[q.id]) user.modQuests[q.id] = { progress: 0, done: false, claimed: false };
+            return _customQuestsCache;
+        }
+
+        function saveCustomQuests(data) {
+            _customQuestsCache = data;
+            try { localStorage.setItem('swordcity_custom_quests_v1', JSON.stringify(data)); } catch (e) {}
+            if (typeof firebaseReady !== 'undefined' && firebaseReady) {
+                try { fbSet('custom_quests', data); } catch (e) {}
+            }
+        }
+
+        async function loadCustomQuestsAsync() {
+            try {
+                if (typeof firebaseReady !== 'undefined' && firebaseReady) {
+                    const d = await fbGet('custom_quests');
+                    if (d && typeof d === 'object' && Array.isArray(d.quests)) {
+                        _customQuestsCache = d;
+                        try { localStorage.setItem('swordcity_custom_quests_v1', JSON.stringify(d)); } catch (e) {}
+                    }
+                }
+            } catch (e) {}
+            return loadCustomQuests();
+        }
+
+        function getActiveCustomQuests() {
+            const data = loadCustomQuests();
+            if (!data.active) return [];
+            return (data.quests || []).filter(function(q) { return q && q.enabled !== false; });
+        }
+
+        function ensurePlayerCustomQuests(user) {
+            if (!user) return user;
+            const data = loadCustomQuests();
+            const active = getActiveCustomQuests();
+            const setId = (data.version || 1) + '_' + active.map(function(q) { return q.id; }).join('|');
+            if (user.cqSetId !== setId) {
+                user.cqSetId = setId;
+                user.customQuests = {};
+                user.customGiftClaimed = false;
+            }
+            if (!user.customQuests) user.customQuests = {};
+            active.forEach(function(q) {
+                if (!user.customQuests[q.id]) {
+                    user.customQuests[q.id] = { progress: 0, done: false, claimed: false };
+                }
             });
             return user;
         }
 
-        function bumpModQuest(key, n) {
+        function bumpCustomQuest(key, n) {
+            if (!key) return;
             const me = getCurrentUser();
-            if (!me || !isModerator(me)) return;
+            if (!me) return;
             const users = loadUsers();
             if (!users[me]) return;
-            ensureModQuests(users[me]);
+            ensurePlayerCustomQuests(users[me]);
+            const active = getActiveCustomQuests();
             let changed = false;
             const amount = n || 1;
-            function progressOne(qid, label, target) {
-                const st = users[me].modQuests[qid];
-                if (!st || st.claimed || st.done) return;
-                st.progress = Math.min(target, (st.progress || 0) + amount);
-                if (st.progress >= target) {
+            active.forEach(function(q) {
+                if ((q.key || '') !== key) return;
+                const st = users[me].customQuests[q.id];
+                if (!st || st.done || st.claimed) return;
+                st.progress = Math.min(q.target || 1, (st.progress || 0) + amount);
+                if (st.progress >= (q.target || 1)) {
                     st.done = true;
-                    pushNotif(me, '✅ Mod görevi tamam: ' + label, 'success');
+                    pushNotif(me, '✅ Görev tamam: ' + q.label + ' — ödülünü kontrol et!', 'success');
                 }
                 changed = true;
-            }
-            // Spesifik görev
-            MOD_QUEST_DEFS.forEach(function(q) {
-                if (q.key === key) progressOne(q.id, q.label, q.target);
             });
-            // Her moderasyon işlemi 'any' sayacını da artırır
-            if (key !== 'any') {
-                const anyQ = MOD_QUEST_DEFS.find(function(q) { return q.key === 'any'; });
-                if (anyQ) progressOne(anyQ.id, anyQ.label, anyQ.target);
-            }
             if (changed) {
                 saveUser(me, users[me]);
                 updateModGiftFab();
             }
         }
 
-        function allModQuestsDone(user) {
-            ensureModQuests(user);
-            return MOD_QUEST_DEFS.every(function(q) {
-                const st = user.modQuests[q.id];
+        function allCustomQuestsDone(user) {
+            ensurePlayerCustomQuests(user);
+            const active = getActiveCustomQuests();
+            if (!active.length) return false;
+            return active.every(function(q) {
+                const st = user.customQuests[q.id];
                 return st && st.done;
             });
         }
 
-        function claimModGift() {
+        function claimCustomGift() {
             const me = getCurrentUser();
-            if (!me || !isModerator(me)) { toast('Sadece moderatör.', 'error'); return; }
+            if (!me) return;
             const users = loadUsers();
-            ensureModQuests(users[me]);
-            if (!allModQuestsDone(users[me])) {
-                toast('Önce tüm moderatör görevlerini tamamla.', 'error');
+            if (!users[me]) return;
+            ensurePlayerCustomQuests(users[me]);
+            if (!allCustomQuestsDone(users[me])) {
+                toast('Önce tüm aktif görevleri tamamla.', 'error');
                 return;
             }
-            if (users[me].modGiftClaimed) {
-                toast('Bugünkü hediyeyi zaten aldın.', 'error');
+            if (users[me].customGiftClaimed) {
+                toast('Bu görev setinin hediyesini zaten aldın.', 'error');
                 return;
             }
-            users[me].modGiftClaimed = true;
+            const data = loadCustomQuests();
+            const giftDef = data.gift || {};
+            users[me].customGiftClaimed = true;
             if (!Array.isArray(users[me].inventory)) users[me].inventory = [];
-            const gift = Object.assign({}, MOD_GIFT_ITEM);
+            const gift = {
+                name: giftDef.name || 'Özel Hediye',
+                image: giftDef.image || '',
+                rarity: giftDef.rarity || 'limited',
+                category: giftDef.category || 'esya',
+                marketValue: Number(giftDef.marketValue) || 0,
+                info: giftDef.info || 'Moderatör görev ödülü'
+            };
             users[me].inventory.push(gift);
-            // ekstra nakit + itibar
-            users[me].balance = (Number(users[me].balance) || 0) + 5000;
-            let r = typeof users[me].reputation === 'number' ? users[me].reputation : 50;
-            users[me].reputation = Math.min(100, r + 3);
+            const money = Number(giftDef.money) || 0;
+            const repGain = Number(giftDef.rep) || 0;
+            if (money > 0) users[me].balance = (Number(users[me].balance) || 0) + money;
+            if (repGain > 0) {
+                let r = typeof users[me].reputation === 'number' ? users[me].reputation : 50;
+                users[me].reputation = Math.min(100, r + repGain);
+            }
             saveUser(me, users[me]);
-            pushNotif(me, '🎁 Resimli hediye alındı: ' + gift.name + ' (+$5000 +3 itibar)', 'success');
-            toast('🎁 Altın Muz hediyesi envanterine eklendi!');
+            pushNotif(me, '🎁 Hediye alındı: ' + gift.name + (money ? ' +$' + money : ''), 'success');
+            toast('🎁 Resimli hediye envanterine eklendi!');
             updateModGiftFab();
             openModGiftPanel();
         }
@@ -2090,7 +2143,13 @@
             const badge = document.getElementById('mod-gift-badge');
             if (!fab) return;
             const me = getCurrentUser();
-            if (!me || !isModerator(me)) {
+            if (!me) {
+                fab.classList.remove('show', 'has-reward');
+                if (badge) badge.classList.remove('show');
+                return;
+            }
+            const active = getActiveCustomQuests();
+            if (!active.length && !isModerator(me)) {
                 fab.classList.remove('show', 'has-reward');
                 if (badge) badge.classList.remove('show');
                 return;
@@ -2098,9 +2157,9 @@
             fab.classList.add('show');
             const users = loadUsers();
             if (!users[me]) return;
-            ensureModQuests(users[me]);
-            const done = allModQuestsDone(users[me]);
-            const claimed = !!users[me].modGiftClaimed;
+            ensurePlayerCustomQuests(users[me]);
+            const done = allCustomQuestsDone(users[me]);
+            const claimed = !!users[me].customGiftClaimed;
             if (done && !claimed) {
                 fab.classList.add('has-reward');
                 if (badge) { badge.textContent = '!'; badge.classList.add('show'); }
@@ -2112,45 +2171,233 @@
 
         function openModGiftPanel() {
             const me = getCurrentUser();
-            if (!me || !isModerator(me)) { toast('Sadece moderatör.', 'error'); return; }
+            if (!me) return;
+            const isMod = isModerator(me);
             const users = loadUsers();
-            ensureModQuests(users[me]);
+            ensurePlayerCustomQuests(users[me]);
             const u = users[me];
-            const rows = MOD_QUEST_DEFS.map(function(q) {
-                const st = u.modQuests[q.id] || { progress: 0, done: false };
-                const pct = Math.min(100, Math.round(((st.progress || 0) / q.target) * 100));
-                const status = st.done
-                    ? '<span style="color:var(--success);font-weight:700;">✓ Tamam</span>'
-                    : '<span style="color:var(--text-muted);">' + (st.progress || 0) + '/' + q.target + '</span>';
-                return `<div style="background:rgba(0,0,0,0.3);border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:10px;">
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-                        <span style="font-weight:600;">${escapeHtml(q.label)}</span>
-                        ${status}
-                    </div>
-                    <div style="height:6px;background:rgba(255,255,255,0.08);border-radius:4px;overflow:hidden;">
-                        <div style="height:100%;width:${pct}%;background:linear-gradient(90deg,var(--accent),#ffd700);border-radius:4px;"></div>
-                    </div>
-                </div>`;
-            }).join('');
-            const canClaim = allModQuestsDone(u) && !u.modGiftClaimed;
+            const data = loadCustomQuests();
+            const active = getActiveCustomQuests();
+            const giftDef = data.gift || {};
+
+            let rows = '';
+            if (!active.length) {
+                rows = '<p style="color:var(--text-muted);font-size:13px;">Şu an aktif özel görev yok.</p>';
+            } else {
+                rows = active.map(function(q) {
+                    const st = (u.customQuests && u.customQuests[q.id]) || { progress: 0, done: false };
+                    const tgt = q.target || 1;
+                    const pct = Math.min(100, Math.round(((st.progress || 0) / tgt) * 100));
+                    const status = st.done
+                        ? '<span style="color:var(--success);font-weight:700;">✓ Tamam</span>'
+                        : '<span style="color:var(--text-muted);">' + (st.progress || 0) + '/' + tgt + '</span>';
+                    return `<div style="background:rgba(0,0,0,0.3);border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:10px;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                            <span style="font-weight:600;">${escapeHtml(q.label || 'Görev')}</span>
+                            ${status}
+                        </div>
+                        <div style="height:6px;background:rgba(255,255,255,0.08);border-radius:4px;overflow:hidden;">
+                            <div style="height:100%;width:${pct}%;background:linear-gradient(90deg,var(--accent),#ffd700);border-radius:4px;"></div>
+                        </div>
+                    </div>`;
+                }).join('');
+            }
+
+            const canClaim = allCustomQuestsDone(u) && !u.customGiftClaimed;
             const giftPreview = `
                 <div style="text-align:center;margin:16px 0;padding:16px;background:rgba(255,215,0,0.08);border:1px solid #ffd700;border-radius:16px;">
-                    <img src="${escapeHtml(MOD_GIFT_ITEM.image)}" alt="hediye" style="width:96px;height:96px;object-fit:contain;border-radius:12px;margin-bottom:8px;" onerror="this.style.display='none'">
-                    <div style="font-weight:700;color:#ffd700;font-size:16px;">${escapeHtml(MOD_GIFT_ITEM.name)}</div>
-                    <div style="font-size:12px;color:var(--text-muted);margin-top:4px;">${escapeHtml(MOD_GIFT_ITEM.info)}</div>
-                    <div style="margin-top:8px;"><span class="rarity-badge rarity-limited">✦ LIMITED ✦</span></div>
+                    ${giftDef.image ? `<img src="${escapeHtml(giftDef.image)}" alt="hediye" style="width:96px;height:96px;object-fit:contain;border-radius:12px;margin-bottom:8px;" onerror="this.style.display='none'">` : '<div style="font-size:48px;margin-bottom:8px;">🎁</div>'}
+                    <div style="font-weight:700;color:#ffd700;font-size:16px;">${escapeHtml(giftDef.name || 'Özel Hediye')}</div>
+                    <div style="font-size:12px;color:var(--text-muted);margin-top:4px;">${escapeHtml(giftDef.info || '')}</div>
+                    <div style="margin-top:6px;font-size:12px;color:var(--text-muted);">
+                        ${giftDef.money ? '+$' + Number(giftDef.money).toLocaleString('tr-TR') : ''}
+                        ${giftDef.rep ? ' · +' + giftDef.rep + ' itibar' : ''}
+                    </div>
+                    <div style="margin-top:8px;"><span class="rarity-badge rarity-limited">✦ ${(giftDef.rarity || 'limited').toUpperCase()} ✦</span></div>
                 </div>`;
-            openModal('🎁 Moderatör Görevleri', `
-                <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px;">Günlük moderasyon görevlerini tamamla, resimli özel hediyeyi kap.</p>
+
+            let modTools = '';
+            if (isMod) {
+                modTools = `
+                    <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);">
+                        <button class="primary-btn" style="width:100%;margin-bottom:8px;" onclick="openModQuestEditor()">⚙️ Görevleri Düzenle (Mod)</button>
+                    </div>`;
+            }
+
+            openModal('🎁 Özel Görevler & Hediye', `
+                <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px;">
+                    ${isMod ? 'Oyuncu görevlerini sen belirliyorsun. Oyuncular tamamlayınca resimli hediyeyi alır.' : 'Moderatörün belirlediği görevleri tamamla, resimli hediyeyi kap.'}
+                </p>
                 ${rows}
                 ${giftPreview}
                 ${canClaim
-                    ? '<button class="primary-btn" style="width:100%;margin-bottom:8px;" onclick="claimModGift()">🎁 Hediyeyi Al</button>'
-                    : (u.modGiftClaimed
-                        ? '<p style="text-align:center;color:var(--success);font-weight:600;">Bugünkü hediye alındı ✓</p>'
+                    ? '<button class="primary-btn" style="width:100%;margin-bottom:8px;" onclick="claimCustomGift()">🎁 Hediyeyi Al</button>'
+                    : (u.customGiftClaimed
+                        ? '<p style="text-align:center;color:var(--success);font-weight:600;">Bu setin hediyesi alındı ✓</p>'
                         : '<p style="text-align:center;color:var(--text-muted);font-size:13px;">Tüm görevler bitince hediye açılır.</p>')}
+                ${modTools}
                 <button class="back-btn" onclick="closeModal()">Kapat</button>
             `);
+        }
+
+        function openModQuestEditor() {
+            if (!isModerator()) { toast('Sadece moderatör.', 'error'); return; }
+            const data = loadCustomQuests();
+            const quests = data.quests || [];
+            const gift = data.gift || {};
+            let listHtml = quests.map(function(q, i) {
+                return `<div style="background:rgba(0,0,0,0.3);border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:10px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+                        <div>
+                            <strong>${escapeHtml(q.label || '')}</strong>
+                            <span style="color:var(--text-muted);font-size:12px;"> · hedef ${q.target || 1} · key: ${escapeHtml(q.key || '—')}</span>
+                            ${q.enabled === false ? ' <span style="color:var(--danger);font-size:11px;">[kapalı]</span>' : ''}
+                        </div>
+                        <div style="display:flex;gap:6px;">
+                            <button class="mod-btn" style="padding:6px 10px;font-size:12px;" onclick="toggleCustomQuest(${i})">${q.enabled === false ? 'Aç' : 'Kapat'}</button>
+                            <button class="danger-btn" style="padding:6px 10px;font-size:12px;" onclick="deleteCustomQuest(${i})">Sil</button>
+                        </div>
+                    </div>
+                </div>`;
+            }).join('') || '<p style="color:var(--text-muted);font-size:13px;">Henüz görev yok.</p>';
+
+            openModal('⚙️ Görev & Hediye Düzenle', `
+                <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Oyuncuların göreceği görevler ve bitince alacakları resimli hediye.</p>
+                <div style="margin-bottom:8px;font-weight:700;color:var(--accent-soft);">Görevler</div>
+                ${listHtml}
+                <div style="background:rgba(0,0,0,0.25);border:1px solid var(--border);border-radius:12px;padding:12px;margin:12px 0;">
+                    <div style="font-weight:600;margin-bottom:8px;">Yeni görev ekle</div>
+                    <div class="form-group"><label>Görev metni</label>
+                    <input type="text" id="cq-label" placeholder="Örn: 2 takas tamamla" style="width:100%;padding:10px;border-radius:10px;background:rgba(0,0,0,0.35);border:1px solid var(--border);color:var(--text);"></div>
+                    <div class="form-group"><label>Hedef sayı</label>
+                    <input type="number" id="cq-target" value="1" min="1" style="width:100%;padding:10px;border-radius:10px;background:rgba(0,0,0,0.35);border:1px solid var(--border);color:var(--text);"></div>
+                    <div class="form-group"><label>Otomatik sayaç anahtarı (opsiyonel)</label>
+                    <select id="cq-key" style="width:100%;padding:10px;border-radius:10px;background:rgba(0,0,0,0.35);border:1px solid var(--border);color:var(--text);">
+                        <option value="">Manuel / yok</option>
+                        <option value="trades">trades (takas)</option>
+                        <option value="sells">sells (pazar satışı)</option>
+                        <option value="msgs">msgs (mesaj)</option>
+                    </select>
+                    <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">trades / sells / msgs ile otomatik ilerler.</div></div>
+                    <button class="primary-btn" onclick="addCustomQuest()">+ Görev Ekle</button>
+                </div>
+                <div style="margin:16px 0 8px;font-weight:700;color:var(--accent-soft);">Resimli hediye ayarı</div>
+                <div class="form-group"><label>Hediye adı</label>
+                <input type="text" id="cg-name" value="${escapeHtml(gift.name || '')}" style="width:100%;padding:10px;border-radius:10px;background:rgba(0,0,0,0.35);border:1px solid var(--border);color:var(--text);"></div>
+                <div class="form-group"><label>Resim URL</label>
+                <input type="text" id="cg-image" value="${escapeHtml(gift.image || '')}" placeholder="https://..." style="width:100%;padding:10px;border-radius:10px;background:rgba(0,0,0,0.35);border:1px solid var(--border);color:var(--text);"></div>
+                <div class="form-group"><label>Açıklama</label>
+                <input type="text" id="cg-info" value="${escapeHtml(gift.info || '')}" style="width:100%;padding:10px;border-radius:10px;background:rgba(0,0,0,0.35);border:1px solid var(--border);color:var(--text);"></div>
+                <div class="form-group"><label>Nakit ödül ($)</label>
+                <input type="number" id="cg-money" value="${Number(gift.money)||0}" min="0" style="width:100%;padding:10px;border-radius:10px;background:rgba(0,0,0,0.35);border:1px solid var(--border);color:var(--text);"></div>
+                <div class="form-group"><label>İtibar ödülü</label>
+                <input type="number" id="cg-rep" value="${Number(gift.rep)||0}" min="0" max="20" style="width:100%;padding:10px;border-radius:10px;background:rgba(0,0,0,0.35);border:1px solid var(--border);color:var(--text);"></div>
+                <div class="form-group"><label>Rarity</label>
+                <select id="cg-rarity" style="width:100%;padding:10px;border-radius:10px;background:rgba(0,0,0,0.35);border:1px solid var(--border);color:var(--text);">
+                    <option value="limited" ${gift.rarity==='limited'?'selected':''}>Limited</option>
+                    <option value="efsanevi" ${gift.rarity==='efsanevi'?'selected':''}>Efsanevi</option>
+                    <option value="ultra_efsanevi" ${gift.rarity==='ultra_efsanevi'?'selected':''}>Ultra Efsanevi</option>
+                    <option value="kromatik" ${gift.rarity==='kromatik'?'selected':''}>Kromatik</option>
+                    <option value="siradan" ${gift.rarity==='siradan'?'selected':''}>Sıradan</option>
+                </select></div>
+                <button class="primary-btn" style="width:100%;margin-bottom:8px;" onclick="saveCustomGiftSettings()">Hediyeyi Kaydet</button>
+                <button class="mod-btn" style="width:100%;margin-bottom:8px;" onclick="resetAllPlayerQuestProgress()">Tüm oyuncu ilerlemelerini sıfırla</button>
+                <label style="display:flex;align-items:center;gap:8px;margin:10px 0;font-size:13px;">
+                    <input type="checkbox" id="cq-active" ${data.active !== false ? 'checked' : ''} onchange="toggleCustomQuestsActive(this.checked)">
+                    Özel görevler aktif
+                </label>
+                <button class="back-btn" onclick="openModGiftPanel()">← Geri</button>
+            `);
+        }
+
+        function addCustomQuest() {
+            if (!isModerator()) return;
+            const label = ((document.getElementById('cq-label') || {}).value || '').trim();
+            const target = Math.max(1, Math.floor(Number((document.getElementById('cq-target') || {}).value) || 1));
+            const key = ((document.getElementById('cq-key') || {}).value || '').trim();
+            if (!label) { toast('Görev metni gerekli.', 'error'); return; }
+            const data = loadCustomQuests();
+            if (!Array.isArray(data.quests)) data.quests = [];
+            data.quests.push({
+                id: 'cq_' + Date.now() + '_' + Math.floor(Math.random() * 999),
+                label: label.slice(0, 80),
+                target: target,
+                key: key,
+                enabled: true
+            });
+            data.version = (Number(data.version) || 1) + 1;
+            saveCustomQuests(data);
+            toast('Görev eklendi');
+            openModQuestEditor();
+        }
+
+        function deleteCustomQuest(index) {
+            if (!isModerator()) return;
+            const data = loadCustomQuests();
+            if (!data.quests || !data.quests[index]) return;
+            if (!confirm('Bu görevi silmek istiyor musun?')) return;
+            data.quests.splice(index, 1);
+            data.version = (Number(data.version) || 1) + 1;
+            saveCustomQuests(data);
+            toast('Görev silindi');
+            openModQuestEditor();
+        }
+
+        function toggleCustomQuest(index) {
+            if (!isModerator()) return;
+            const data = loadCustomQuests();
+            if (!data.quests || !data.quests[index]) return;
+            data.quests[index].enabled = data.quests[index].enabled === false;
+            data.version = (Number(data.version) || 1) + 1;
+            saveCustomQuests(data);
+            openModQuestEditor();
+        }
+
+        function toggleCustomQuestsActive(on) {
+            if (!isModerator()) return;
+            const data = loadCustomQuests();
+            data.active = !!on;
+            saveCustomQuests(data);
+            updateModGiftFab();
+            toast(on ? 'Özel görevler açıldı' : 'Özel görevler kapatıldı');
+        }
+
+        function saveCustomGiftSettings() {
+            if (!isModerator()) return;
+            const data = loadCustomQuests();
+            data.gift = {
+                name: ((document.getElementById('cg-name') || {}).value || 'Özel Hediye').trim().slice(0, 60),
+                image: ((document.getElementById('cg-image') || {}).value || '').trim(),
+                info: ((document.getElementById('cg-info') || {}).value || '').trim().slice(0, 160),
+                money: Math.max(0, Math.floor(Number((document.getElementById('cg-money') || {}).value) || 0)),
+                rep: Math.max(0, Math.min(20, Math.floor(Number((document.getElementById('cg-rep') || {}).value) || 0))),
+                rarity: ((document.getElementById('cg-rarity') || {}).value || 'limited'),
+                category: 'esya',
+                marketValue: 99999
+            };
+            saveCustomQuests(data);
+            toast('Hediye ayarları kaydedildi');
+            openModQuestEditor();
+        }
+
+        function resetAllPlayerQuestProgress() {
+            if (!isModerator()) return;
+            if (!confirm('Tüm oyuncuların özel görev ilerlemesi ve hediye claim sıfırlansın mı?')) return;
+            const data = loadCustomQuests();
+            data.version = (Number(data.version) || 1) + 1;
+            saveCustomQuests(data);
+            const users = loadUsers();
+            Object.keys(users).forEach(function(name) {
+                if (users[name]) {
+                    users[name].cqSetId = null;
+                    users[name].customQuests = {};
+                    users[name].customGiftClaimed = false;
+                }
+            });
+            try { saveUsers(users); } catch (e) {}
+            toast('İlerlemeler sıfırlandı (yeni set)');
+            updateModGiftFab();
+            openModQuestEditor();
         }
 
         function todayKeyLocal() {
@@ -2245,6 +2492,10 @@
                 changed = true;
             });
             if (changed) saveUser(username, users[username]);
+            // Özel (moderatör tanımlı) görev ilerlemesi
+            try {
+                if (username === getCurrentUser()) bumpCustomQuest(key, n);
+            } catch (e) {}
         }
 
         function claimQuestReward(qid) {
@@ -2318,7 +2569,6 @@
             saveUser(username, users[username]);
             pushNotif(username, '⚠️ Moderasyon uyarısı (' + w + '): ' + reason, 'danger');
             pushModLog('warn', username + ' uyarı #' + w + ' — ' + reason);
-            try { bumpModQuest('warn'); } catch (e) {}
             if (w >= 3) {
                 adjustReputation(username, -10, '3+ uyarı');
                 toast('3+ uyarı: itibar −10 uygulandı');
@@ -2339,7 +2589,6 @@
             saveUser(username, users[username]);
             pushNotif(username, '💸 Para cezası: −$' + n.toLocaleString('tr-TR'), 'danger');
             pushModLog('fine', username + ' −$' + n);
-            try { bumpModQuest('fine'); } catch (e) {}
             pushTxHistory(username, 'Para cezası −$' + n, 'fine');
             toast('Ceza uygulandı');
             modSelectUser(username);
@@ -2357,7 +2606,6 @@
             if (users[username].modTags.length > 8) users[username].modTags = users[username].modTags.slice(0, 8);
             saveUser(username, users[username]);
             pushModLog('tag', username + ' +tag ' + t);
-            try { bumpModQuest('any'); } catch (e) {}
             toast('Etiket eklendi');
             modSelectUser(username);
         }
@@ -2896,7 +3144,6 @@
             try { localStorage.removeItem('swordcity_announce_dismiss'); } catch (e) {}
             renderAnnouncement();
             pushModLog('announce', obj.text.slice(0, 80));
-            try { bumpModQuest('announce'); } catch (e) {}
             toast('Duyuru yayınlandı.');
         }
         function openModAnnouncePanel() {
@@ -6015,6 +6262,7 @@
             if (modFolder) {
                 modFolder.style.display = isModerator(username) ? '' : 'none';
             }
+            try { loadCustomQuestsAsync().then(function(){ try { updateModGiftFab(); } catch(e){} }); } catch (e) {}
             try { updateModGiftFab(); } catch (e) {}
             // Canlı online durumu
             try { setupPresence(); } catch (e) {}
