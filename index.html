@@ -1212,6 +1212,29 @@
             display: none;
         }
         .daily-btn-float.show { display: block; }
+        #site-version-badge {
+            position: fixed;
+            right: 10px;
+            bottom: 8px;
+            z-index: 900;
+            font-size: 11px;
+            letter-spacing: 0.04em;
+            color: rgba(255,255,255,0.45);
+            background: rgba(0,0,0,0.35);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 8px;
+            padding: 4px 8px;
+            pointer-events: none;
+            user-select: none;
+            font-family: Orbitron, monospace, sans-serif;
+        }
+        body.is-mobile #site-version-badge {
+            right: 8px;
+            bottom: 6px;
+            font-size: 10px;
+            padding: 3px 6px;
+        }
+
         @media (max-width: 640px) {
             .folder-grid { grid-template-columns: repeat(2, 1fr) !important; gap: 10px !important; }
             .modal-content { max-width: 96vw !important; padding: 18px 14px !important; }
@@ -1826,6 +1849,7 @@
             <button class="primary-btn" style="margin-top:16px;" onclick="hideWarResultBanner()">Tamam</button>
         </div>
     </div>
+    <div id="site-version-badge">v1.0.0</div>
     <div id="toast" class="toast"></div>
 
     <!-- Müzik çalar sol alt -->
@@ -4235,9 +4259,15 @@
                 if (v && typeof v === 'object') {
                     _goldMarketCache = v;
                     try { localStorage.setItem('swordcity_gold_market_v1', JSON.stringify(v)); } catch (e) {}
-                    if (window._jewelerOpen) {
-                        try { openJeweler(); } catch (e) {}
-                    }
+                    try { updateJewelerPriceLabel(); } catch (e) {}
+                }
+            });
+            db.ref('site_version').on('value', snap => {
+                const v = snap.val();
+                if (v != null) {
+                    _siteVersionCache = (typeof v === 'object' && v.text != null) ? String(v.text) : String(v);
+                    try { localStorage.setItem('swordcity_site_version_v1', _siteVersionCache); } catch (e) {}
+                    try { renderSiteVersion(); } catch (e) {}
                 }
             });
             db.ref('rules').on('value', snap => {
@@ -5923,6 +5953,7 @@
             try { loadRentalsAsync().then(function(){ try { processExpiredRentals(); } catch(e){} }); } catch (e) {}
             try { loadClanWarsAsync().then(function(){ try { processClanWarsTimeouts(); } catch(e){} }); } catch (e) {}
             try { loadGoldMarketAsync().then(function(){ try { startGoldPriceTicker(); } catch(e){} }); } catch (e) { try { startGoldPriceTicker(); } catch(e2){} }
+            try { loadSiteVersionAsync().then(function(){ try { renderSiteVersion(); } catch(e){} }); } catch (e) { try { renderSiteVersion(); } catch(e2){} }
             // Canlı online durumu
             try { setupPresence(); } catch (e) {}
         }
@@ -6761,13 +6792,21 @@
             if (_goldTickTimer) return;
             _goldTickTimer = setInterval(function() {
                 try {
-                    const m = loadGoldMarketSync();
-                    maybeTickGoldPrice(m);
-                    if (window._jewelerOpen) {
-                        try { openJeweler(); } catch (e) {}
-                    }
+                    // Sadece arka planda fiyat güncelle — menüyü yeniden açma
+                    maybeTickGoldPrice(loadGoldMarketSync());
+                    // Açık kuyumcuda sadece fiyat satırını güncelle (modal yeniden açılmaz)
+                    try { updateJewelerPriceLabel(); } catch (e) {}
                 } catch (e) {}
             }, 15000); // 15sn kontrol; fiyat dakikada bir değişir
+        }
+        function updateJewelerPriceLabel() {
+            if (!window._jewelerOpen) return;
+            const el = document.getElementById('jeweler-live-price');
+            if (!el) return;
+            const price = getGoldPrice();
+            el.textContent = '$' + price.toLocaleString('tr-TR');
+            const sub = document.getElementById('jeweler-live-sub');
+            if (sub) sub.textContent = '1 Gold = $' + price.toLocaleString('tr-TR');
         }
 
         async function openJeweler() {
@@ -6794,8 +6833,8 @@
                     <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
                         <div>
                             <div style="font-size:12px;color:var(--text-muted);">Anlık altın fiyatı</div>
-                            <div style="font-size:28px;font-weight:800;color:#ffd54f;font-family:Orbitron,sans-serif;">$${price.toLocaleString('tr-TR')}</div>
-                            <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">1 Gold = $${price.toLocaleString('tr-TR')}</div>
+                            <div id="jeweler-live-price" style="font-size:28px;font-weight:800;color:#ffd54f;font-family:Orbitron,sans-serif;">$${price.toLocaleString('tr-TR')}</div>
+                            <div id="jeweler-live-sub" style="font-size:12px;color:var(--text-muted);margin-top:2px;">1 Gold = $${price.toLocaleString('tr-TR')}</div>
                         </div>
                         <div style="text-align:right;font-size:12px;line-height:1.5;">
                             ${lockNote}<br>
@@ -6917,6 +6956,74 @@
             try { pushModLog('gold_market', 'Altın fiyatı ayarlandı: $' + m.price + ' (baz $' + m.basePrice + ')'); } catch (e) {}
             toast('🥇 Altın piyasası kaydedildi');
             openJeweler();
+        }
+
+
+        // ========== SÜRÜM (sağ alt) ==========
+        let _siteVersionCache = null;
+
+        function loadSiteVersionSync() {
+            if (_siteVersionCache != null && String(_siteVersionCache).trim()) return String(_siteVersionCache).trim();
+            try {
+                const raw = localStorage.getItem('swordcity_site_version_v1');
+                if (raw && String(raw).trim()) _siteVersionCache = String(raw).trim();
+            } catch (e) {}
+            if (_siteVersionCache == null || !String(_siteVersionCache).trim()) _siteVersionCache = 'v1.0.0';
+            return String(_siteVersionCache).trim();
+        }
+
+        async function loadSiteVersionAsync() {
+            try {
+                if (typeof firebaseReady !== 'undefined' && firebaseReady) {
+                    const d = await fbGet('site_version');
+                    if (d != null) {
+                        _siteVersionCache = (typeof d === 'object' && d.text != null) ? String(d.text) : String(d);
+                        try { localStorage.setItem('swordcity_site_version_v1', _siteVersionCache); } catch (e) {}
+                    }
+                }
+            } catch (e) {}
+            return loadSiteVersionSync();
+        }
+
+        function saveSiteVersion(text) {
+            const t = String(text || '').trim().slice(0, 32) || 'v1.0.0';
+            _siteVersionCache = t;
+            try { localStorage.setItem('swordcity_site_version_v1', t); } catch (e) {}
+            if (typeof firebaseReady !== 'undefined' && firebaseReady) {
+                try { fbSet('site_version', { text: t, updatedAt: new Date().toISOString(), updatedBy: getCurrentUser() || 'mod' }); } catch (e) {}
+            }
+            renderSiteVersion();
+        }
+
+        function renderSiteVersion() {
+            const el = document.getElementById('site-version-badge');
+            if (!el) return;
+            el.textContent = loadSiteVersionSync();
+        }
+
+        function openSiteVersionMod() {
+            if (!isModerator()) { toast('Sadece moderatör.', 'error'); return; }
+            const cur = loadSiteVersionSync();
+            openModal('🏷️ Site Sürümü', `
+                <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Sağ altta küçük görünür. Örn: v1.2.0 veya SWOR-26</p>
+                <div class="form-group">
+                    <label>Sürüm yazısı</label>
+                    <input type="text" id="site-ver-input" value="${escapeHtml(cur)}" maxlength="32" style="width:100%;padding:10px;border-radius:10px;background:rgba(0,0,0,0.35);border:1px solid var(--border);color:var(--text);">
+                </div>
+                <button class="primary-btn" style="width:100%;margin-bottom:8px;" onclick="saveSiteVersionFromMod()">Kaydet</button>
+                <button class="back-btn" onclick="openModerator()">← Geri</button>
+            `);
+        }
+
+        function saveSiteVersionFromMod() {
+            if (!isModerator()) return;
+            const el = document.getElementById('site-ver-input');
+            const t = ((el && el.value) || '').trim();
+            if (!t) { toast('Sürüm boş olamaz.', 'error'); return; }
+            saveSiteVersion(t);
+            try { pushModLog('version', 'Sürüm güncellendi: ' + t); } catch (e) {}
+            toast('🏷️ Sürüm: ' + t);
+            openModerator();
         }
 
         function openBank() {
@@ -10304,6 +10411,9 @@
                 </button>
                 <button class="mod-btn" onclick="openModLogPanel()" style="margin-bottom:8px;">
                     <span style="font-size:20px;">📋</span> Mod Log
+                </button>
+                <button class="mod-btn" onclick="openSiteVersionMod()" style="margin-bottom:8px;">
+                    <span style="font-size:20px;">🏷️</span> Site Sürümü
                 </button>
                 <button class="mod-btn" onclick="openGoldMarketMod()" style="margin-bottom:8px;">
                     <span style="font-size:20px;">🥇</span> Altın Piyasası
