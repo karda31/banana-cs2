@@ -13437,54 +13437,195 @@ Lütfen daha sonra tekrar gelin.</textarea>
             const me = getCurrentUser();
             const recipes = loadCraftRecipes();
             const isMod = me && isModerator(me);
-            let html = '<p style="font-size:13px;color:var(--text-muted);margin-bottom:12px;">Moderatör tariflerini kullanarak malzemelerden yeni karakter üret.</p>';
+            let html = `
+                <p style="font-size:13px;color:var(--text-muted);margin-bottom:14px;line-height:1.45;">
+                    Malzemeleri kullanarak tariflerden yeni karakter üret. Sonuç envanterine eklenir.
+                </p>`;
             if (isMod) {
-                html += '<button class="primary-btn" style="width:100%;margin-bottom:12px;" onclick="modAddCraftRecipe()">➕ Yeni Tarif Ekle (Mod)</button>';
+                html += '<button class="primary-btn" style="width:100%;margin-bottom:14px;" onclick="modAddCraftRecipe()">➕ Yeni Tarif Ekle (Mod)</button>';
             }
             if (!recipes.length) {
-                html += '<p style="color:var(--text-muted);text-align:center;padding:16px 0;">Henüz tarif yok.</p>';
+                html += '<p style="color:var(--text-muted);text-align:center;padding:20px 0;">Henüz tarif yok.</p>';
             } else {
                 recipes.forEach(function(rec, ri) {
-                    const mats = (rec.materials || []).map(function(m) {
-                        return escapeHtml(m.name) + (m.qty > 1 ? ' x' + m.qty : '') + (m.rarity ? ' [' + rarityStyle(m.rarity).label + ']' : '');
-                    }).join(', ');
                     const res = rec.result || {};
-                    html += `<div class="info-card" style="margin-bottom:10px;">
-                        <div style="font-weight:700;">${escapeHtml(rec.name || 'Tarif')}</div>
-                        <div style="font-size:12px;color:var(--text-muted);margin-top:4px;">Gereken: ${mats || '—'}</div>
-                        <div style="margin-top:6px;">Sonuç: <b>${escapeHtml(res.name || '?')}</b> ${rarityBadgeHtml(res.rarity || 'siradan')}</div>
-                        <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
-                            <button class="primary-btn" style="flex:1;" onclick="doCraft(${ri})">🛠️ Üret</button>
-                            ${isMod ? `<button class="danger-btn" onclick="modDeleteCraftRecipe(${ri})">Sil</button>` : ''}
-                        </div>
-                    </div>`;
+                    const img = res.image
+                        ? `<img src="${escapeHtml(res.image)}" alt="" style="width:72px;height:72px;object-fit:cover;border-radius:14px;border:2px solid var(--border);box-shadow:0 0 18px rgba(255,0,204,0.25);" onerror="this.outerHTML='<div style=\\'width:72px;height:72px;border-radius:14px;background:rgba(255,0,204,0.12);display:grid;place-items:center;font-size:28px;border:1px solid var(--border);\\'>🛠️</div>'">`
+                        : `<div style="width:72px;height:72px;border-radius:14px;background:linear-gradient(145deg,rgba(255,0,204,0.18),rgba(80,0,120,0.25));display:grid;place-items:center;font-size:28px;border:1px solid var(--border);">🛠️</div>`;
+                    const mats = (rec.materials || []).map(function(m) {
+                        const badge = m.rarity ? rarityBadgeHtml(m.rarity) : '';
+                        return `<span style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px;margin:3px 4px 3px 0;background:rgba(0,0,0,0.28);border:1px solid var(--border);border-radius:999px;font-size:12px;">
+                            <b>${escapeHtml(m.name || '?')}</b>
+                            <span style="color:var(--accent-soft);">×${m.qty || 1}</span>
+                            ${badge}
+                        </span>`;
+                    }).join('');
+                    html += `
+                        <div class="info-card" style="margin-bottom:12px;padding:14px;">
+                            <div style="display:flex;gap:14px;align-items:flex-start;">
+                                ${img}
+                                <div style="flex:1;min-width:0;">
+                                    <div style="font-family:'Orbitron',sans-serif;font-size:13px;letter-spacing:1px;color:var(--accent-soft);margin-bottom:4px;">${escapeHtml(rec.name || 'Tarif')}</div>
+                                    <div style="font-weight:700;font-size:17px;margin-bottom:6px;">${escapeHtml(res.name || '?')}</div>
+                                    <div style="margin-bottom:8px;">${rarityBadgeHtml(res.rarity || 'siradan')}</div>
+                                    <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px;">Gereken malzemeler</div>
+                                    <div style="display:flex;flex-wrap:wrap;">${mats || '<span style="color:var(--text-muted);font-size:12px;">—</span>'}</div>
+                                </div>
+                            </div>
+                            <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">
+                                <button class="primary-btn" style="flex:1;" onclick="doCraft(${ri})">🛠️ Üret</button>
+                                ${isMod ? `<button class="danger-btn" onclick="modDeleteCraftRecipe(${ri})">Sil</button>` : ''}
+                            </div>
+                        </div>`;
                 });
             }
             html += '<button class="back-btn" onclick="closeModal()">Kapat</button>';
             openModal('🛠️ Craft', html);
         }
 
+        function craftMatRowHtml(idx, data) {
+            data = data || {};
+            const name = escapeHtml(data.name || '');
+            const qty = data.qty || 1;
+            const rar = data.rarity || 'siradan';
+            return `
+                <div class="info-card craft-mat-row" data-idx="${idx}" style="margin-bottom:8px;padding:10px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                        <span style="font-weight:700;font-size:13px;color:var(--accent-soft);">Malzeme #${idx + 1}</span>
+                        <button type="button" class="danger-btn" style="padding:4px 10px;font-size:12px;" onclick="craftRemoveMat(${idx})">Kaldır</button>
+                    </div>
+                    <div class="form-group" style="margin-bottom:8px;">
+                        <label>Eşya / karakter adı</label>
+                        <input type="text" class="cr-mat-name" value="${name}" placeholder="Tam ad (envanterdekiyle aynı)">
+                    </div>
+                    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+                        <div class="form-group" style="flex:1;min-width:90px;margin-bottom:0;">
+                            <label>Adet</label>
+                            <input type="number" class="cr-mat-qty" value="${qty}" min="1" step="1">
+                        </div>
+                        <div class="form-group" style="flex:2;min-width:140px;margin-bottom:0;">
+                            <label>Enderlik (opsiyonel filtre)</label>
+                            ${raritySelectHtml(rar, 'cr-mat-rar-' + idx)}
+                        </div>
+                    </div>
+                </div>`;
+        }
+
         function modAddCraftRecipe() {
             const me = getCurrentUser();
             if (!me || !isModerator(me)) { toast('Sadece moderatör.', 'error'); return; }
+            window._craftMats = [{ name: '', qty: 1, rarity: 'siradan' }];
+            renderCraftRecipeForm();
+        }
+
+        function renderCraftRecipeForm() {
+            if (!Array.isArray(window._craftMats) || !window._craftMats.length) {
+                window._craftMats = [{ name: '', qty: 1, rarity: 'siradan' }];
+            }
+            // mevcut form değerlerini sakla
+            const prevName = ((document.getElementById('cr-name') || {}).value) || '';
+            const prevResName = ((document.getElementById('cr-res-name') || {}).value) || '';
+            const prevResImg = ((document.getElementById('cr-res-img') || {}).value) || '';
+            const prevResRar = ((document.getElementById('cr-res-rar') || {}).value) || 'ender';
+
+            // satırlardaki mevcut değerleri geri yaz
+            const rows = document.querySelectorAll('.craft-mat-row');
+            rows.forEach(function(row, i) {
+                if (!window._craftMats[i]) return;
+                const n = row.querySelector('.cr-mat-name');
+                const q = row.querySelector('.cr-mat-qty');
+                const r = row.querySelector('select');
+                if (n) window._craftMats[i].name = n.value;
+                if (q) window._craftMats[i].qty = parseInt(q.value, 10) || 1;
+                if (r) window._craftMats[i].rarity = r.value;
+            });
+
+            let matsHtml = '';
+            window._craftMats.forEach(function(m, i) {
+                matsHtml += craftMatRowHtml(i, m);
+            });
+
             openModal('➕ Craft Tarifi', `
-                <div class="form-group"><label>Tarif adı</label><input type="text" id="cr-name" placeholder="Örn: Efsanevi Kılıççı"></div>
-                <div class="form-group"><label>Malzeme 1 adı</label><input type="text" id="cr-m1-name" placeholder="Karakter/eşya adı"></div>
-                <div class="form-group"><label>Malzeme 1 adet</label><input type="number" id="cr-m1-qty" value="1" min="1"></div>
-                <div class="form-group"><label>Malzeme 1 enderlik (opsiyonel)</label>${raritySelectHtml('siradan','cr-m1-rar')}</div>
-                <div class="form-group"><label>Malzeme 2 adı (opsiyonel)</label><input type="text" id="cr-m2-name"></div>
-                <div class="form-group"><label>Malzeme 2 adet</label><input type="number" id="cr-m2-qty" value="1" min="1"></div>
-                <div class="form-group"><label>Malzeme 2 enderlik</label>${raritySelectHtml('siradan','cr-m2-rar')}</div>
-                <div class="form-group"><label>Malzeme 3 adı (opsiyonel)</label><input type="text" id="cr-m3-name"></div>
-                <div class="form-group"><label>Malzeme 3 adet</label><input type="number" id="cr-m3-qty" value="1" min="1"></div>
-                <div class="form-group"><label>Malzeme 3 enderlik</label>${raritySelectHtml('siradan','cr-m3-rar')}</div>
-                <hr style="border-color:var(--border);margin:12px 0;">
-                <div class="form-group"><label>Sonuç karakter adı</label><input type="text" id="cr-res-name" placeholder="Yeni karakter"></div>
-                <div class="form-group"><label>Sonuç enderlik</label>${raritySelectHtml('ender','cr-res-rar')}</div>
-                <div class="form-group"><label>Sonuç görsel URL (opsiyonel)</label><input type="text" id="cr-res-img" placeholder="https://..."></div>
+                <div class="form-group">
+                    <label>Tarif adı</label>
+                    <input type="text" id="cr-name" value="${escapeHtml(prevName)}" placeholder="Örn: Efsanevi Kılıççı">
+                </div>
+                <div style="font-weight:700;margin:12px 0 8px;color:var(--accent-soft);">Malzemeler (istediğin kadar ekle)</div>
+                <div id="cr-mats-wrap">${matsHtml}</div>
+                <button type="button" class="primary-btn" style="width:100%;margin-bottom:14px;background:rgba(255,0,204,0.15);" onclick="craftAddMat()">➕ Malzeme Ekle</button>
+                <hr style="border-color:var(--border);margin:14px 0;">
+                <div style="font-weight:700;margin-bottom:8px;color:var(--accent-soft);">Üretilecek sonuç</div>
+                <div class="form-group">
+                    <label>Sonuç karakter adı</label>
+                    <input type="text" id="cr-res-name" value="${escapeHtml(prevResName)}" placeholder="Yeni karakter adı">
+                </div>
+                <div class="form-group">
+                    <label>Sonuç enderlik</label>
+                    ${raritySelectHtml(prevResRar, 'cr-res-rar')}
+                </div>
+                <div class="form-group">
+                    <label>Sonuç görsel URL</label>
+                    <input type="text" id="cr-res-img" value="${escapeHtml(prevResImg)}" placeholder="https://..." oninput="craftPreviewResultImg()">
+                    <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Resim URL'si — oyuncular craft menüsünde görür</div>
+                </div>
+                <div id="cr-res-preview" style="display:flex;justify-content:center;margin:10px 0 14px;">
+                    <div style="width:96px;height:96px;border-radius:16px;background:rgba(255,0,204,0.1);border:1px dashed var(--border);display:grid;place-items:center;color:var(--text-muted);font-size:12px;text-align:center;padding:8px;">Önizleme</div>
+                </div>
                 <button class="primary-btn" onclick="modSaveCraftRecipe()">Kaydet</button>
                 <button class="back-btn" onclick="openCraft()">← Geri</button>
             `);
+            // rarity select değerlerini satırlara uygula
+            window._craftMats.forEach(function(m, i) {
+                const sel = document.getElementById('cr-mat-rar-' + i);
+                if (sel && m.rarity) sel.value = normalizeRarity(m.rarity);
+            });
+            craftPreviewResultImg();
+        }
+
+        function craftAddMat() {
+            // mevcut değerleri oku
+            const rows = document.querySelectorAll('.craft-mat-row');
+            rows.forEach(function(row, i) {
+                if (!window._craftMats[i]) window._craftMats[i] = { name: '', qty: 1, rarity: 'siradan' };
+                const n = row.querySelector('.cr-mat-name');
+                const q = row.querySelector('.cr-mat-qty');
+                const r = row.querySelector('select');
+                if (n) window._craftMats[i].name = n.value;
+                if (q) window._craftMats[i].qty = parseInt(q.value, 10) || 1;
+                if (r) window._craftMats[i].rarity = r.value;
+            });
+            window._craftMats.push({ name: '', qty: 1, rarity: 'siradan' });
+            renderCraftRecipeForm();
+        }
+
+        function craftRemoveMat(idx) {
+            const rows = document.querySelectorAll('.craft-mat-row');
+            rows.forEach(function(row, i) {
+                if (!window._craftMats[i]) window._craftMats[i] = { name: '', qty: 1, rarity: 'siradan' };
+                const n = row.querySelector('.cr-mat-name');
+                const q = row.querySelector('.cr-mat-qty');
+                const r = row.querySelector('select');
+                if (n) window._craftMats[i].name = n.value;
+                if (q) window._craftMats[i].qty = parseInt(q.value, 10) || 1;
+                if (r) window._craftMats[i].rarity = r.value;
+            });
+            if (window._craftMats.length <= 1) {
+                toast('En az 1 malzeme satırı kalmalı.', 'error');
+                return;
+            }
+            window._craftMats.splice(idx, 1);
+            renderCraftRecipeForm();
+        }
+
+        function craftPreviewResultImg() {
+            const url = ((document.getElementById('cr-res-img') || {}).value || '').trim();
+            const box = document.getElementById('cr-res-preview');
+            if (!box) return;
+            if (!url) {
+                box.innerHTML = '<div style="width:96px;height:96px;border-radius:16px;background:rgba(255,0,204,0.1);border:1px dashed var(--border);display:grid;place-items:center;color:var(--text-muted);font-size:12px;text-align:center;padding:8px;">Önizleme</div>';
+                return;
+            }
+            box.innerHTML = `<img src="${escapeHtml(url)}" alt="önizleme" style="width:96px;height:96px;object-fit:cover;border-radius:16px;border:2px solid var(--border);box-shadow:0 0 20px rgba(255,0,204,0.35);" onerror="this.parentElement.innerHTML='<div style=\\'width:96px;height:96px;border-radius:16px;background:rgba(255,61,113,0.12);border:1px solid rgba(255,61,113,0.4);display:grid;place-items:center;color:#ff3d71;font-size:12px;text-align:center;padding:8px;\\'>Resim yüklenemedi</div>'">`;
         }
 
         function modSaveCraftRecipe() {
@@ -13492,15 +13633,19 @@ Lütfen daha sonra tekrar gelin.</textarea>
             if (!me || !isModerator(me)) return;
             const name = ((document.getElementById('cr-name') || {}).value || '').trim() || 'Tarif';
             const materials = [];
-            for (let i = 1; i <= 3; i++) {
-                const n = ((document.getElementById('cr-m' + i + '-name') || {}).value || '').trim();
-                if (!n) continue;
-                let qty = parseInt((document.getElementById('cr-m' + i + '-qty') || {}).value, 10);
+            const rows = document.querySelectorAll('.craft-mat-row');
+            rows.forEach(function(row) {
+                const nEl = row.querySelector('.cr-mat-name');
+                const qEl = row.querySelector('.cr-mat-qty');
+                const rEl = row.querySelector('select');
+                const n = (nEl && nEl.value || '').trim();
+                if (!n) return;
+                let qty = parseInt(qEl && qEl.value, 10);
                 if (isNaN(qty) || qty < 1) qty = 1;
-                const rar = normalizeRarity((document.getElementById('cr-m' + i + '-rar') || {}).value);
+                const rar = normalizeRarity(rEl && rEl.value);
                 materials.push({ name: n, qty: qty, rarity: rar });
-            }
-            if (!materials.length) { toast('En az 1 malzeme gerekli.', 'error'); return; }
+            });
+            if (!materials.length) { toast('En az 1 malzeme gerekli (ad yazılmalı).', 'error'); return; }
             const resName = ((document.getElementById('cr-res-name') || {}).value || '').trim();
             if (!resName) { toast('Sonuç karakter adı gerekli.', 'error'); return; }
             const resRar = normalizeRarity((document.getElementById('cr-res-rar') || {}).value);
@@ -13515,6 +13660,7 @@ Lütfen daha sonra tekrar gelin.</textarea>
                 createdAt: new Date().toISOString()
             });
             saveCraftRecipes(recipes);
+            window._craftMats = null;
             toast('Tarif eklendi');
             openCraft();
         }
@@ -13535,7 +13681,7 @@ Lütfen daha sonra tekrar gelin.</textarea>
             if (!me) return;
             const recipes = loadCraftRecipes();
             const rec = recipes[ri];
-            if (!rec) { toast('Tarif yok.', 'error'); return; }
+            if (!rec) { toast('Tarif bulunamadı.', 'error'); return; }
             const users = loadUsers();
             if (!users[me]) return;
             ensureUserFields(users[me]);
