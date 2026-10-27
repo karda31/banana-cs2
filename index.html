@@ -1753,6 +1753,16 @@
                     <div class="folder-name">Kiralama</div>
                     <div class="folder-desc">Karakter kirala</div>
                 </div>
+                <div class="folder" onclick="openCraft()">
+                    <div class="folder-icon">🛠️</div>
+                    <div class="folder-name">Craft</div>
+                    <div class="folder-desc">Tarifler & üret</div>
+                </div>
+                <div class="folder" onclick="openUpgrader()">
+                    <div class="folder-icon">⬆️</div>
+                    <div class="folder-name">Yükseltici</div>
+                    <div class="folder-desc">5 aynı → 1 üst</div>
+                </div>
                 <div class="folder" onclick="openTrade()">
                     <div class="folder-icon">🔄</div>
                     <div class="folder-name">Takas</div>
@@ -1906,6 +1916,7 @@
         let _usersCache = {};
         let _marketCache = [];
         let _rentalsCache = [];
+        let _craftRecipesCache = [];
         let _charPricesCache = {}; // karakter adı -> orijinal piyasa fiyatı
         let _tradesCache = [];
         let _casesCache = [];
@@ -13096,8 +13107,10 @@ Lütfen daha sonra tekrar gelin.</textarea>
                     const img = it.image
                         ? `<img src="${escapeHtml(it.image)}" alt="" style="width:56px;height:56px;object-fit:cover;border-radius:10px;border:1px solid var(--border);" onerror="this.style.display='none'">`
                         : `<div style="width:56px;height:56px;border-radius:10px;background:rgba(255,0,204,0.12);display:grid;place-items:center;font-size:24px;">⚔️</div>`;
-                    const hours = Number(r.hours) || 1;
                     const price = Math.max(0, Math.floor(Number(r.price) || 0));
+                    const currency = (r.currency || 'gold');
+                    const curLabel = currency === 'diamond' ? '💎 Diamond' : (currency === 'emerald' ? '💚 Emerald' : '🥇 Gold');
+                    const dur = formatRentDuration(r);
                     const isMine = r.owner === me;
                     list += `
                         <div class="info-card" style="margin-bottom:10px;">
@@ -13107,7 +13120,7 @@ Lütfen daha sonra tekrar gelin.</textarea>
                                     <div style="font-weight:700;">${escapeHtml(it.name || 'Karakter')}</div>
                                     <div style="margin-top:4px;">${rarityBadgeHtml(it.rarity)}</div>
                                     <div style="font-size:12px;color:var(--text-muted);margin-top:4px;">
-                                        ⏱ ${hours} saat · 💰 $${price.toLocaleString('tr-TR')}
+                                        ⏱ ${dur} · ${curLabel} ${price.toLocaleString('tr-TR')}
                                         · Sahip: ${isMine ? 'sen' : formatDisplayName(r.owner)}
                                     </div>
                                 </div>
@@ -13166,14 +13179,29 @@ Lütfen daha sonra tekrar gelin.</textarea>
                     <select id="rent-item-index">${opts}</select>
                 </div>
                 <div class="form-group">
-                    <label>Kira ücreti ($)</label>
+                    <label>Para birimi</label>
+                    <select id="rent-currency">
+                        <option value="gold">🥇 Gold</option>
+                        <option value="emerald">💚 Emerald</option>
+                        <option value="diamond">💎 Diamond</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Kira ücreti</label>
                     <input type="number" id="rent-price" value="0" min="0" step="1">
                     <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">0 = ücretsiz kiralama</div>
                 </div>
                 <div class="form-group">
-                    <label>Süre (saat)</label>
-                    <input type="number" id="rent-hours" value="24" min="1" max="168" step="1">
-                    <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">1–168 saat (max 7 gün)</div>
+                    <label>Süre</label>
+                    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                        <input type="number" id="rent-days" value="0" min="0" max="30" step="1" style="width:80px;" placeholder="Gün">
+                        <span style="font-size:12px;color:var(--text-muted);">gün</span>
+                        <input type="number" id="rent-hours" value="24" min="0" max="23" step="1" style="width:80px;" placeholder="Saat">
+                        <span style="font-size:12px;color:var(--text-muted);">saat</span>
+                        <input type="number" id="rent-minutes" value="0" min="0" max="59" step="1" style="width:80px;" placeholder="Dk">
+                        <span style="font-size:12px;color:var(--text-muted);">dk</span>
+                    </div>
+                    <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">En az 1 dakika, en fazla 30 gün</div>
                 </div>
                 <button class="primary-btn" onclick="confirmRentListing()">İlanı Yayınla</button>
                 <button class="back-btn" onclick="openRentals()">← Geri</button>
@@ -13185,11 +13213,28 @@ Lütfen daha sonra tekrar gelin.</textarea>
             if (!me) return;
             const idx = parseInt((document.getElementById('rent-item-index') || {}).value, 10);
             let price = parseFloat((document.getElementById('rent-price') || {}).value);
+            let days = parseInt((document.getElementById('rent-days') || {}).value, 10);
             let hours = parseInt((document.getElementById('rent-hours') || {}).value, 10);
+            let minutes = parseInt((document.getElementById('rent-minutes') || {}).value, 10);
+            let currency = ((document.getElementById('rent-currency') || {}).value || 'gold').toLowerCase();
+            if (['gold','emerald','diamond'].indexOf(currency) < 0) currency = 'gold';
             if (isNaN(price) || price < 0) price = 0;
             price = Math.floor(price);
-            if (isNaN(hours) || hours < 1) hours = 1;
-            if (hours > 168) hours = 168;
+            if (isNaN(days) || days < 0) days = 0;
+            if (isNaN(hours) || hours < 0) hours = 0;
+            if (isNaN(minutes) || minutes < 0) minutes = 0;
+            if (days > 30) days = 30;
+            if (hours > 23) hours = 23;
+            if (minutes > 59) minutes = 59;
+            const totalMinutes = days * 24 * 60 + hours * 60 + minutes;
+            if (totalMinutes < 1) {
+                toast('Süre en az 1 dakika olmalı.', 'error');
+                return;
+            }
+            if (totalMinutes > 30 * 24 * 60) {
+                toast('Süre en fazla 30 gün olabilir.', 'error');
+                return;
+            }
             const users = loadUsers();
             if (!users[me] || !Array.isArray(users[me].inventory) || !users[me].inventory[idx]) {
                 toast('Karakter bulunamadı.', 'error');
@@ -13216,7 +13261,11 @@ Lütfen daha sonra tekrar gelin.</textarea>
                 owner: me,
                 item: item,
                 price: price,
+                currency: currency,
+                days: days,
                 hours: hours,
+                minutes: minutes,
+                totalMinutes: totalMinutes,
                 status: 'listed',
                 createdAt: new Date().toISOString(),
                 listExpiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
@@ -13262,7 +13311,17 @@ Lütfen daha sonra tekrar gelin.</textarea>
             if (r.owner === me) { toast('Kendi ilanını kiralayamazsın.', 'error'); return; }
 
             const price = Math.max(0, Math.floor(Number(r.price) || 0));
-            const hours = Math.max(1, Math.min(168, Number(r.hours) || 1));
+            const currency = (r.currency === 'emerald' || r.currency === 'diamond') ? r.currency : 'gold';
+            let totalMinutes = Number(r.totalMinutes);
+            if (!totalMinutes || totalMinutes < 1) {
+                const d = Number(r.days) || 0;
+                const h = Number(r.hours) || 0;
+                const m = Number(r.minutes) || 0;
+                // eski ilanlar: sadece hours
+                if (!d && !m && h) totalMinutes = h * 60;
+                else totalMinutes = d * 24 * 60 + h * 60 + m;
+            }
+            if (totalMinutes < 1) totalMinutes = 60;
             const users = loadUsers();
             if (!users[me] || !users[r.owner]) {
                 toast('Kullanıcı bulunamadı.', 'error');
@@ -13270,8 +13329,9 @@ Lütfen daha sonra tekrar gelin.</textarea>
             }
             ensureUserFields(users[me]);
             ensureUserFields(users[r.owner]);
-            if (price > 0 && (Number(users[me].balance) || 0) < price) {
-                toast('Yetersiz bakiye! $' + price.toLocaleString('tr-TR') + ' gerekli', 'error');
+            const curLabel = currency === 'diamond' ? 'Diamond' : (currency === 'emerald' ? 'Emerald' : 'Gold');
+            if (price > 0 && (Number(users[me][currency]) || 0) < price) {
+                toast('Yetersiz ' + curLabel + '! ' + price.toLocaleString('tr-TR') + ' gerekli', 'error');
                 return;
             }
             if (invSpaceLeft(users[me]) < 1) {
@@ -13279,14 +13339,15 @@ Lütfen daha sonra tekrar gelin.</textarea>
                 return;
             }
             const it = normalizeItem(r.item || {});
-            if (!confirm('"' + (it.name || 'Karakter') + '" karakterini ' + hours + ' saatliğine $' + price.toLocaleString('tr-TR') + ' karşılığında kiralamak istiyor musun?')) return;
+            const durTxt = formatRentDuration(r);
+            if (!confirm('"' + (it.name || 'Karakter') + '" karakterini ' + durTxt + ' süreliğine ' + price.toLocaleString('tr-TR') + ' ' + curLabel + ' karşılığında kiralamak istiyor musun?')) return;
 
-            // Para
+            // Para (gold / emerald / diamond)
             if (price > 0) {
-                users[me].balance = (Number(users[me].balance) || 0) - price;
-                users[r.owner].balance = (Number(users[r.owner].balance) || 0) + price;
+                users[me][currency] = (Number(users[me][currency]) || 0) - price;
+                users[r.owner][currency] = (Number(users[r.owner][currency]) || 0) + price;
             }
-            const rentUntil = new Date(Date.now() + hours * 60 * 60 * 1000).toISOString();
+            const rentUntil = new Date(Date.now() + totalMinutes * 60 * 1000).toISOString();
             const rentedItem = normalizeItem(it);
             rentedItem._rented = true;
             rentedItem._rentId = r.id;
@@ -13306,10 +13367,330 @@ Lütfen daha sonra tekrar gelin.</textarea>
             saveRentals(rentals);
 
             try { pushNotif(me, '🏠 Kiraladın: ' + (it.name || 'Karakter') + ' · bitiş ' + new Date(rentUntil).toLocaleString('tr-TR'), 'success'); } catch (e) {}
-            try { pushNotif(r.owner, '🏠 Karakterin kiralandı: ' + (it.name || 'Karakter') + (price ? (' +$' + price) : ''), 'success'); } catch (e) {}
+            try { pushNotif(r.owner, '🏠 Karakterin kiralandı: ' + (it.name || 'Karakter') + (price ? (' +' + price + ' ' + curLabel) : ''), 'success'); } catch (e) {}
             toast('Kiralama tamam!');
             openRentals();
         }
+
+
+        // ========== KİRALAMA SÜRE YARDIMCISI ==========
+        function formatRentDuration(r) {
+            if (!r) return '?';
+            let d = Number(r.days) || 0;
+            let h = Number(r.hours) || 0;
+            let m = Number(r.minutes) || 0;
+            let total = Number(r.totalMinutes);
+            if (!total || total < 1) {
+                if (!d && !m && h) total = h * 60;
+                else total = d * 24 * 60 + h * 60 + m;
+            }
+            if (total < 1 && h) total = h * 60;
+            if (total < 1) return '1 dk';
+            d = Math.floor(total / (24 * 60));
+            h = Math.floor((total % (24 * 60)) / 60);
+            m = total % 60;
+            const parts = [];
+            if (d) parts.push(d + ' gün');
+            if (h) parts.push(h + ' saat');
+            if (m) parts.push(m + ' dk');
+            return parts.length ? parts.join(' ') : '1 dk';
+        }
+
+        // ========== CRAFT SİSTEMİ ==========
+        function loadCraftRecipes() {
+            return Array.isArray(_craftRecipesCache) ? _craftRecipesCache : [];
+        }
+        async function loadCraftRecipesAsync() {
+            try {
+                if (typeof firebaseReady !== 'undefined' && firebaseReady) {
+                    const data = await fbGet('craft_recipes');
+                    _craftRecipesCache = Array.isArray(data) ? data : (data ? Object.values(data) : []);
+                } else {
+                    try { _craftRecipesCache = JSON.parse(localStorage.getItem('swordcity_craft_recipes_v1') || '[]'); }
+                    catch (e) { _craftRecipesCache = []; }
+                }
+            } catch (e) {
+                try { _craftRecipesCache = JSON.parse(localStorage.getItem('swordcity_craft_recipes_v1') || '[]'); }
+                catch (e2) { _craftRecipesCache = []; }
+            }
+            if (!Array.isArray(_craftRecipesCache)) _craftRecipesCache = [];
+            return _craftRecipesCache;
+        }
+        function saveCraftRecipes(list) {
+            _craftRecipesCache = Array.isArray(list) ? list : [];
+            try { localStorage.setItem('swordcity_craft_recipes_v1', JSON.stringify(_craftRecipesCache)); } catch (e) {}
+            if (typeof firebaseReady !== 'undefined' && firebaseReady) {
+                try { fbSet('craft_recipes', _craftRecipesCache); } catch (e) {}
+            }
+        }
+
+        async function openCraft() {
+            await loadCraftRecipesAsync();
+            const me = getCurrentUser();
+            const recipes = loadCraftRecipes();
+            const isMod = me && isModerator(me);
+            let html = '<p style="font-size:13px;color:var(--text-muted);margin-bottom:12px;">Moderatör tariflerini kullanarak malzemelerden yeni karakter üret.</p>';
+            if (isMod) {
+                html += '<button class="primary-btn" style="width:100%;margin-bottom:12px;" onclick="modAddCraftRecipe()">➕ Yeni Tarif Ekle (Mod)</button>';
+            }
+            if (!recipes.length) {
+                html += '<p style="color:var(--text-muted);text-align:center;padding:16px 0;">Henüz tarif yok.</p>';
+            } else {
+                recipes.forEach(function(rec, ri) {
+                    const mats = (rec.materials || []).map(function(m) {
+                        return escapeHtml(m.name) + (m.qty > 1 ? ' x' + m.qty : '') + (m.rarity ? ' [' + rarityStyle(m.rarity).label + ']' : '');
+                    }).join(', ');
+                    const res = rec.result || {};
+                    html += `<div class="info-card" style="margin-bottom:10px;">
+                        <div style="font-weight:700;">${escapeHtml(rec.name || 'Tarif')}</div>
+                        <div style="font-size:12px;color:var(--text-muted);margin-top:4px;">Gereken: ${mats || '—'}</div>
+                        <div style="margin-top:6px;">Sonuç: <b>${escapeHtml(res.name || '?')}</b> ${rarityBadgeHtml(res.rarity || 'siradan')}</div>
+                        <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
+                            <button class="primary-btn" style="flex:1;" onclick="doCraft(${ri})">🛠️ Üret</button>
+                            ${isMod ? `<button class="danger-btn" onclick="modDeleteCraftRecipe(${ri})">Sil</button>` : ''}
+                        </div>
+                    </div>`;
+                });
+            }
+            html += '<button class="back-btn" onclick="closeModal()">Kapat</button>';
+            openModal('🛠️ Craft', html);
+        }
+
+        function modAddCraftRecipe() {
+            const me = getCurrentUser();
+            if (!me || !isModerator(me)) { toast('Sadece moderatör.', 'error'); return; }
+            openModal('➕ Craft Tarifi', `
+                <div class="form-group"><label>Tarif adı</label><input type="text" id="cr-name" placeholder="Örn: Efsanevi Kılıççı"></div>
+                <div class="form-group"><label>Malzeme 1 adı</label><input type="text" id="cr-m1-name" placeholder="Karakter/eşya adı"></div>
+                <div class="form-group"><label>Malzeme 1 adet</label><input type="number" id="cr-m1-qty" value="1" min="1"></div>
+                <div class="form-group"><label>Malzeme 1 enderlik (opsiyonel)</label>${raritySelectHtml('siradan','cr-m1-rar')}</div>
+                <div class="form-group"><label>Malzeme 2 adı (opsiyonel)</label><input type="text" id="cr-m2-name"></div>
+                <div class="form-group"><label>Malzeme 2 adet</label><input type="number" id="cr-m2-qty" value="1" min="1"></div>
+                <div class="form-group"><label>Malzeme 2 enderlik</label>${raritySelectHtml('siradan','cr-m2-rar')}</div>
+                <div class="form-group"><label>Malzeme 3 adı (opsiyonel)</label><input type="text" id="cr-m3-name"></div>
+                <div class="form-group"><label>Malzeme 3 adet</label><input type="number" id="cr-m3-qty" value="1" min="1"></div>
+                <div class="form-group"><label>Malzeme 3 enderlik</label>${raritySelectHtml('siradan','cr-m3-rar')}</div>
+                <hr style="border-color:var(--border);margin:12px 0;">
+                <div class="form-group"><label>Sonuç karakter adı</label><input type="text" id="cr-res-name" placeholder="Yeni karakter"></div>
+                <div class="form-group"><label>Sonuç enderlik</label>${raritySelectHtml('ender','cr-res-rar')}</div>
+                <div class="form-group"><label>Sonuç görsel URL (opsiyonel)</label><input type="text" id="cr-res-img" placeholder="https://..."></div>
+                <button class="primary-btn" onclick="modSaveCraftRecipe()">Kaydet</button>
+                <button class="back-btn" onclick="openCraft()">← Geri</button>
+            `);
+        }
+
+        function modSaveCraftRecipe() {
+            const me = getCurrentUser();
+            if (!me || !isModerator(me)) return;
+            const name = ((document.getElementById('cr-name') || {}).value || '').trim() || 'Tarif';
+            const materials = [];
+            for (let i = 1; i <= 3; i++) {
+                const n = ((document.getElementById('cr-m' + i + '-name') || {}).value || '').trim();
+                if (!n) continue;
+                let qty = parseInt((document.getElementById('cr-m' + i + '-qty') || {}).value, 10);
+                if (isNaN(qty) || qty < 1) qty = 1;
+                const rar = normalizeRarity((document.getElementById('cr-m' + i + '-rar') || {}).value);
+                materials.push({ name: n, qty: qty, rarity: rar });
+            }
+            if (!materials.length) { toast('En az 1 malzeme gerekli.', 'error'); return; }
+            const resName = ((document.getElementById('cr-res-name') || {}).value || '').trim();
+            if (!resName) { toast('Sonuç karakter adı gerekli.', 'error'); return; }
+            const resRar = normalizeRarity((document.getElementById('cr-res-rar') || {}).value);
+            const resImg = ((document.getElementById('cr-res-img') || {}).value || '').trim();
+            const recipes = loadCraftRecipes();
+            recipes.push({
+                id: 'craft_' + Date.now(),
+                name: name,
+                materials: materials,
+                result: { name: resName, rarity: resRar, image: resImg, category: 'karakter' },
+                createdBy: me,
+                createdAt: new Date().toISOString()
+            });
+            saveCraftRecipes(recipes);
+            toast('Tarif eklendi');
+            openCraft();
+        }
+
+        function modDeleteCraftRecipe(ri) {
+            const me = getCurrentUser();
+            if (!me || !isModerator(me)) return;
+            if (!confirm('Tarifi silmek istiyor musun?')) return;
+            const recipes = loadCraftRecipes();
+            recipes.splice(ri, 1);
+            saveCraftRecipes(recipes);
+            toast('Tarif silindi');
+            openCraft();
+        }
+
+        function doCraft(ri) {
+            const me = getCurrentUser();
+            if (!me) return;
+            const recipes = loadCraftRecipes();
+            const rec = recipes[ri];
+            if (!rec) { toast('Tarif yok.', 'error'); return; }
+            const users = loadUsers();
+            if (!users[me]) return;
+            ensureUserFields(users[me]);
+            if (!Array.isArray(users[me].inventory)) users[me].inventory = [];
+            // Malzeme kontrolü
+            const inv = users[me].inventory.slice();
+            const toRemove = [];
+            for (let mi = 0; mi < (rec.materials || []).length; mi++) {
+                const mat = rec.materials[mi];
+                let need = mat.qty || 1;
+                for (let i = 0; i < inv.length && need > 0; i++) {
+                    if (toRemove.indexOf(i) >= 0) continue;
+                    const it = normalizeItem(inv[i]);
+                    if (!it || !it.name) continue;
+                    if (it.name.toLowerCase() !== String(mat.name).toLowerCase()) continue;
+                    if (mat.rarity && normalizeRarity(it.rarity) !== normalizeRarity(mat.rarity)) continue;
+                    toRemove.push(i);
+                    need--;
+                }
+                if (need > 0) {
+                    toast('Eksik malzeme: ' + mat.name + (mat.qty > 1 ? ' x' + mat.qty : ''), 'error');
+                    return;
+                }
+            }
+            if (invSpaceLeft(users[me]) < 1 && toRemove.length === 0) {
+                toast('Envanter dolu.', 'error');
+                return;
+            }
+            // Sil (yüksek indeksten)
+            toRemove.sort(function(a,b){ return b - a; });
+            toRemove.forEach(function(i) { inv.splice(i, 1); });
+            const res = rec.result || {};
+            inv.push(normalizeItem({
+                name: res.name || 'Craft Ürünü',
+                image: res.image || '',
+                rarity: res.rarity || 'siradan',
+                category: 'karakter',
+                marketValue: 0,
+                info: 'Craft ile üretildi: ' + (rec.name || '')
+            }));
+            users[me].inventory = inv;
+            bumpInvVersion(users[me]);
+            saveUser(me, users[me]);
+            toast('🛠️ Üretildi: ' + (res.name || 'Karakter'));
+            try { pushNotif(me, '🛠️ Craft: ' + (res.name || 'Karakter') + ' kazandın!', 'success'); } catch (e) {}
+            openCraft();
+        }
+
+        // ========== YÜKSELTİCİ (5 aynı enderlik → 1 üst) ==========
+        const RARITY_ORDER = ['siradan','ender','super_ender','destansi','gizemli','super_gizemli','efsanevi','ultra_efsanevi','superstar','popstar','limited','kromatik','no_limit'];
+
+        function nextRarityKey(rar) {
+            const k = normalizeRarity(rar);
+            const i = RARITY_ORDER.indexOf(k);
+            if (i < 0 || i >= RARITY_ORDER.length - 1) return null;
+            return RARITY_ORDER[i + 1];
+        }
+
+        async function openUpgrader() {
+            const me = getCurrentUser();
+            if (!me) return;
+            const user = getUser(me);
+            if (!user) return;
+            const inv = (user.inventory || []).map(function(it, i) {
+                return { it: normalizeItem(it), i: i };
+            }).filter(function(x) {
+                return isCharacterItem(x.it) && !x.it._rented;
+            });
+
+            // Rarity grupları
+            const groups = {};
+            inv.forEach(function(x) {
+                const r = normalizeRarity(x.it.rarity);
+                if (!groups[r]) groups[r] = [];
+                groups[r].push(x);
+            });
+
+            let html = '<p style="font-size:13px;color:var(--text-muted);margin-bottom:12px;">Aynı enderlikten <b>5 karakter</b> ver, <b>1 üst enderlikten rastgele</b> bir karakter al.</p>';
+            let any = false;
+            RARITY_ORDER.forEach(function(r) {
+                const list = groups[r] || [];
+                const nxt = nextRarityKey(r);
+                if (!nxt) return;
+                if (list.length < 5) {
+                    html += `<div class="info-card" style="margin-bottom:8px;opacity:0.7;">
+                        ${rarityBadgeHtml(r)} → ${rarityBadgeHtml(nxt)}
+                        <div style="font-size:12px;color:var(--text-muted);margin-top:4px;">${list.length}/5 karakter (yetersiz)</div>
+                    </div>`;
+                    return;
+                }
+                any = true;
+                const opts = list.map(function(x) {
+                    return `<label style="display:flex;align-items:center;gap:8px;margin:4px 0;font-size:13px;">
+                        <input type="checkbox" class="upg-check" data-rarity="${r}" value="${x.i}">
+                        ${escapeHtml(x.it.name)}
+                    </label>`;
+                }).join('');
+                html += `<div class="info-card" style="margin-bottom:10px;">
+                    ${rarityBadgeHtml(r)} → ${rarityBadgeHtml(nxt)}
+                    <div style="font-size:12px;color:var(--text-muted);margin:6px 0;">5 tanesini seç:</div>
+                    <div style="max-height:160px;overflow:auto;">${opts}</div>
+                    <button class="primary-btn" style="width:100%;margin-top:8px;" onclick="doUpgrade('${r}')">⬆️ Yükselt</button>
+                </div>`;
+            });
+            if (!any && !Object.keys(groups).length) {
+                html += '<p style="color:var(--text-muted);text-align:center;">Yükseltilecek karakter yok.</p>';
+            }
+            html += '<button class="back-btn" onclick="closeModal()">Kapat</button>';
+            openModal('⬆️ Yükseltici', html);
+        }
+
+        function doUpgrade(rarityKey) {
+            const me = getCurrentUser();
+            if (!me) return;
+            const nxt = nextRarityKey(rarityKey);
+            if (!nxt) { toast('Bu enderlik daha yükselemez.', 'error'); return; }
+            const boxes = Array.prototype.slice.call(document.querySelectorAll('.upg-check[data-rarity="' + rarityKey + '"]:checked'));
+            if (boxes.length !== 5) {
+                toast('Tam olarak 5 karakter seçmelisin. (Seçili: ' + boxes.length + ')', 'error');
+                return;
+            }
+            const indices = boxes.map(function(b) { return parseInt(b.value, 10); }).filter(function(n) { return !isNaN(n); });
+            if (indices.length !== 5) { toast('Seçim hatası.', 'error'); return; }
+
+            const users = loadUsers();
+            if (!users[me] || !Array.isArray(users[me].inventory)) return;
+            ensureUserFields(users[me]);
+            const inv = users[me].inventory.slice();
+            // Doğrula
+            const selectedItems = [];
+            for (let i = 0; i < indices.length; i++) {
+                const idx = indices[i];
+                if (!inv[idx]) { toast('Karakter bulunamadı.', 'error'); return; }
+                const it = normalizeItem(inv[idx]);
+                if (!isCharacterItem(it) || it._rented) { toast('Geçersiz karakter.', 'error'); return; }
+                if (normalizeRarity(it.rarity) !== normalizeRarity(rarityKey)) {
+                    toast('Hepsi aynı enderlikte olmalı.', 'error');
+                    return;
+                }
+                selectedItems.push(it);
+            }
+            // Rastgele birini baz al, enderliği yükselt
+            const base = selectedItems[Math.floor(Math.random() * selectedItems.length)];
+            const newItem = normalizeItem({
+                name: base.name,
+                image: base.image || '',
+                rarity: nxt,
+                category: 'karakter',
+                marketValue: 0,
+                info: 'Yükseltici ile üretildi (' + rarityStyle(rarityKey).label + ' → ' + rarityStyle(nxt).label + ')'
+            });
+            // Sil (yüksek indeks)
+            indices.sort(function(a,b){ return b - a; });
+            indices.forEach(function(i) { inv.splice(i, 1); });
+            inv.push(newItem);
+            users[me].inventory = inv;
+            bumpInvVersion(users[me]);
+            saveUser(me, users[me]);
+            toast('⬆️ Yükseltildi: ' + newItem.name + ' → ' + rarityStyle(nxt).label);
+            try { pushNotif(me, '⬆️ Yükseltici: ' + newItem.name + ' (' + rarityStyle(nxt).label + ')', 'success'); } catch (e) {}
+            openUpgrader();
+        }
+
 
         // ========== KURALLAR (moderatör düzenler) ==========
         let _rulesCache = null;
