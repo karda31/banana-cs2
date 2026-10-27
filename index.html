@@ -1077,9 +1077,61 @@
             #music-player .mp-title { max-width: 70px; font-size: 10px; }
         }
 
+        /* ===== MODERATÖR GÖREV HEDİYESİ (sol alt) ===== */
+        #mod-gift-fab {
+            position: fixed;
+            left: 12px;
+            bottom: 140px;
+            z-index: 95;
+            width: 52px;
+            height: 52px;
+            border-radius: 16px;
+            border: 1px solid var(--border);
+            background: linear-gradient(145deg, rgba(255,0,204,0.25), rgba(100,0,180,0.35));
+            box-shadow: 0 0 22px rgba(255,0,204,0.4), inset 0 0 12px rgba(255,255,255,0.08);
+            color: #fff;
+            font-size: 26px;
+            cursor: pointer;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.2s, box-shadow 0.2s;
+            backdrop-filter: blur(10px);
+        }
+        #mod-gift-fab.show { display: flex; }
+        #mod-gift-fab:hover {
+            transform: scale(1.08);
+            box-shadow: 0 0 28px rgba(255,0,204,0.6);
+        }
+        #mod-gift-fab.has-reward {
+            animation: giftPulse 1.6s ease-in-out infinite;
+            border-color: #ffd700;
+        }
+        @keyframes giftPulse {
+            0%, 100% { box-shadow: 0 0 18px rgba(255,215,0,0.45); }
+            50% { box-shadow: 0 0 32px rgba(255,215,0,0.85); }
+        }
+        #mod-gift-badge {
+            position: absolute;
+            top: -6px;
+            right: -6px;
+            min-width: 18px;
+            height: 18px;
+            padding: 0 5px;
+            border-radius: 10px;
+            background: var(--danger);
+            color: #fff;
+            font-size: 11px;
+            font-weight: 700;
+            display: none;
+            align-items: center;
+            justify-content: center;
+        }
+        #mod-gift-badge.show { display: flex; }
+        @media (max-width: 480px) {
+            #mod-gift-fab { left: 8px; bottom: 130px; width: 46px; height: 46px; font-size: 22px; }
+        }
 
-
-        
         .online-count {
             font-size: 12px;
             color: var(--success);
@@ -1748,6 +1800,12 @@
 
     <div id="toast" class="toast"></div>
 
+    <!-- Moderatorspecial gift FAB (sol alt, müzik üstü) -->
+    <button type="button" id="mod-gift-fab" title="Moderatör Görevleri & Hediye" onclick="openModGiftPanel()">
+        🎁
+        <span id="mod-gift-badge">!</span>
+    </button>
+
     <!-- Müzik çalar sol alt -->
     <div id="music-player" class="collapsed">
         <button type="button" id="mp-prev" title="Önceki" onclick="musicPrev()">⏮</button>
@@ -1923,6 +1981,178 @@
             { t: 'diamond', min: 1, max: 2, label: 'diamond' }
         ];
 
+        // ===== MODERATÖR GÜNLÜK GÖREVLERİ + RESİMLİ HEDİYE =====
+        const MOD_QUEST_DEFS = [
+            { id: 'mq_warn', label: '1 uyarı ver', target: 1, key: 'warn' },
+            { id: 'mq_fine', label: '1 para cezası uygula', target: 1, key: 'fine' },
+            { id: 'mq_announce', label: '1 duyuru yayınla', target: 1, key: 'announce' },
+            { id: 'mq_log', label: 'Herhangi 3 moderasyon işlemi yap', target: 3, key: 'any' }
+        ];
+        // Resimli hediye (her gün görevler bitince alınabilir)
+        const MOD_GIFT_ITEM = {
+            name: '🍌 Altın Muz Hediye',
+            image: 'https://steamdb.com/assets/images/skins/cs2/stickers/sticker-banana.png',
+            rarity: 'limited',
+            category: 'esya',
+            marketValue: 99999,
+            info: 'Moderatör günlük görevlerini tamamlayanın özel resimli hediyesi. Sınırlı.'
+        };
+
+        function ensureModQuests(user) {
+            if (!user) return user;
+            const day = todayKeyLocal();
+            if (user.modQuestDay !== day) {
+                user.modQuestDay = day;
+                user.modQuests = {};
+                MOD_QUEST_DEFS.forEach(function(q) {
+                    user.modQuests[q.id] = { progress: 0, done: false, claimed: false };
+                });
+                user.modGiftClaimed = false;
+            }
+            if (!user.modQuests) user.modQuests = {};
+            MOD_QUEST_DEFS.forEach(function(q) {
+                if (!user.modQuests[q.id]) user.modQuests[q.id] = { progress: 0, done: false, claimed: false };
+            });
+            return user;
+        }
+
+        function bumpModQuest(key, n) {
+            const me = getCurrentUser();
+            if (!me || !isModerator(me)) return;
+            const users = loadUsers();
+            if (!users[me]) return;
+            ensureModQuests(users[me]);
+            let changed = false;
+            const amount = n || 1;
+            function progressOne(qid, label, target) {
+                const st = users[me].modQuests[qid];
+                if (!st || st.claimed || st.done) return;
+                st.progress = Math.min(target, (st.progress || 0) + amount);
+                if (st.progress >= target) {
+                    st.done = true;
+                    pushNotif(me, '✅ Mod görevi tamam: ' + label, 'success');
+                }
+                changed = true;
+            }
+            // Spesifik görev
+            MOD_QUEST_DEFS.forEach(function(q) {
+                if (q.key === key) progressOne(q.id, q.label, q.target);
+            });
+            // Her moderasyon işlemi 'any' sayacını da artırır
+            if (key !== 'any') {
+                const anyQ = MOD_QUEST_DEFS.find(function(q) { return q.key === 'any'; });
+                if (anyQ) progressOne(anyQ.id, anyQ.label, anyQ.target);
+            }
+            if (changed) {
+                saveUser(me, users[me]);
+                updateModGiftFab();
+            }
+        }
+
+        function allModQuestsDone(user) {
+            ensureModQuests(user);
+            return MOD_QUEST_DEFS.every(function(q) {
+                const st = user.modQuests[q.id];
+                return st && st.done;
+            });
+        }
+
+        function claimModGift() {
+            const me = getCurrentUser();
+            if (!me || !isModerator(me)) { toast('Sadece moderatör.', 'error'); return; }
+            const users = loadUsers();
+            ensureModQuests(users[me]);
+            if (!allModQuestsDone(users[me])) {
+                toast('Önce tüm moderatör görevlerini tamamla.', 'error');
+                return;
+            }
+            if (users[me].modGiftClaimed) {
+                toast('Bugünkü hediyeyi zaten aldın.', 'error');
+                return;
+            }
+            users[me].modGiftClaimed = true;
+            if (!Array.isArray(users[me].inventory)) users[me].inventory = [];
+            const gift = Object.assign({}, MOD_GIFT_ITEM);
+            users[me].inventory.push(gift);
+            // ekstra nakit + itibar
+            users[me].balance = (Number(users[me].balance) || 0) + 5000;
+            let r = typeof users[me].reputation === 'number' ? users[me].reputation : 50;
+            users[me].reputation = Math.min(100, r + 3);
+            saveUser(me, users[me]);
+            pushNotif(me, '🎁 Resimli hediye alındı: ' + gift.name + ' (+$5000 +3 itibar)', 'success');
+            toast('🎁 Altın Muz hediyesi envanterine eklendi!');
+            updateModGiftFab();
+            openModGiftPanel();
+        }
+
+        function updateModGiftFab() {
+            const fab = document.getElementById('mod-gift-fab');
+            const badge = document.getElementById('mod-gift-badge');
+            if (!fab) return;
+            const me = getCurrentUser();
+            if (!me || !isModerator(me)) {
+                fab.classList.remove('show', 'has-reward');
+                if (badge) badge.classList.remove('show');
+                return;
+            }
+            fab.classList.add('show');
+            const users = loadUsers();
+            if (!users[me]) return;
+            ensureModQuests(users[me]);
+            const done = allModQuestsDone(users[me]);
+            const claimed = !!users[me].modGiftClaimed;
+            if (done && !claimed) {
+                fab.classList.add('has-reward');
+                if (badge) { badge.textContent = '!'; badge.classList.add('show'); }
+            } else {
+                fab.classList.remove('has-reward');
+                if (badge) badge.classList.remove('show');
+            }
+        }
+
+        function openModGiftPanel() {
+            const me = getCurrentUser();
+            if (!me || !isModerator(me)) { toast('Sadece moderatör.', 'error'); return; }
+            const users = loadUsers();
+            ensureModQuests(users[me]);
+            const u = users[me];
+            const rows = MOD_QUEST_DEFS.map(function(q) {
+                const st = u.modQuests[q.id] || { progress: 0, done: false };
+                const pct = Math.min(100, Math.round(((st.progress || 0) / q.target) * 100));
+                const status = st.done
+                    ? '<span style="color:var(--success);font-weight:700;">✓ Tamam</span>'
+                    : '<span style="color:var(--text-muted);">' + (st.progress || 0) + '/' + q.target + '</span>';
+                return `<div style="background:rgba(0,0,0,0.3);border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:10px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                        <span style="font-weight:600;">${escapeHtml(q.label)}</span>
+                        ${status}
+                    </div>
+                    <div style="height:6px;background:rgba(255,255,255,0.08);border-radius:4px;overflow:hidden;">
+                        <div style="height:100%;width:${pct}%;background:linear-gradient(90deg,var(--accent),#ffd700);border-radius:4px;"></div>
+                    </div>
+                </div>`;
+            }).join('');
+            const canClaim = allModQuestsDone(u) && !u.modGiftClaimed;
+            const giftPreview = `
+                <div style="text-align:center;margin:16px 0;padding:16px;background:rgba(255,215,0,0.08);border:1px solid #ffd700;border-radius:16px;">
+                    <img src="${escapeHtml(MOD_GIFT_ITEM.image)}" alt="hediye" style="width:96px;height:96px;object-fit:contain;border-radius:12px;margin-bottom:8px;" onerror="this.style.display='none'">
+                    <div style="font-weight:700;color:#ffd700;font-size:16px;">${escapeHtml(MOD_GIFT_ITEM.name)}</div>
+                    <div style="font-size:12px;color:var(--text-muted);margin-top:4px;">${escapeHtml(MOD_GIFT_ITEM.info)}</div>
+                    <div style="margin-top:8px;"><span class="rarity-badge rarity-limited">✦ LIMITED ✦</span></div>
+                </div>`;
+            openModal('🎁 Moderatör Görevleri', `
+                <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px;">Günlük moderasyon görevlerini tamamla, resimli özel hediyeyi kap.</p>
+                ${rows}
+                ${giftPreview}
+                ${canClaim
+                    ? '<button class="primary-btn" style="width:100%;margin-bottom:8px;" onclick="claimModGift()">🎁 Hediyeyi Al</button>'
+                    : (u.modGiftClaimed
+                        ? '<p style="text-align:center;color:var(--success);font-weight:600;">Bugünkü hediye alındı ✓</p>'
+                        : '<p style="text-align:center;color:var(--text-muted);font-size:13px;">Tüm görevler bitince hediye açılır.</p>')}
+                <button class="back-btn" onclick="closeModal()">Kapat</button>
+            `);
+        }
+
         function todayKeyLocal() {
             try { return todayKey(); } catch (e) {
                 const d = new Date();
@@ -2088,6 +2318,7 @@
             saveUser(username, users[username]);
             pushNotif(username, '⚠️ Moderasyon uyarısı (' + w + '): ' + reason, 'danger');
             pushModLog('warn', username + ' uyarı #' + w + ' — ' + reason);
+            try { bumpModQuest('warn'); } catch (e) {}
             if (w >= 3) {
                 adjustReputation(username, -10, '3+ uyarı');
                 toast('3+ uyarı: itibar −10 uygulandı');
@@ -2108,6 +2339,7 @@
             saveUser(username, users[username]);
             pushNotif(username, '💸 Para cezası: −$' + n.toLocaleString('tr-TR'), 'danger');
             pushModLog('fine', username + ' −$' + n);
+            try { bumpModQuest('fine'); } catch (e) {}
             pushTxHistory(username, 'Para cezası −$' + n, 'fine');
             toast('Ceza uygulandı');
             modSelectUser(username);
@@ -2125,6 +2357,7 @@
             if (users[username].modTags.length > 8) users[username].modTags = users[username].modTags.slice(0, 8);
             saveUser(username, users[username]);
             pushModLog('tag', username + ' +tag ' + t);
+            try { bumpModQuest('any'); } catch (e) {}
             toast('Etiket eklendi');
             modSelectUser(username);
         }
@@ -2663,6 +2896,7 @@
             try { localStorage.removeItem('swordcity_announce_dismiss'); } catch (e) {}
             renderAnnouncement();
             pushModLog('announce', obj.text.slice(0, 80));
+            try { bumpModQuest('announce'); } catch (e) {}
             toast('Duyuru yayınlandı.');
         }
         function openModAnnouncePanel() {
@@ -5707,6 +5941,12 @@
             const modFolder = document.getElementById('mod-folder');
             if (modFolder) modFolder.style.display = 'none';
             try {
+                const fab = document.getElementById('mod-gift-fab');
+                if (fab) fab.classList.remove('show', 'has-reward');
+                const badge = document.getElementById('mod-gift-badge');
+                if (badge) badge.classList.remove('show');
+            } catch (e) {}
+            try {
                 const remembered = localStorage.getItem('swordcity_last_user') || '';
                 document.getElementById('login-user').value = remembered;
             } catch (e) {
@@ -5775,6 +6015,7 @@
             if (modFolder) {
                 modFolder.style.display = isModerator(username) ? '' : 'none';
             }
+            try { updateModGiftFab(); } catch (e) {}
             // Canlı online durumu
             try { setupPresence(); } catch (e) {}
         }
