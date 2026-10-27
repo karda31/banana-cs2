@@ -13108,8 +13108,8 @@ Lütfen daha sonra tekrar gelin.</textarea>
                         ? `<img src="${escapeHtml(it.image)}" alt="" style="width:56px;height:56px;object-fit:cover;border-radius:10px;border:1px solid var(--border);" onerror="this.style.display='none'">`
                         : `<div style="width:56px;height:56px;border-radius:10px;background:rgba(255,0,204,0.12);display:grid;place-items:center;font-size:24px;">⚔️</div>`;
                     const price = Math.max(0, Math.floor(Number(r.price) || 0));
-                    const currency = (r.currency || 'gold');
-                    const curLabel = currency === 'diamond' ? '💎 Diamond' : (currency === 'emerald' ? '💚 Emerald' : '🥇 Gold');
+                    const currency = (r.currency || 'balance');
+                    const curLabel = currency === 'balance' ? '💵 Para' : (currency === 'diamond' ? '💎 Diamond' : (currency === 'emerald' ? '💚 Emerald' : '🥇 Gold'));
                     const dur = formatRentDuration(r);
                     const isMine = r.owner === me;
                     list += `
@@ -13126,9 +13126,8 @@ Lütfen daha sonra tekrar gelin.</textarea>
                                 </div>
                             </div>
                             <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
-                                ${isMine
-                                    ? `<button class="danger-btn" style="flex:1;" onclick="cancelRentalListing('${r.id}')">İlanı Geri Çek</button>`
-                                    : `<button class="primary-btn" style="flex:1;" onclick="rentCharacter('${r.id}')">Kirala</button>`}
+                                ${!isMine ? `<button class="primary-btn" style="flex:1;" onclick="rentCharacter('${r.id}')">Kirala</button>` : ''}
+                                ${(isMine || isModerator(me)) ? `<button class="danger-btn" style="flex:1;" onclick="cancelRentalListing('${r.id}')">${isMine ? 'İlanı Geri Çek' : '🗑️ İlanı Kaldır (Mod)'}</button>` : ''}
                             </div>
                         </div>`;
                 });
@@ -13181,9 +13180,7 @@ Lütfen daha sonra tekrar gelin.</textarea>
                 <div class="form-group">
                     <label>Para birimi</label>
                     <select id="rent-currency">
-                        <option value="gold">🥇 Gold</option>
-                        <option value="emerald">💚 Emerald</option>
-                        <option value="diamond">💎 Diamond</option>
+                        <option value="balance">💵 Para ($)</option>
                     </select>
                 </div>
                 <div class="form-group">
@@ -13216,8 +13213,8 @@ Lütfen daha sonra tekrar gelin.</textarea>
             let days = parseInt((document.getElementById('rent-days') || {}).value, 10);
             let hours = parseInt((document.getElementById('rent-hours') || {}).value, 10);
             let minutes = parseInt((document.getElementById('rent-minutes') || {}).value, 10);
-            let currency = ((document.getElementById('rent-currency') || {}).value || 'gold').toLowerCase();
-            if (['gold','emerald','diamond'].indexOf(currency) < 0) currency = 'gold';
+            let currency = ((document.getElementById('rent-currency') || {}).value || 'balance').toLowerCase();
+            if (currency !== 'balance') currency = 'balance';
             if (isNaN(price) || price < 0) price = 0;
             price = Math.floor(price);
             if (isNaN(days) || days < 0) days = 0;
@@ -13281,20 +13278,30 @@ Lütfen daha sonra tekrar gelin.</textarea>
             const idx = rentals.findIndex(function(r) { return r && String(r.id) === String(rentId); });
             if (idx < 0) { toast('İlan yok.', 'error'); return; }
             const r = rentals[idx];
-            if (r.status !== 'listed' || r.owner !== me) {
+            const isMod = isModerator(me);
+            if (r.status !== 'listed' || (r.owner !== me && !isMod)) {
                 toast('Bu ilanı geri çekemezsin.', 'error');
                 return;
             }
+            const ownerName = r.owner;
             const users = loadUsers();
-            if (!users[me]) return;
-            ensureUserFields(users[me]);
-            if (!Array.isArray(users[me].inventory)) users[me].inventory = [];
-            users[me].inventory.push(normalizeItem(r.item || {}));
-            bumpInvVersion(users[me]);
-            saveUser(me, users[me]);
+            if (!users[ownerName]) {
+                toast('Sahip hesabı bulunamadı.', 'error');
+                return;
+            }
+            ensureUserFields(users[ownerName]);
+            if (!Array.isArray(users[ownerName].inventory)) users[ownerName].inventory = [];
+            users[ownerName].inventory.push(normalizeItem(r.item || {}));
+            bumpInvVersion(users[ownerName]);
+            saveUser(ownerName, users[ownerName]);
             rentals.splice(idx, 1);
             saveRentals(rentals);
-            toast('İlan geri çekildi, karakter envanterinde.');
+            if (isMod && ownerName !== me) {
+                try { pushNotif(ownerName, '🏠 Moderasyon: Kiralama ilanın kaldırıldı, karakter iade edildi: ' + ((r.item && r.item.name) || 'Karakter'), 'info'); } catch (e) {}
+                toast('Mod: İlan kaldırıldı, karakter sahibe iade edildi.');
+            } else {
+                toast('İlan geri çekildi, karakter envanterinde.');
+            }
             openRentals();
         }
 
@@ -13311,7 +13318,7 @@ Lütfen daha sonra tekrar gelin.</textarea>
             if (r.owner === me) { toast('Kendi ilanını kiralayamazsın.', 'error'); return; }
 
             const price = Math.max(0, Math.floor(Number(r.price) || 0));
-            const currency = (r.currency === 'emerald' || r.currency === 'diamond') ? r.currency : 'gold';
+            const currency = (r.currency === 'balance' || r.currency === 'emerald' || r.currency === 'diamond') ? r.currency : (r.currency === 'gold' ? 'gold' : 'balance');
             let totalMinutes = Number(r.totalMinutes);
             if (!totalMinutes || totalMinutes < 1) {
                 const d = Number(r.days) || 0;
@@ -13329,7 +13336,7 @@ Lütfen daha sonra tekrar gelin.</textarea>
             }
             ensureUserFields(users[me]);
             ensureUserFields(users[r.owner]);
-            const curLabel = currency === 'diamond' ? 'Diamond' : (currency === 'emerald' ? 'Emerald' : 'Gold');
+            const curLabel = currency === 'balance' ? 'Para ($)' : (currency === 'diamond' ? 'Diamond' : (currency === 'emerald' ? 'Emerald' : 'Gold'));
             if (price > 0 && (Number(users[me][currency]) || 0) < price) {
                 toast('Yetersiz ' + curLabel + '! ' + price.toLocaleString('tr-TR') + ' gerekli', 'error');
                 return;
@@ -13369,7 +13376,8 @@ Lütfen daha sonra tekrar gelin.</textarea>
             try { pushNotif(me, '🏠 Kiraladın: ' + (it.name || 'Karakter') + ' · bitiş ' + new Date(rentUntil).toLocaleString('tr-TR'), 'success'); } catch (e) {}
             try { pushNotif(r.owner, '🏠 Karakterin kiralandı: ' + (it.name || 'Karakter') + (price ? (' +' + price + ' ' + curLabel) : ''), 'success'); } catch (e) {}
             toast('Kiralama tamam!');
-            openRentals();
+            window._rentalsOpen = false;
+            closeModal();
         }
 
 
@@ -13577,7 +13585,7 @@ Lütfen daha sonra tekrar gelin.</textarea>
         }
 
         // ========== YÜKSELTİCİ (5 aynı enderlik → 1 üst) ==========
-        const RARITY_ORDER = ['siradan','ender','super_ender','destansi','gizemli','super_gizemli','efsanevi','ultra_efsanevi','superstar','popstar','limited','kromatik','no_limit'];
+        const RARITY_ORDER = ['siradan','ender','super_ender','destansi','gizemli','super_gizemli','efsanevi','ultra_efsanevi','superstar','popstar','kromatik'];
 
         function nextRarityKey(rar) {
             const k = normalizeRarity(rar);
