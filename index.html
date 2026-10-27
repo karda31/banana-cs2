@@ -1676,6 +1676,11 @@
                     <div class="folder-name">Pazar</div>
                     <div class="folder-desc">Al & Sat</div>
                 </div>
+                <div class="folder" onclick="openRentals()">
+                    <div class="folder-icon">🏠</div>
+                    <div class="folder-name">Kiralama</div>
+                    <div class="folder-desc">Karakter kirala</div>
+                </div>
                 <div class="folder" onclick="openTrade()">
                     <div class="folder-icon">🔄</div>
                     <div class="folder-name">Takas</div>
@@ -1715,6 +1720,11 @@
                     <div class="folder-icon">🎯</div>
                     <div class="folder-name">Görevler</div>
                     <div class="folder-desc">Günlük hedefler</div>
+                </div>
+                <div class="folder" onclick="openRules()">
+                    <div class="folder-icon">📜</div>
+                    <div class="folder-name">Kurallar</div>
+                    <div class="folder-desc">Sunucu kuralları</div>
                 </div>
                 <div class="folder" onclick="openNews()">
                     <div class="folder-icon">📰</div>
@@ -1814,6 +1824,7 @@
         // In-memory cache (hızlı okuma için)
         let _usersCache = {};
         let _marketCache = [];
+        let _rentalsCache = [];
         let _charPricesCache = {}; // karakter adı -> orijinal piyasa fiyatı
         let _tradesCache = [];
         let _casesCache = [];
@@ -4145,10 +4156,24 @@
                     try { openMarket(); } catch (e) {}
                 }
             });
+            db.ref('rentals').on('value', snap => {
+                const v = snap.val();
+                _rentalsCache = Array.isArray(v) ? v : (v ? Object.values(v) : []);
+                if (window._rentalsOpen) {
+                    try { openRentals(); } catch (e) {}
+                }
+            });
             
             db.ref('weekly_stats').on('value', snap => {
                 const v = snap.val();
                 _weeklyStatsCache = (v && typeof v === 'object') ? v : {};
+            });
+            db.ref('rules').on('value', snap => {
+                const v = snap.val();
+                if (v && typeof v === 'object') {
+                    _rulesCache = v;
+                    try { localStorage.setItem('swordcity_rules_v1', JSON.stringify(v)); } catch (e) {}
+                }
             });
             db.ref('global_announcement').on('value', snap => {
                 _announceCache = snap.val();
@@ -5822,6 +5847,8 @@
             if (modFolder) {
                 modFolder.style.display = isModerator(username) ? '' : 'none';
             }
+            // Kiralama süreleri
+            try { loadRentalsAsync().then(function(){ try { processExpiredRentals(); } catch(e){} }); } catch (e) {}
             // Canlı online durumu
             try { setupPresence(); } catch (e) {}
         }
@@ -9591,6 +9618,9 @@
                 <button class="mod-btn" onclick="openModLogPanel()" style="margin-bottom:8px;">
                     <span style="font-size:20px;">📋</span> Mod Log
                 </button>
+                <button class="mod-btn" onclick="openRulesEditor()" style="margin-bottom:8px;">
+                    <span style="font-size:20px;">📜</span> Kuralları Düzenle
+                </button>
                 <button class="mod-btn" onclick="openModAnnouncePanel()" style="margin-bottom:8px;">
                     <span style="font-size:20px;">📢</span> Duyuru & Event
                 </button>
@@ -12149,6 +12179,436 @@ Lütfen daha sonra tekrar gelin.</textarea>
         function saveNewsList(list) {
             try { localStorage.setItem('swordcity_news', JSON.stringify(list)); } catch (e) {}
             if (firebaseReady) fbSet('news', list);
+        }
+
+        // ========== KARAKTER KİRALAMA ==========
+        function loadRentals() {
+            return Array.isArray(_rentalsCache) ? _rentalsCache : [];
+        }
+        async function loadRentalsAsync() {
+            try {
+                if (typeof firebaseReady !== 'undefined' && firebaseReady) {
+                    const data = await fbGet('rentals');
+                    _rentalsCache = Array.isArray(data) ? data : (data ? Object.values(data) : []);
+                } else {
+                    try {
+                        _rentalsCache = JSON.parse(localStorage.getItem('swordcity_rentals_v1') || '[]');
+                    } catch (e) { _rentalsCache = []; }
+                }
+            } catch (e) {
+                try {
+                    _rentalsCache = JSON.parse(localStorage.getItem('swordcity_rentals_v1') || '[]');
+                } catch (e2) { _rentalsCache = []; }
+            }
+            if (!Array.isArray(_rentalsCache)) _rentalsCache = [];
+            return _rentalsCache;
+        }
+        function saveRentals(list) {
+            _rentalsCache = Array.isArray(list) ? list : [];
+            try { localStorage.setItem('swordcity_rentals_v1', JSON.stringify(_rentalsCache)); } catch (e) {}
+            if (typeof firebaseReady !== 'undefined' && firebaseReady) {
+                try { fbSet('rentals', _rentalsCache); } catch (e) {}
+            }
+        }
+        function isCharacterItem(item) {
+            const it = normalizeItem(item);
+            const cat = String(it.category || '').toLowerCase();
+            return cat === 'karakter' || cat === 'character' || cat === 'char';
+        }
+        function processExpiredRentals() {
+            const now = Date.now();
+            const rentals = loadRentals();
+            let changed = false;
+            const users = loadUsers();
+            const keep = [];
+            rentals.forEach(function(r) {
+                if (!r) return;
+                // Aktif kiralama süresi dolmuşsa karakteri sahibe iade et
+                if (r.status === 'rented' && r.rentUntil && Date.parse(r.rentUntil) <= now) {
+                    const owner = r.owner;
+                    const renter = r.renter;
+                    const item = normalizeItem(r.item || {});
+                    // Kiracıdan sil
+                    if (renter && users[renter] && Array.isArray(users[renter].inventory)) {
+                        ensureUserFields(users[renter]);
+                        users[renter].inventory = users[renter].inventory.filter(function(it) {
+                            const n = normalizeItem(it);
+                            return !(n._rentId && String(n._rentId) === String(r.id));
+                        });
+                        bumpInvVersion(users[renter]);
+                        saveUser(renter, users[renter]);
+                        try { pushNotif(renter, '⏰ Kiralama süresi bitti: ' + (item.name || 'Karakter'), 'info'); } catch (e) {}
+                    }
+                    // Sahibe iade
+                    if (owner && users[owner]) {
+                        ensureUserFields(users[owner]);
+                        if (!Array.isArray(users[owner].inventory)) users[owner].inventory = [];
+                        const back = normalizeItem(item);
+                        delete back._rentId;
+                        delete back._rented;
+                        delete back._rentOwner;
+                        delete back._rentUntil;
+                        users[owner].inventory.push(back);
+                        bumpInvVersion(users[owner]);
+                        saveUser(owner, users[owner]);
+                        try { pushNotif(owner, '🏠 Kiraladığın karakter geri döndü: ' + (item.name || 'Karakter'), 'success'); } catch (e) {}
+                    }
+                    changed = true;
+                    return; // listing bitti, listede tutma
+                }
+                // Süresi dolmuş açık ilan (kimse kiralamadı) — sahibe iade
+                if (r.status === 'listed' && r.listExpiresAt && Date.parse(r.listExpiresAt) <= now) {
+                    const owner = r.owner;
+                    const item = normalizeItem(r.item || {});
+                    if (owner && users[owner]) {
+                        ensureUserFields(users[owner]);
+                        if (!Array.isArray(users[owner].inventory)) users[owner].inventory = [];
+                        users[owner].inventory.push(item);
+                        bumpInvVersion(users[owner]);
+                        saveUser(owner, users[owner]);
+                        try { pushNotif(owner, '🏠 Kiralama ilanın süresi doldu, karakter iade: ' + (item.name || 'Karakter'), 'info'); } catch (e) {}
+                    }
+                    changed = true;
+                    return;
+                }
+                keep.push(r);
+            });
+            if (changed) saveRentals(keep);
+            return keep;
+        }
+
+        async function openRentals() {
+            window._rentalsOpen = true;
+            await loadRentalsAsync();
+            processExpiredRentals();
+            const me = getCurrentUser();
+            const rentals = loadRentals().filter(function(r) { return r && r.status === 'listed'; });
+            const mineActive = loadRentals().filter(function(r) {
+                return r && r.status === 'rented' && (r.owner === me || r.renter === me);
+            });
+
+            let list = '';
+            if (!rentals.length) {
+                list = '<p style="color:var(--text-muted);text-align:center;padding:16px 0;">Şu an kiralık karakter yok.</p>';
+            } else {
+                rentals.forEach(function(r) {
+                    const it = normalizeItem(r.item || {});
+                    const img = it.image
+                        ? `<img src="${escapeHtml(it.image)}" alt="" style="width:56px;height:56px;object-fit:cover;border-radius:10px;border:1px solid var(--border);" onerror="this.style.display='none'">`
+                        : `<div style="width:56px;height:56px;border-radius:10px;background:rgba(255,0,204,0.12);display:grid;place-items:center;font-size:24px;">⚔️</div>`;
+                    const hours = Number(r.hours) || 1;
+                    const price = Math.max(0, Math.floor(Number(r.price) || 0));
+                    const isMine = r.owner === me;
+                    list += `
+                        <div class="info-card" style="margin-bottom:10px;">
+                            <div style="display:flex;gap:12px;align-items:center;">
+                                ${img}
+                                <div style="flex:1;min-width:0;">
+                                    <div style="font-weight:700;">${escapeHtml(it.name || 'Karakter')}</div>
+                                    <div style="margin-top:4px;">${rarityBadgeHtml(it.rarity)}</div>
+                                    <div style="font-size:12px;color:var(--text-muted);margin-top:4px;">
+                                        ⏱ ${hours} saat · 💰 $${price.toLocaleString('tr-TR')}
+                                        · Sahip: ${isMine ? 'sen' : formatDisplayName(r.owner)}
+                                    </div>
+                                </div>
+                            </div>
+                            <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
+                                ${isMine
+                                    ? `<button class="danger-btn" style="flex:1;" onclick="cancelRentalListing('${r.id}')">İlanı Geri Çek</button>`
+                                    : `<button class="primary-btn" style="flex:1;" onclick="rentCharacter('${r.id}')">Kirala</button>`}
+                            </div>
+                        </div>`;
+                });
+            }
+
+            let activeHtml = '';
+            if (mineActive.length) {
+                activeHtml = '<div style="font-weight:700;color:var(--accent-soft);margin:14px 0 8px;">Aktif kiralamaların</div>';
+                mineActive.forEach(function(r) {
+                    const it = normalizeItem(r.item || {});
+                    const until = r.rentUntil ? new Date(r.rentUntil).toLocaleString('tr-TR') : '—';
+                    const role = r.owner === me ? 'Kiraya verdin' : 'Kiraladın';
+                    activeHtml += `<div class="info-card" style="margin-bottom:8px;font-size:13px;">
+                        <b>${escapeHtml(it.name || 'Karakter')}</b> · ${role}<br>
+                        <span style="color:var(--text-muted);">Bitiş: ${until}</span>
+                    </div>`;
+                });
+            }
+
+            openModal('🏠 Karakter Kiralama', `
+                <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px;">
+                    Envanterindeki <b>karakter</b>leri kiraya ver. Süre bitince otomatik iade olur.
+                </p>
+                <button class="primary-btn" style="width:100%;margin-bottom:12px;" onclick="startRentListing()">➕ Karakterimi Kiraya Ver</button>
+                ${list}
+                ${activeHtml}
+                <button class="back-btn" onclick="window._rentalsOpen=false;closeModal()">Kapat</button>
+            `);
+        }
+
+        function startRentListing() {
+            const me = getCurrentUser();
+            if (!me) return;
+            const user = getUser(me);
+            if (!user) return;
+            const inv = (user.inventory || []).map(function(it, i) { return { it: normalizeItem(it), i: i }; })
+                .filter(function(x) { return isCharacterItem(x.it) && !x.it._rented; });
+            if (!inv.length) {
+                toast('Kiraya verecek karakterin yok. (Kategori: karakter)', 'error');
+                return;
+            }
+            let opts = inv.map(function(x) {
+                return `<option value="${x.i}">${escapeHtml(x.it.name)} · ${rarityStyle(x.it.rarity).label}</option>`;
+            }).join('');
+            openModal('➕ Kiraya Ver', `
+                <div class="form-group">
+                    <label>Karakter seç</label>
+                    <select id="rent-item-index">${opts}</select>
+                </div>
+                <div class="form-group">
+                    <label>Kira ücreti ($)</label>
+                    <input type="number" id="rent-price" value="0" min="0" step="1">
+                    <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">0 = ücretsiz kiralama</div>
+                </div>
+                <div class="form-group">
+                    <label>Süre (saat)</label>
+                    <input type="number" id="rent-hours" value="24" min="1" max="168" step="1">
+                    <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">1–168 saat (max 7 gün)</div>
+                </div>
+                <button class="primary-btn" onclick="confirmRentListing()">İlanı Yayınla</button>
+                <button class="back-btn" onclick="openRentals()">← Geri</button>
+            `);
+        }
+
+        function confirmRentListing() {
+            const me = getCurrentUser();
+            if (!me) return;
+            const idx = parseInt((document.getElementById('rent-item-index') || {}).value, 10);
+            let price = parseFloat((document.getElementById('rent-price') || {}).value);
+            let hours = parseInt((document.getElementById('rent-hours') || {}).value, 10);
+            if (isNaN(price) || price < 0) price = 0;
+            price = Math.floor(price);
+            if (isNaN(hours) || hours < 1) hours = 1;
+            if (hours > 168) hours = 168;
+            const users = loadUsers();
+            if (!users[me] || !Array.isArray(users[me].inventory) || !users[me].inventory[idx]) {
+                toast('Karakter bulunamadı.', 'error');
+                return;
+            }
+            const item = normalizeItem(users[me].inventory[idx]);
+            if (!isCharacterItem(item)) {
+                toast('Sadece karakter kiralanabilir.', 'error');
+                return;
+            }
+            if (item._rented) {
+                toast('Bu karakter zaten kirada.', 'error');
+                return;
+            }
+            // Envanterden çıkar
+            users[me].inventory = users[me].inventory.slice();
+            users[me].inventory.splice(idx, 1);
+            bumpInvVersion(users[me]);
+            saveUser(me, users[me]);
+
+            const rentals = loadRentals();
+            rentals.push({
+                id: 'rent_' + Date.now() + '_' + Math.floor(Math.random() * 9999),
+                owner: me,
+                item: item,
+                price: price,
+                hours: hours,
+                status: 'listed',
+                createdAt: new Date().toISOString(),
+                listExpiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+            });
+            saveRentals(rentals);
+            toast('🏠 Kiralama ilanı yayınlandı');
+            openRentals();
+        }
+
+        function cancelRentalListing(rentId) {
+            const me = getCurrentUser();
+            const rentals = loadRentals();
+            const idx = rentals.findIndex(function(r) { return r && String(r.id) === String(rentId); });
+            if (idx < 0) { toast('İlan yok.', 'error'); return; }
+            const r = rentals[idx];
+            if (r.status !== 'listed' || r.owner !== me) {
+                toast('Bu ilanı geri çekemezsin.', 'error');
+                return;
+            }
+            const users = loadUsers();
+            if (!users[me]) return;
+            ensureUserFields(users[me]);
+            if (!Array.isArray(users[me].inventory)) users[me].inventory = [];
+            users[me].inventory.push(normalizeItem(r.item || {}));
+            bumpInvVersion(users[me]);
+            saveUser(me, users[me]);
+            rentals.splice(idx, 1);
+            saveRentals(rentals);
+            toast('İlan geri çekildi, karakter envanterinde.');
+            openRentals();
+        }
+
+        async function rentCharacter(rentId) {
+            const me = getCurrentUser();
+            if (!me) return;
+            await loadRentalsAsync();
+            processExpiredRentals();
+            const rentals = loadRentals();
+            const idx = rentals.findIndex(function(r) { return r && String(r.id) === String(rentId); });
+            if (idx < 0) { toast('İlan artık yok.', 'error'); openRentals(); return; }
+            const r = rentals[idx];
+            if (r.status !== 'listed') { toast('Bu ilan kiralanamaz.', 'error'); return; }
+            if (r.owner === me) { toast('Kendi ilanını kiralayamazsın.', 'error'); return; }
+
+            const price = Math.max(0, Math.floor(Number(r.price) || 0));
+            const hours = Math.max(1, Math.min(168, Number(r.hours) || 1));
+            const users = loadUsers();
+            if (!users[me] || !users[r.owner]) {
+                toast('Kullanıcı bulunamadı.', 'error');
+                return;
+            }
+            ensureUserFields(users[me]);
+            ensureUserFields(users[r.owner]);
+            if (price > 0 && (Number(users[me].balance) || 0) < price) {
+                toast('Yetersiz bakiye! $' + price.toLocaleString('tr-TR') + ' gerekli', 'error');
+                return;
+            }
+            if (invSpaceLeft(users[me]) < 1) {
+                toast('Envanter dolu.', 'error');
+                return;
+            }
+            const it = normalizeItem(r.item || {});
+            if (!confirm('"' + (it.name || 'Karakter') + '" karakterini ' + hours + ' saatliğine $' + price.toLocaleString('tr-TR') + ' karşılığında kiralamak istiyor musun?')) return;
+
+            // Para
+            if (price > 0) {
+                users[me].balance = (Number(users[me].balance) || 0) - price;
+                users[r.owner].balance = (Number(users[r.owner].balance) || 0) + price;
+            }
+            const rentUntil = new Date(Date.now() + hours * 60 * 60 * 1000).toISOString();
+            const rentedItem = normalizeItem(it);
+            rentedItem._rented = true;
+            rentedItem._rentId = r.id;
+            rentedItem._rentOwner = r.owner;
+            rentedItem._rentUntil = rentUntil;
+            if (!Array.isArray(users[me].inventory)) users[me].inventory = [];
+            users[me].inventory.push(rentedItem);
+            bumpInvVersion(users[me]);
+            bumpInvVersion(users[r.owner]);
+            saveUser(me, users[me]);
+            saveUser(r.owner, users[r.owner]);
+
+            rentals[idx].status = 'rented';
+            rentals[idx].renter = me;
+            rentals[idx].rentUntil = rentUntil;
+            rentals[idx].rentedAt = new Date().toISOString();
+            saveRentals(rentals);
+
+            try { pushNotif(me, '🏠 Kiraladın: ' + (it.name || 'Karakter') + ' · bitiş ' + new Date(rentUntil).toLocaleString('tr-TR'), 'success'); } catch (e) {}
+            try { pushNotif(r.owner, '🏠 Karakterin kiralandı: ' + (it.name || 'Karakter') + (price ? (' +$' + price) : ''), 'success'); } catch (e) {}
+            toast('Kiralama tamam!');
+            openRentals();
+        }
+
+        // ========== KURALLAR (moderatör düzenler) ==========
+        let _rulesCache = null;
+
+        function defaultRulesText() {
+            return '1. Saygı ve adil oyun zorunludur.\n2. Hile / bug abuse yasaktır.\n3. Dolandırıcılık ve scam yasaktır.\n4. Moderasyon kararları geçerlidir.\n5. Kurallara uymayan hesaplar cezalandırılır.';
+        }
+
+        function loadRulesSync() {
+            if (_rulesCache && typeof _rulesCache === 'object') return _rulesCache;
+            try {
+                const raw = localStorage.getItem('swordcity_rules_v1');
+                if (raw) _rulesCache = JSON.parse(raw);
+            } catch (e) {}
+            if (!_rulesCache || typeof _rulesCache !== 'object') {
+                _rulesCache = {
+                    text: defaultRulesText(),
+                    updatedAt: null,
+                    updatedBy: null
+                };
+            }
+            return _rulesCache;
+        }
+
+        async function loadRulesAsync() {
+            try {
+                if (typeof firebaseReady !== 'undefined' && firebaseReady) {
+                    const d = await fbGet('rules');
+                    if (d && typeof d === 'object' && typeof d.text === 'string') {
+                        _rulesCache = d;
+                        try { localStorage.setItem('swordcity_rules_v1', JSON.stringify(d)); } catch (e) {}
+                    }
+                }
+            } catch (e) {}
+            return loadRulesSync();
+        }
+
+        function saveRules(data) {
+            _rulesCache = data;
+            try { localStorage.setItem('swordcity_rules_v1', JSON.stringify(data)); } catch (e) {}
+            if (typeof firebaseReady !== 'undefined' && firebaseReady) {
+                try { fbSet('rules', data); } catch (e) {}
+            }
+        }
+
+        function formatRulesHtml(text) {
+            const lines = String(text || '').split('\n');
+            return lines.map(function(line) {
+                const t = line.trim();
+                if (!t) return '<div style="height:8px;"></div>';
+                return '<div style="padding:8px 10px;margin-bottom:6px;background:rgba(0,0,0,0.28);border:1px solid var(--border);border-radius:10px;line-height:1.45;">' + escapeHtml(t) + '</div>';
+            }).join('');
+        }
+
+        async function openRules() {
+            const data = await loadRulesAsync();
+            const me = getCurrentUser();
+            const isMod = me && isModerator(me);
+            const meta = (data.updatedAt)
+                ? ('Son güncelleme: ' + new Date(data.updatedAt).toLocaleString('tr-TR') + (data.updatedBy ? (' · ' + escapeHtml(data.updatedBy)) : ''))
+                : 'Henüz moderatör güncellemedi.';
+            openModal('📜 Sunucu Kuralları', `
+                <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">${meta}</p>
+                <div style="max-height:55vh;overflow-y:auto;margin-bottom:12px;">
+                    ${formatRulesHtml(data.text || defaultRulesText())}
+                </div>
+                ${isMod ? '<button class="primary-btn" style="width:100%;margin-bottom:8px;" onclick="openRulesEditor()">✏️ Kuralları Düzenle</button>' : ''}
+                <button class="back-btn" onclick="closeModal()">Kapat</button>
+            `);
+        }
+
+        function openRulesEditor() {
+            if (!isModerator()) { toast('Sadece moderatör.', 'error'); return; }
+            const data = loadRulesSync();
+            openModal('✏️ Kuralları Düzenle', `
+                <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Her satır bir kural olarak görünür. Kaydedince herkese yansır.</p>
+                <div class="form-group">
+                    <label>Kurallar</label>
+                    <textarea id="rules-text" rows="14" style="width:100%;padding:12px;background:rgba(0,0,0,0.35);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:inherit;line-height:1.45;resize:vertical;">${escapeHtml(data.text || defaultRulesText())}</textarea>
+                </div>
+                <button class="primary-btn" style="width:100%;margin-bottom:8px;" onclick="saveRulesFromEditor()">Kaydet</button>
+                <button class="back-btn" onclick="openRules()">← Geri</button>
+            `);
+        }
+
+        function saveRulesFromEditor() {
+            if (!isModerator()) { toast('Sadece moderatör.', 'error'); return; }
+            const el = document.getElementById('rules-text');
+            const text = ((el && el.value) || '').trim();
+            if (!text) { toast('Kurallar boş olamaz.', 'error'); return; }
+            const data = {
+                text: text.slice(0, 12000),
+                updatedAt: new Date().toISOString(),
+                updatedBy: getCurrentUser() || 'mod'
+            };
+            saveRules(data);
+            try { pushModLog('rules', 'Kurallar güncellendi'); } catch (e) {}
+            toast('📜 Kurallar kaydedildi');
+            openRules();
         }
 
         async function openNews() {
