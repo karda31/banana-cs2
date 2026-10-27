@@ -3692,27 +3692,18 @@
         }
 
         // ---------- MARKET ----------
-        function forceMarketPricesZero(list) {
-            if (!Array.isArray(list)) return list || [];
-            list.forEach(function(l) {
-                if (l && typeof l === 'object') l.price = 0;
-            });
-            return list;
-        }
         function loadMarket() {
-            return forceMarketPricesZero(_marketCache || []);
+            return _marketCache || [];
         }
         async function loadMarketAsync() {
             if (firebaseReady) {
                 const data = await fbGet('market');
                 _marketCache = Array.isArray(data) ? data : (data ? Object.values(data) : []);
-                forceMarketPricesZero(_marketCache);
                 return _marketCache;
             }
             try {
                 _marketCache = JSON.parse(localStorage.getItem('swordcity_market_v1') || '[]');
             } catch (e) { _marketCache = []; }
-            forceMarketPricesZero(_marketCache);
             return _marketCache;
         }
         function saveMarket(list) {
@@ -7430,7 +7421,7 @@
 
             let list = '';
             if (!market.length) {
-                list = '<p style="color:var(--text-muted);text-align:center;padding:20px 0;">Pazarda henüz ilan yok.<br><span style="font-size:12px;">Online — biri alınca anında kaybolur. Pazar fiyatı $0 — ücretsiz alım.</span></p>';
+                list = '<p style="color:var(--text-muted);text-align:center;padding:20px 0;">Pazarda henüz ilan yok.<br><span style="font-size:12px;">Online — biri alınca anında kaybolur. Satışlarda %5 komisyon kesilir.</span></p>';
             } else {
                 // Karakter ve diğerleri ayır
                 const chars = [];
@@ -7622,8 +7613,8 @@
                 </div>
                 <div class="form-group">
                     <label>Fiyat ($)</label>
-                    <input type="number" id="sell-price" value="0" min="0" step="1" readonly style="opacity:0.85;">
-                    <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Pazar fiyatı sabit <b>$0</b> — ücretsiz transfer.</div>
+                    <input type="number" id="sell-price" value="0" min="0" step="1" placeholder="0">
+                    <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Varsayılan $0 — istediğin fiyatı yazabilirsin.</div>
                 </div>
                 <button class="primary-btn" onclick="confirmSellItem()">İLANI YAYINLA</button>
                 <button class="back-btn" onclick="openMarket()">← Pazara Dön</button>
@@ -7640,8 +7631,9 @@
         function confirmSellItem() {
             const me = getCurrentUser();
             const idx = parseInt(document.getElementById('sell-item-index').value, 10);
-            // Pazar fiyatı sabit 0
-            const price = 0;
+            let price = parseFloat(document.getElementById('sell-price').value);
+            if (isNaN(price) || price < 0) price = 0;
+            price = Math.floor(price);
 
             if (isNaN(idx) || idx < 0) {
                 toast('Eşya seç.', 'error');
@@ -7713,18 +7705,25 @@
             ensureUserFields(users[me]);
             if (!serverSale) ensureUserFields(users[listing.seller]);
 
-            // Pazar / SERVER fiyatı sabit $0
-            listing.price = 0;
+            const listPrice = Math.max(0, Math.floor(Number(listing.price) || 0));
 
+            if (listPrice > 0 && (users[me].balance || 0) < listPrice) {
+                toast('Yetersiz bakiye! ($' + listPrice.toLocaleString('tr-TR') + ' gerekli)', 'error');
+                return;
+            }
             if (invSpaceLeft(users[me]) < 1) {
                 toast('Envanter dolu! (' + (users[me].inventory || []).length + '/' + invCapacity(users[me]) + ')', 'error');
                 return;
             }
 
             const boughtItem = normalizeItem(listing.item);
-            const priceHint = serverSale
-                ? ('SERVER mağazasından "' + boughtItem.name + '" ücretsiz alınacak ($0).')
-                : ('"' + boughtItem.name + '" [' + rarityStyle(boughtItem.rarity).label + '] ücretsiz alınacak ($0). Onaylıyor musun?');
+            const priceHint = listPrice <= 0
+                ? (serverSale
+                    ? ('SERVER mağazasından "' + boughtItem.name + '" ücretsiz alınacak ($0).')
+                    : ('"' + boughtItem.name + '" [' + rarityStyle(boughtItem.rarity).label + '] ücretsiz alınacak ($0). Onaylıyor musun?'))
+                : (serverSale
+                    ? ('SERVER mağazasından "' + boughtItem.name + '" için $' + listPrice.toLocaleString('tr-TR') + ' harcanacak. Para kimseye gitmez.')
+                    : ('"' + boughtItem.name + '" [' + rarityStyle(boughtItem.rarity).label + '] için $' + listPrice.toLocaleString('tr-TR') + ' ödeyecek misin?'));
             if (!confirm(priceHint)) return;
 
             await loadMarketAsync();
@@ -7756,8 +7755,11 @@
                 return;
             }
 
-            // Pazar / SERVER her zaman $0
-            const price = 0;
+            const price = Math.max(0, Math.floor(Number(listing.price) || 0));
+            if (price > 0 && (users2[me].balance || 0) < price) {
+                toast('Yetersiz bakiye!', 'error');
+                return;
+            }
             const tax = (!serverSale && price > 0) ? Math.floor(price * MARKET_TAX_RATE) : 0;
             const sellerGain = price - tax;
             // Para sadece alıcıdan düşer
@@ -9274,7 +9276,7 @@
             }
             openModal('🖥️ SERVER Pazar Satışı', `
                 <p style="color:var(--text-muted);font-size:13px;margin-bottom:12px;">
-                    Satıcı <b style="color:#00e676;">SERVER</b> görünür. Fiyat sabit <b>$0</b> — oyuncular ücretsiz alır.
+                    Satıcı <b style="color:#00e676;">SERVER</b> görünür. Varsayılan fiyat $0; istediğin tutarı girebilirsin. $0 ise ücretsiz alınır.
                 </p>
                 <button class="primary-btn" onclick="modAddServerListing()" style="margin-bottom:14px;">➕ SERVER İlanı Ekle</button>
                 ${list}
@@ -9303,8 +9305,8 @@
                 </div>
                 <div class="form-group">
                     <label>Fiyat ($)</label>
-                    <input type="number" id="srv-price" value="0" min="0" step="1" readonly style="opacity:0.85;">
-                    <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">SERVER fiyatı sabit <b>$0</b>.</div>
+                    <input type="number" id="srv-price" value="0" min="0" step="1" placeholder="0">
+                    <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Varsayılan $0 — istediğin fiyatı yazabilirsin.</div>
                 </div>
                 <div class="form-group">
                     <label>Stok (kaç kişi alabilsin)</label>
@@ -9322,7 +9324,9 @@
             const image = (document.getElementById('srv-image') && document.getElementById('srv-image').value || '').trim();
             const rarity = normalizeRarity(document.getElementById('srv-rarity') && document.getElementById('srv-rarity').value);
             const category = normalizeCategory(document.getElementById('srv-category') && document.getElementById('srv-category').value);
-            const price = 0; // SERVER fiyatı sabit 0
+            let price = parseFloat(document.getElementById('srv-price') && document.getElementById('srv-price').value);
+            if (isNaN(price) || price < 0) price = 0;
+            price = Math.floor(price);
             let stock = parseInt(document.getElementById('srv-stock') && document.getElementById('srv-stock').value, 10);
             if (!name) {
                 toast('Ürün adı gerekli.', 'error');
