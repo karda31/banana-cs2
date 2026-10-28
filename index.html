@@ -340,6 +340,153 @@
             box-shadow: 0 0 18px var(--accent-glow);
         }
 
+
+        /* Rastgele kelime & cümle yükleme */
+        .rw-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 9999;
+            background: radial-gradient(ellipse at center, #1a0030 0%, #05000c 100%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+        }
+        .rw-overlay.hidden { display: none; }
+        .rw-loader {
+            width: 56px;
+            height: 56px;
+            border: 4px solid rgba(255,0,204,0.25);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: rwSpin 0.8s linear infinite;
+            margin-bottom: 20px;
+        }
+        @keyframes rwSpin { to { transform: rotate(360deg); } }
+        .rw-status {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 14px;
+            color: var(--accent-soft);
+            letter-spacing: 2px;
+            margin-bottom: 28px;
+            animation: pulse 1.2s ease infinite;
+        }
+        .rw-words {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            justify-content: center;
+            max-width: 420px;
+            min-height: 48px;
+            margin-bottom: 24px;
+        }
+        .rw-word {
+            padding: 8px 14px;
+            border-radius: 20px;
+            background: rgba(255,0,204,0.15);
+            border: 1px solid var(--border);
+            color: #fff;
+            font-weight: 700;
+            font-size: 15px;
+            opacity: 0;
+            transform: translateY(10px) scale(0.9);
+            animation: rwWordIn 0.45s ease forwards;
+        }
+        @keyframes rwWordIn {
+            to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        .rw-sentence {
+            max-width: 480px;
+            text-align: center;
+            font-size: 18px;
+            font-weight: 600;
+            line-height: 1.5;
+            color: var(--text);
+            padding: 18px 20px;
+            border-radius: 14px;
+            background: rgba(255,0,204,0.08);
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow);
+            opacity: 0;
+            transform: scale(0.95);
+            transition: all 0.4s ease;
+        }
+        .rw-sentence.show {
+            opacity: 1;
+            transform: scale(1);
+        }
+        .rw-actions {
+            margin-top: 22px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
+            opacity: 0;
+            transition: opacity 0.3s ease 0.2s;
+        }
+        .rw-actions.show { opacity: 1; }
+
+
+        /* ========== Rastgele Cümle ========== */
+        .rand-loading-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 9999;
+            background: rgba(5, 0, 12, 0.88);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 18px;
+            backdrop-filter: blur(8px);
+        }
+        .rand-spinner {
+            width: 56px;
+            height: 56px;
+            border: 4px solid rgba(255,0,204,0.2);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: randSpin 0.8s linear infinite;
+        }
+        @keyframes randSpin {
+            to { transform: rotate(360deg); }
+        }
+        .rand-loading-text {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 14px;
+            color: var(--accent-soft);
+            letter-spacing: 2px;
+            animation: randPulse 1.2s ease-in-out infinite;
+        }
+        @keyframes randPulse {
+            0%, 100% { opacity: 0.5; }
+            50% { opacity: 1; }
+        }
+        .rand-word-chip {
+            display: inline-block;
+            padding: 4px 10px;
+            margin: 3px;
+            border-radius: 20px;
+            background: rgba(255,0,204,0.15);
+            border: 1px solid var(--border);
+            font-size: 13px;
+            color: var(--accent-soft);
+            font-weight: 600;
+        }
+        .rand-sentence-box {
+            background: rgba(0,0,0,0.35);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 18px 16px;
+            font-size: 17px;
+            line-height: 1.55;
+            text-align: center;
+            color: var(--text);
+            margin: 12px 0;
+            box-shadow: 0 0 24px rgba(255,0,204,0.12);
+        }
+
         /* ========== ÇARK (Eve Tahayır) ========== */
         .wheel-wrap {
             position: relative;
@@ -391,16 +538,25 @@
             position: absolute;
             left: 50%;
             top: 50%;
-            transform-origin: 0 0;
-            font-size: 11px;
-            font-weight: 700;
+            width: 0;
+            height: 0;
+            font-size: 12px;
+            font-weight: 800;
             color: #fff;
-            text-shadow: 0 1px 3px rgba(0,0,0,0.85);
+            text-shadow: 0 0 4px #000, 0 1px 3px rgba(0,0,0,0.95), 0 -1px 2px #000;
             white-space: nowrap;
-            max-width: 90px;
+            pointer-events: none;
+            z-index: 2;
+            letter-spacing: 0.3px;
+        }
+        .wheel-seg-label span {
+            display: inline-block;
+            max-width: 72px;
             overflow: hidden;
             text-overflow: ellipsis;
-            pointer-events: none;
+            text-align: center;
+            line-height: 1.15;
+            transform: translate(-50%, -50%);
         }
 
 
@@ -1882,6 +2038,11 @@
                     <div class="folder-name">Console</div>
                     <div class="folder-desc">Komut yaz</div>
                 </div>
+                <div class="folder" onclick="openRandomSentence()">
+                    <div class="folder-icon">✨</div>
+                    <div class="folder-name">Rastgele Cümle</div>
+                    <div class="folder-desc">Kelime → cümle üret</div>
+                </div>
                 <div class="folder" onclick="openWheels()">
                     <div class="folder-icon">🎡</div>
                     <div class="folder-name">Eve Tahayır</div>
@@ -1948,6 +2109,19 @@
     </div>
     <audio id="site-audio" preload="none"></audio>
 
+
+
+    <!-- Rastgele kelime & cümle yükleme ekranı -->
+    <div id="rw-overlay" class="rw-overlay hidden" aria-hidden="true">
+        <div class="rw-loader" id="rw-loader"></div>
+        <div class="rw-status" id="rw-status">YÜKLENİYOR...</div>
+        <div class="rw-words" id="rw-words"></div>
+        <div class="rw-sentence" id="rw-sentence"></div>
+        <div class="rw-actions" id="rw-actions">
+            <button type="button" class="primary-btn" onclick="startRandomWords()">Tekrar</button>
+            <button type="button" class="back-btn" onclick="closeRandomWords()">Kapat</button>
+        </div>
+    </div>
 
     <script>
         // ============================================================
@@ -4103,9 +4277,9 @@
             saveWheels([{
                 id: 'w_default_eve',
                 name: 'Eve Tahayır',
-                description: 'Günlük şans çarkı — çevir ve kazan!',
+                description: 'Çarkı çevir — sınırsız!',
                 cost: 0,
-                dailyLimit: 1,
+                dailyLimit: 0,
                 active: true,
                 segments: [
                     { label: 'Boş', type: 'money', amount: 0, weight: 30, color: '#444' },
@@ -9735,6 +9909,276 @@
 
         // ========== KASALAR ==========
 
+
+        // ========== RASTGELE KELİME + CÜMLE (Eve Tahayır) ==========
+        const RW_WORDS = [
+            'kılıç', 'şehir', 'gece', 'fırtına', 'gölge', 'ateş', 'rüzgar', 'yıldız',
+            'kahraman', 'düşman', 'kapı', 'anahtar', 'sırlar', 'yol', 'köprü', 'deniz',
+            'ejderha', 'altın', 'gümüş', 'taş', 'orman', 'dağ', 'vadi', 'ışık',
+            'karanlık', 'umut', 'korku', 'cesaret', 'dost', 'savaş', 'barış', 'rüya',
+            'ayna', 'zaman', 'hatıra', 'şarkı', 'dans', 'gülüş', 'gözyaşı', 'kalp',
+            'banana', 'kasa', 'çark', 'jackpot', 'klan', 'arena', 'görev', 'pet',
+            'bakiye', 'pazar', 'takas', 'rozet', 'seviye', 'mod', 'sunucu', 'oyuncu'
+        ];
+
+        const RW_TEMPLATES = [
+            'Bir {0} ile {1} arasında geçen {2}, herkesi şaşırttı.',
+            '{0} aslında bir {1} değildi; o bir {2} hikayesiydi.',
+            'Kimse bilmiyordu ki {0}, {1} yüzünden {2} olmuştu.',
+            'Bu gece {0} ve {1} bir araya gelince {2} doğdu.',
+            '{0} arayanlar önce {1} bulur, sonra {2} ile karşılaşır.',
+            'Efsaneye göre {0}, yalnızca {1} taşıyanlara {2} verir.',
+            'Sessiz bir {0} içinde {1} fısıldadı: “{2} yaklaşıyor.”',
+            '{0} kapısından giren, {1} olmadan {2} çıkamaz.',
+            'Her {0} bir {1} ister; her {1} bir {2} ister.',
+            'Bugün {0} vardı, yarın {1} olacak, belki de {2}.',
+            '{0} düşerken {1} yükseldi ve ortada bir {2} kaldı.',
+            'Kader {0} yazmış, {1} silmiş, {2} ile mühürlemiş.',
+            'Çark döndü, {0} geldi; ama asıl ödül {1} ile {2} idi.',
+            'Sword City\'de {0} olmadan {1} konuşulmaz, {2} unutulmaz.',
+            '{0} sesi duyulunca herkes {1} sandı, meğer {2} imiş.'
+        ];
+
+        function pickRandom(arr, n) {
+            const copy = arr.slice();
+            const out = [];
+            n = Math.min(n, copy.length);
+            for (let i = 0; i < n; i++) {
+                const idx = Math.floor(Math.random() * copy.length);
+                out.push(copy.splice(idx, 1)[0]);
+            }
+            return out;
+        }
+
+        function closeRandomWords() {
+            const ov = document.getElementById('rw-overlay');
+            if (ov) {
+                ov.classList.add('hidden');
+                ov.setAttribute('aria-hidden', 'true');
+            }
+        }
+
+        function startRandomWords() {
+            const ov = document.getElementById('rw-overlay');
+            const loader = document.getElementById('rw-loader');
+            const status = document.getElementById('rw-status');
+            const wordsEl = document.getElementById('rw-words');
+            const sentEl = document.getElementById('rw-sentence');
+            const actions = document.getElementById('rw-actions');
+            if (!ov) return;
+
+            ov.classList.remove('hidden');
+            ov.setAttribute('aria-hidden', 'false');
+            if (loader) loader.style.display = 'block';
+            if (status) status.textContent = 'YÜKLENİYOR...';
+            if (wordsEl) wordsEl.innerHTML = '';
+            if (sentEl) {
+                sentEl.textContent = '';
+                sentEl.classList.remove('show');
+            }
+            if (actions) actions.classList.remove('show');
+
+            const words = pickRandom(RW_WORDS, 3 + Math.floor(Math.random() * 2)); // 3-4 kelime
+            const tpl = RW_TEMPLATES[Math.floor(Math.random() * RW_TEMPLATES.length)];
+            let sentence = tpl;
+            for (let i = 0; i < 3; i++) {
+                sentence = sentence.replace('{' + i + '}', words[i % words.length]);
+            }
+            // capitalize first letter
+            sentence = sentence.charAt(0).toUpperCase() + sentence.slice(1);
+
+            // Phase 1: loading
+            setTimeout(function() {
+                if (status) status.textContent = 'KELİMELER SEÇİLİYOR...';
+            }, 600);
+
+            // Phase 2: words appear one by one
+            setTimeout(function() {
+                if (status) status.textContent = 'KELİMELER';
+                if (loader) loader.style.display = 'none';
+                words.forEach(function(w, i) {
+                    setTimeout(function() {
+                        if (!wordsEl) return;
+                        const span = document.createElement('span');
+                        span.className = 'rw-word';
+                        span.textContent = w;
+                        span.style.animationDelay = '0s';
+                        wordsEl.appendChild(span);
+                    }, i * 350);
+                });
+            }, 1400);
+
+            // Phase 3: build sentence
+            const afterWords = 1400 + words.length * 350 + 400;
+            setTimeout(function() {
+                if (status) status.textContent = 'CÜMLE KURULUYOR...';
+            }, afterWords);
+
+            setTimeout(function() {
+                if (status) status.textContent = 'HAZIR';
+                if (sentEl) {
+                    sentEl.textContent = sentence;
+                    sentEl.classList.add('show');
+                }
+                if (actions) actions.classList.add('show');
+            }, afterWords + 700);
+        }
+
+
+        // ========== RASTGELE KELİME → CÜMLE ==========
+        const _RAND_WORDS = {
+            isimler: [
+                'kılıç', 'ejderha', 'şehir', 'gece', 'gölge', 'kahraman', 'büyücü', 'kalp',
+                'rüzgar', 'ateş', 'deniz', 'yıldız', 'savaşçı', 'kral', 'prenses', 'orman',
+                'kale', 'hazine', 'yolcu', 'hayalet', 'kurt', 'aslan', 'güneş', 'ay',
+                'fırtına', 'köprü', 'anahtar', 'kapı', 'rüya', 'zaman', 'kader', 'umut',
+                'sword', 'city', 'klan', 'pet', 'kasa', 'banka', 'pazar', 'görev'
+            ],
+            sifatlar: [
+                'gizemli', 'korkusuz', 'parlak', 'karanlık', 'eski', 'yeni', 'güçlü', 'sessiz',
+                'hızlı', 'yavaş', 'altın', 'gümüş', 'kayıp', 'efsanevi', 'sonsuz', 'küçük',
+                'dev', 'soğuk', 'sıcak', 'vahşi', 'nazik', 'özgür', 'kırık', 'parlayan'
+            ],
+            fiiller: [
+                'koştu', 'uçtu', 'savaştı', 'gülümsedi', 'kayboldu', 'buldu', 'açtı', 'kapattı',
+                'fısıldadı', 'bağırdı', 'bekledi', 'kaçtı', 'döndü', 'yükseldi', 'düştü',
+                'yazdı', 'okudu', 'şarkı söyledi', 'dans etti', 'uyandı', 'uyudu', 'kazandı'
+            ],
+            yerler: [
+                'ormanda', 'kalede', 'şehirde', 'deniz kenarında', 'dağlarda', 'gökyüzünde',
+                'gölgede', 'pazar yerinde', 'klan evinde', 'karanlık sokakta', 'köprüde',
+                'eski tapınakta', 'yıldızların altında', 'rüyada', 'zamanın ötesinde'
+            ],
+            baglac: ['ve', 'ama', 'çünkü', 'sonra', 'birden', 'ansızın', 'yavaşça', 'cesurca']
+        };
+
+        const _RAND_TEMPLATES = [
+            function(w) {
+                return 'Bir ' + w.sifat + ' ' + w.isim + ' ' + w.yer + ' ' + w.fiil + '.';
+            },
+            function(w) {
+                return w.isim[0].toUpperCase() + w.isim.slice(1) + ' ' + w.baglac + ' ' + w.sifat + ' ' + w.isim2 + ' ' + w.yer + ' ' + w.fiil + '.';
+            },
+            function(w) {
+                return 'Herkes ' + w.sifat + ' ' + w.isim + 'ı konuşuyordu; oysa o ' + w.yer + ' ' + w.fiil + '.';
+            },
+            function(w) {
+                return w.yer[0].toUpperCase() + w.yer.slice(1) + ' bir ' + w.sifat + ' ' + w.isim + ' belirdi ve ' + w.fiil + '.';
+            },
+            function(w) {
+                return 'Efsaneye göre ' + w.sifat + ' ' + w.isim + ', ' + w.isim2 + ' ile birlikte ' + w.yer + ' ' + w.fiil + '.';
+            },
+            function(w) {
+                return 'Bugün ' + w.sifat + ' bir ' + w.isim + ' gördüm; ' + w.baglac + ' hemen ' + w.fiil + '.';
+            },
+            function(w) {
+                return w.isim[0].toUpperCase() + w.isim.slice(1) + ' kadar ' + w.sifat + ' başka bir şey yoktu — ta ki ' + w.isim2 + ' ' + w.fiil + ' olana dek.';
+            },
+            function(w) {
+                return 'Sword City\'de ' + w.sifat + ' ' + w.isim + ' ' + w.yer + ' dolaşıyor, ' + w.baglac + ' kimse ' + w.fiil + ' demedi.';
+            }
+        ];
+
+        function _pickRand(arr) {
+            return arr[Math.floor(Math.random() * arr.length)];
+        }
+
+        function _buildRandomSentence() {
+            const isim = _pickRand(_RAND_WORDS.isimler);
+            let isim2 = _pickRand(_RAND_WORDS.isimler);
+            let guard = 0;
+            while (isim2 === isim && guard++ < 8) isim2 = _pickRand(_RAND_WORDS.isimler);
+            const words = {
+                isim: isim,
+                isim2: isim2,
+                sifat: _pickRand(_RAND_WORDS.sifatlar),
+                fiil: _pickRand(_RAND_WORDS.fiiller),
+                yer: _pickRand(_RAND_WORDS.yerler),
+                baglac: _pickRand(_RAND_WORDS.baglac)
+            };
+            const tpl = _pickRand(_RAND_TEMPLATES);
+            const sentence = tpl(words);
+            const used = [words.sifat, words.isim, words.isim2, words.fiil, words.yer, words.baglac]
+                .filter(function(x, i, a) { return a.indexOf(x) === i; });
+            return { sentence: sentence, words: used };
+        }
+
+        function openRandomSentence() {
+            const me = getCurrentUser();
+            // giriş zorunlu değil; site menüsü genelde giriş sonrası ama yine de açık bırak
+            const html = `
+                <div class="info-card" style="margin-bottom:12px;">
+                    <p style="font-size:13px;color:var(--text-muted);line-height:1.5;margin:0;">
+                        Butona bas, rastgele kelimeler seçilsin ve onlardan bir cümle kurulsun.
+                    </p>
+                </div>
+                <div id="rand-result-area">
+                    <p style="text-align:center;color:var(--text-muted);padding:20px 0;">Henüz cümle yok. Başlat!</p>
+                </div>
+                <button class="primary-btn" style="width:100%;" onclick="runRandomSentence()">✨ Cümle üret</button>
+                <button class="back-btn" style="width:100%;margin-top:10px;" onclick="closeModal()">Kapat</button>
+            `;
+            openModal('✨ Rastgele Cümle', html);
+        }
+
+        function runRandomSentence() {
+            // yükleniyor ekranı
+            let overlay = document.getElementById('rand-loading-overlay');
+            if (!overlay) {
+                overlay = document.createElement('div');
+                overlay.id = 'rand-loading-overlay';
+                overlay.className = 'rand-loading-overlay';
+                overlay.innerHTML = '<div class="rand-spinner"></div><div class="rand-loading-text" id="rand-loading-msg">KELİMELER SEÇİLİYOR...</div>';
+                document.body.appendChild(overlay);
+            } else {
+                overlay.style.display = 'flex';
+            }
+
+            const msgs = [
+                'KELİMELER SEÇİLİYOR...',
+                'CÜMLE KURULUYOR...',
+                'BÜYÜ HAZIRLANIYOR...',
+                'SON DOKUNUŞ...'
+            ];
+            let step = 0;
+            const msgEl = document.getElementById('rand-loading-msg');
+            if (msgEl) msgEl.textContent = msgs[0];
+            const iv = setInterval(function() {
+                step++;
+                if (msgEl && step < msgs.length) msgEl.textContent = msgs[step];
+            }, 450);
+
+            const wait = 1600 + Math.floor(Math.random() * 900);
+            setTimeout(function() {
+                clearInterval(iv);
+                overlay.style.display = 'none';
+                const result = _buildRandomSentence();
+                const area = document.getElementById('rand-result-area');
+                if (!area) {
+                    // modal kapalıysa yeniden aç
+                    openRandomSentence();
+                    setTimeout(function() { _showRandResult(result); }, 50);
+                    return;
+                }
+                _showRandResult(result);
+            }, wait);
+        }
+
+        function _showRandResult(result) {
+            const area = document.getElementById('rand-result-area');
+            if (!area) return;
+            const chips = (result.words || []).map(function(w) {
+                return '<span class="rand-word-chip">' + escapeHtml(w) + '</span>';
+            }).join('');
+            area.innerHTML = `
+                <div style="text-align:center;margin-bottom:6px;">
+                    <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;letter-spacing:1px;">SEÇİLEN KELİMELER</div>
+                    ${chips}
+                </div>
+                <div class="rand-sentence-box">${escapeHtml(result.sentence)}</div>
+            `;
+        }
+
         // ========== EVE TAHAYIR / ÇARK SİSTEMİ ==========
         function _wheelColors(n) {
             const palette = ['#c62828','#1565c0','#2e7d32','#f9a825','#6a1b9a','#00838f','#ef6c00','#ad1457','#4527a0','#00695c','#ff00cc','#37474f'];
@@ -9759,21 +10203,28 @@
                     const segs = (w.segments || []).length;
                     const cost = Number(w.cost) || 0;
                     const costTxt = cost <= 0 ? 'Ücretsiz' : ('$' + cost.toLocaleString('tr-TR'));
-                    const lim = Number(w.dailyLimit) || 0;
-                    const limTxt = lim > 0 ? (' · günde ' + lim + ' hak') : '';
                     html += `
                         <div class="info-card" style="margin-bottom:10px;">
                             <div style="font-weight:700;font-size:16px;color:var(--accent-soft);">🎡 ${escapeHtml(w.name || 'Çark')}</div>
                             <div style="font-size:12px;color:var(--text-muted);margin:6px 0;line-height:1.4;">${escapeHtml(w.description || '')}</div>
                             <div style="font-size:13px;margin-bottom:10px;">
                                 <span style="color:#ffd54f;font-family:Orbitron,sans-serif;">${costTxt}</span>
-                                <span style="color:var(--text-muted);">${limTxt} · ${segs} dilim</span>
+                                <span style="color:var(--text-muted);"> · sınırsız · ${segs} dilim</span>
                             </div>
                             <button class="primary-btn" style="width:100%;" onclick="openWheelSpin('${escapeHtml(w.id)}')">Çevir</button>
                         </div>
                     `;
                 });
             }
+            html += `
+                <div class="info-card" style="margin-top:12px;border-color:rgba(255,0,204,0.5);">
+                    <h4 style="color:var(--accent-soft);margin:0 0 8px;">✨ Rastgele Kelime & Cümle</h4>
+                    <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px;line-height:1.4;">
+                        Tıkla: yükleniyor → rastgele kelimeler → onlarla cümle.
+                    </p>
+                    <button class="primary-btn" style="width:100%;" onclick="startRandomWords()">🎲 Başlat</button>
+                </div>
+            `;
             if (isModerator(me)) {
                 html += '<button class="mod-btn" style="width:100%;margin-top:8px;" onclick="modManageWheels()">⚙️ Çarkları düzenle (Mod)</button>';
             }
@@ -9791,43 +10242,31 @@
             }
             const segs = w.segments;
             const n = segs.length;
-            // conic-gradient
             let gradParts = [];
-            let acc = 0;
             for (let i = 0; i < n; i++) {
                 const col = segs[i].color || _wheelColors(i);
-                const start = (acc / n) * 360;
-                acc += 1;
-                const end = (acc / n) * 360;
-                gradParts.push(col + ' ' + start + 'deg ' + end + 'deg');
+                const startA = (i / n) * 360;
+                const endA = ((i + 1) / n) * 360;
+                gradParts.push(col + ' ' + startA + 'deg ' + endA + 'deg');
             }
             const grad = 'conic-gradient(from -90deg, ' + gradParts.join(', ') + ')';
 
-            // labels positioned roughly at mid-angle of each segment
             let labelsHtml = '';
             for (let i = 0; i < n; i++) {
-                const mid = ((i + 0.5) / n) * 360 - 90; // match from -90deg
-                const rad = (mid * Math.PI) / 180;
-                // place label outward from center
-                const r = 38; // % of radius approx via translate
-                labelsHtml += `<div class="wheel-seg-label" style="transform: rotate(${mid + 90}deg) translate(0, -${r}%) rotate(${-(mid + 90)}deg) translate(-50%, -50%);">${escapeHtml(String(segs[i].label || '').slice(0, 12))}</div>`;
+                const mid = ((i + 0.5) / n) * 360 - 90;
+                const txt = String(segs[i].label || '').slice(0, 14);
+                labelsHtml += '<div class="wheel-seg-label" style="transform: rotate(' + (mid + 90) + 'deg) translateY(-78px) rotate(' + (-(mid + 90)) + 'deg);">'
+                    + '<span>' + escapeHtml(txt) + '</span></div>';
             }
 
             const cost = Number(w.cost) || 0;
-            const lim = Number(w.dailyLimit) || 0;
             const user = getUser(me) || {};
             ensureUserFields(user);
-            const spinsKey = 'wheelSpins_' + wheelId;
-            const spinsMap = user.wheelSpins || {};
-            const today = new Date().toDateString();
-            const used = (spinsMap[spinsKey] && spinsMap[spinsKey].day === today) ? (spinsMap[spinsKey].count || 0) : 0;
-            const left = lim > 0 ? Math.max(0, lim - used) : 999;
-            const canSpin = left > 0 && (cost <= 0 || (Number(user.balance) || 0) >= cost);
+            const canSpin = (cost <= 0 || (Number(user.balance) || 0) >= cost);
 
-            let status = '';
-            if (lim > 0) status += 'Bugün kalan hak: <b>' + left + '</b>';
-            if (cost > 0) status += (status ? ' · ' : '') + 'Maliyet: <b style="color:#ffd54f;">$' + cost.toLocaleString('tr-TR') + '</b>';
-            if (!status) status = 'Sınırsız çevirme';
+            let status = cost > 0
+                ? 'Maliyet: <b style="color:#ffd54f;">$' + cost.toLocaleString('tr-TR') + '</b> · sınırsız çevirme'
+                : 'Ücretsiz · sınırsız çevirme';
 
             const html = `
                 <div class="info-card" style="margin-bottom:8px;">
@@ -9844,7 +10283,7 @@
                 <div id="wheel-result" style="text-align:center;min-height:28px;font-weight:700;margin:8px 0;color:var(--accent-soft);"></div>
                 <button class="primary-btn" style="width:100%;" id="wheel-spin-btn" ${canSpin ? '' : 'disabled'}
                     onclick="doWheelSpin('${escapeHtml(wheelId)}')">
-                    ${canSpin ? (cost > 0 ? 'Çevir (−$' + cost.toLocaleString('tr-TR') + ')' : 'Çevir') : 'Hak yok / yetersiz bakiye'}
+                    ${canSpin ? (cost > 0 ? 'Çevir (−$' + cost.toLocaleString('tr-TR') + ')' : 'Çevir') : 'Yetersiz bakiye'}
                 </button>
                 <button class="back-btn" style="margin-top:10px;width:100%;" onclick="openWheels()">← Çarklara dön</button>
             `;
@@ -9863,16 +10302,6 @@
             if (!users[me]) return;
             ensureUserFields(users[me]);
             const cost = Number(w.cost) || 0;
-            const lim = Number(w.dailyLimit) || 0;
-            const spinsKey = 'wheelSpins_' + wheelId;
-            if (!users[me].wheelSpins) users[me].wheelSpins = {};
-            const today = new Date().toDateString();
-            const rec = users[me].wheelSpins[spinsKey];
-            const used = (rec && rec.day === today) ? (rec.count || 0) : 0;
-            if (lim > 0 && used >= lim) {
-                toast('Bugünkü hakkın bitti.', 'error');
-                return;
-            }
             if (cost > 0 && (users[me].balance || 0) < cost) {
                 toast('Yetersiz bakiye.', 'error');
                 return;
@@ -9883,7 +10312,6 @@
             if (btn) btn.disabled = true;
             if (disk) disk.classList.add('spinning');
 
-            // weighted pick
             const segs = w.segments;
             let totalW = 0;
             segs.forEach(function(s) { totalW += Math.max(1, Number(s.weight) || 1); });
@@ -9896,28 +10324,22 @@
             const win = segs[winIdx];
             const n = segs.length;
             const segAngle = 360 / n;
-            // pointer at top (-90deg / 12 o'clock). Segment i center at i*segAngle + segAngle/2 from start (-90 handled in CSS)
-            // We rotate disk clockwise by extraTurns*360 + offset so that winIdx lands under pointer.
             const extraTurns = 5 + Math.floor(Math.random() * 3);
             const centerOfSeg = winIdx * segAngle + segAngle / 2;
-            // conic from -90deg means seg0 starts at top. After rotation R, point that was at angle A is now at A+R.
-            // We want centerOfSeg (from top, clockwise) to end under pointer (top) → rotate so center goes to 0 from top:
-            // rotation = 360 - centerOfSeg (+ full turns)
             const targetRot = extraTurns * 360 + (360 - centerOfSeg);
 
             if (disk) {
                 disk.style.transition = 'none';
                 disk.style.transform = 'rotate(0deg)';
-                // force reflow
                 void disk.offsetWidth;
                 disk.style.transition = 'transform 4.5s cubic-bezier(0.12, 0.75, 0.15, 1)';
                 disk.style.transform = 'rotate(' + targetRot + 'deg)';
             }
 
-            // apply cost & limit immediately, prize after animation
-            if (cost > 0) users[me].balance = (users[me].balance || 0) - cost;
-            users[me].wheelSpins[spinsKey] = { day: today, count: used + 1 };
-            saveUsers(users);
+            if (cost > 0) {
+                users[me].balance = (users[me].balance || 0) - cost;
+                saveUsers(users);
+            }
 
             setTimeout(function() {
                 const users2 = loadUsers();
@@ -9958,8 +10380,17 @@
                 const res = document.getElementById('wheel-result');
                 if (res) res.textContent = msg;
                 if (disk) disk.classList.remove('spinning');
-                // refresh buttons state
-                setTimeout(function() { openWheelSpin(wheelId); }, 1200);
+                if (btn) {
+                    const costNow = Number(w.cost) || 0;
+                    const bal = Number(users2[me].balance) || 0;
+                    if (costNow > 0 && bal < costNow) {
+                        btn.disabled = true;
+                        btn.textContent = 'Yetersiz bakiye';
+                    } else {
+                        btn.disabled = false;
+                        btn.textContent = costNow > 0 ? ('Çevir (−$' + costNow.toLocaleString('tr-TR') + ')') : 'Çevir';
+                    }
+                }
             }, 4600);
         }
 
@@ -9977,7 +10408,7 @@
                             <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
                                 <div>
                                     <div style="font-weight:700;color:var(--accent-soft);">🎡 ${escapeHtml(w.name || 'Çark')}</div>
-                                    <div style="font-size:11px;color:var(--text-muted);">${(w.segments || []).length} dilim · maliyet $${Number(w.cost||0).toLocaleString('tr-TR')} · limit ${Number(w.dailyLimit)||0}/gün ${active ? '' : '· PASİF'}</div>
+                                    <div style="font-size:11px;color:var(--text-muted);">${(w.segments || []).length} dilim · maliyet $${Number(w.cost||0).toLocaleString('tr-TR')} ${active ? '' : '· PASİF'}</div>
                                 </div>
                             </div>
                             <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;">
@@ -10023,7 +10454,7 @@
                 name: 'Yeni Çark',
                 description: '',
                 cost: 0,
-                dailyLimit: 1,
+                dailyLimit: 0,
                 active: true,
                 segments: [
                     { label: 'Boş', type: 'money', amount: 0, weight: 20, color: '#555' },
@@ -10064,7 +10495,7 @@
                             <input type="number" id="w-cost" value="${Number(w.cost)||0}" min="0" style="width:100%;">
                         </div>
                         <div>
-                            <label style="font-size:12px;color:var(--text-muted);">Günlük limit (0=sınırsız)</label>
+                            <label style="font-size:12px;color:var(--text-muted);">Günlük limit (0 önerilir = sınırsız)</label>
                             <input type="number" id="w-limit" value="${Number(w.dailyLimit)||0}" min="0" style="width:100%;">
                         </div>
                     </div>
