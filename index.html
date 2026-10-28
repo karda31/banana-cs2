@@ -10025,6 +10025,7 @@
         }
 
 
+
         // ========== RASTGELE KELİME → CÜMLE ==========
         const _RAND_WORDS = {
             isimler: [
@@ -10032,84 +10033,178 @@
                 'rüzgar', 'ateş', 'deniz', 'yıldız', 'savaşçı', 'kral', 'prenses', 'orman',
                 'kale', 'hazine', 'yolcu', 'hayalet', 'kurt', 'aslan', 'güneş', 'ay',
                 'fırtına', 'köprü', 'anahtar', 'kapı', 'rüya', 'zaman', 'kader', 'umut',
-                'sword', 'city', 'klan', 'pet', 'kasa', 'banka', 'pazar', 'görev'
+                'klan', 'pet', 'kasa', 'banka', 'pazar', 'görev', 'oda', 'yatak', 'balkon',
+                'bar', 'parti', 'gece kulübü', 'otomat', 'duş', 'araba', 'çatı', 'bodrum'
             ],
             sifatlar: [
                 'gizemli', 'korkusuz', 'parlak', 'karanlık', 'eski', 'yeni', 'güçlü', 'sessiz',
                 'hızlı', 'yavaş', 'altın', 'gümüş', 'kayıp', 'efsanevi', 'sonsuz', 'küçük',
-                'dev', 'soğuk', 'sıcak', 'vahşi', 'nazik', 'özgür', 'kırık', 'parlayan'
+                'dev', 'soğuk', 'sıcak', 'vahşi', 'nazik', 'özgür', 'kırık', 'parlayan',
+                'ıslak', 'terli', 'çiplak', 'dar', 'sıkı', 'yumuşak', 'sert', 'ateşli',
+                'utangaç', 'aç', 'dolgun', 'kirli', 'masum', 'yasak', 'gizli', 'geceleyin'
             ],
             fiiller: [
                 'koştu', 'uçtu', 'savaştı', 'gülümsedi', 'kayboldu', 'buldu', 'açtı', 'kapattı',
                 'fısıldadı', 'bağırdı', 'bekledi', 'kaçtı', 'döndü', 'yükseldi', 'düştü',
-                'yazdı', 'okudu', 'şarkı söyledi', 'dans etti', 'uyandı', 'uyudu', 'kazandı'
+                'yazdı', 'okudu', 'şarkı söyledi', 'dans etti', 'uyandı', 'uyudu', 'kazandı',
+                'öpüştü', 'sarıldı', 'dokundu', 'okşadı', 'soyundu', 'titredi', 'inledi',
+                'fısıldayarak yalvardı', 'diz çöktü', 'sımsıkı tuttu', 'nefes nefese kaldı'
             ],
             yerler: [
                 'ormanda', 'kalede', 'şehirde', 'deniz kenarında', 'dağlarda', 'gökyüzünde',
                 'gölgede', 'pazar yerinde', 'klan evinde', 'karanlık sokakta', 'köprüde',
-                'eski tapınakta', 'yıldızların altında', 'rüyada', 'zamanın ötesinde'
+                'eski tapınakta', 'yıldızların altında', 'rüyada', 'zamanın ötesinde',
+                'yatak odasında', 'duşun altında', 'karanlık bir odada', 'arabanın arkasında',
+                'çatı katında', 'kilitli kapının ardında', 'parti sonrası boş salonda'
             ],
-            baglac: ['ve', 'ama', 'çünkü', 'sonra', 'birden', 'ansızın', 'yavaşça', 'cesurca']
+            baglac: ['ve', 'ama', 'çünkü', 'sonra', 'birden', 'ansızın', 'yavaşça', 'cesurca', 'sessizce', 'inleyerek'],
+            // +18 kelime havuzu
+            nsfw_isim: [
+                'sevişme', 'sikişme', 'öpücük', 'sarılma', 'dokunuş', 'inleme', 'arzu',
+                'beden', 'ten', 'dudak', 'boyun', 'bel', 'kalça', 'göğüs', 'bacak',
+                'gece', 'yasak', 'tutku', 'ateş', 'ter', 'nefes', 'fısıltı', 'orgazm',
+                'fantezi', 'oyun', 'emir', 'itaat', 'zincir', 'göz bağı', 'yatak'
+            ],
+            nsfw_sifat: [
+                'ıslak', 'sıcak', 'sert', 'yumuşak', 'aç', 'dolgun', 'titreyen', 'terli',
+                'çiplak', 'yarı çıplak', 'kızarmış', 'nefes nefese', 'sırılsıklam', 'yasak',
+                'kirli', 'masum görünümlü', 'açgözlü', 'kıskanç', 'sahip çıkan'
+            ],
+            nsfw_fiil: [
+                'sevişti', 'sikti', 'sikildi', 'öpüştü', 'yaladı', 'emdi', 'sardı',
+                'içine aldı', 'üzerine çıktı', 'arkadan sarıldı', 'saçından tuttu',
+                'inletti', 'titretti', 'doyurdu', 'boşaldı', 'fısıldayarak yalvardı',
+                'diz çöktü', 'sırtüstü yattı', 'bacaklarını açtı', 'nefes nefese kaldı',
+                'tekrar istedi', 'daha sert istedi', 'isim söyleyerek inledi'
+            ]
         };
-
-        const _RAND_TEMPLATES = [
-            function(w) {
-                return 'Bir ' + w.sifat + ' ' + w.isim + ' ' + w.yer + ' ' + w.fiil + '.';
-            },
-            function(w) {
-                return w.isim[0].toUpperCase() + w.isim.slice(1) + ' ' + w.baglac + ' ' + w.sifat + ' ' + w.isim2 + ' ' + w.yer + ' ' + w.fiil + '.';
-            },
-            function(w) {
-                return 'Herkes ' + w.sifat + ' ' + w.isim + 'ı konuşuyordu; oysa o ' + w.yer + ' ' + w.fiil + '.';
-            },
-            function(w) {
-                return w.yer[0].toUpperCase() + w.yer.slice(1) + ' bir ' + w.sifat + ' ' + w.isim + ' belirdi ve ' + w.fiil + '.';
-            },
-            function(w) {
-                return 'Efsaneye göre ' + w.sifat + ' ' + w.isim + ', ' + w.isim2 + ' ile birlikte ' + w.yer + ' ' + w.fiil + '.';
-            },
-            function(w) {
-                return 'Bugün ' + w.sifat + ' bir ' + w.isim + ' gördüm; ' + w.baglac + ' hemen ' + w.fiil + '.';
-            },
-            function(w) {
-                return w.isim[0].toUpperCase() + w.isim.slice(1) + ' kadar ' + w.sifat + ' başka bir şey yoktu — ta ki ' + w.isim2 + ' ' + w.fiil + ' olana dek.';
-            },
-            function(w) {
-                return 'Sword City\'de ' + w.sifat + ' ' + w.isim + ' ' + w.yer + ' dolaşıyor, ' + w.baglac + ' kimse ' + w.fiil + ' demedi.';
-            }
-        ];
 
         function _pickRand(arr) {
             return arr[Math.floor(Math.random() * arr.length)];
         }
 
+        function _shuffle(arr) {
+            const a = arr.slice();
+            for (let i = a.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                const t = a[i]; a[i] = a[j]; a[j] = t;
+            }
+            return a;
+        }
+
         function _buildRandomSentence() {
-            const isim = _pickRand(_RAND_WORDS.isimler);
-            let isim2 = _pickRand(_RAND_WORDS.isimler);
-            let guard = 0;
-            while (isim2 === isim && guard++ < 8) isim2 = _pickRand(_RAND_WORDS.isimler);
-            const words = {
-                isim: isim,
-                isim2: isim2,
-                sifat: _pickRand(_RAND_WORDS.sifatlar),
-                fiil: _pickRand(_RAND_WORDS.fiiller),
-                yer: _pickRand(_RAND_WORDS.yerler),
-                baglac: _pickRand(_RAND_WORDS.baglac)
-            };
-            const tpl = _pickRand(_RAND_TEMPLATES);
-            const sentence = tpl(words);
-            const used = [words.sifat, words.isim, words.isim2, words.fiil, words.yer, words.baglac]
-                .filter(function(x, i, a) { return a.indexOf(x) === i; });
-            return { sentence: sentence, words: used };
+            // ~35% ihtimal +18 mod
+            const nsfw = Math.random() < 0.35;
+            // kelime sayısı 2–10 arası rastgele
+            const count = 2 + Math.floor(Math.random() * 9);
+
+            let pool = [];
+            if (nsfw) {
+                pool = pool.concat(_RAND_WORDS.nsfw_isim, _RAND_WORDS.nsfw_sifat, _RAND_WORDS.nsfw_fiil);
+                pool = pool.concat(_RAND_WORDS.sifatlar, _RAND_WORDS.yerler, _RAND_WORDS.baglac);
+            } else {
+                pool = pool.concat(
+                    _RAND_WORDS.isimler, _RAND_WORDS.sifatlar, _RAND_WORDS.fiiller,
+                    _RAND_WORDS.yerler, _RAND_WORDS.baglac
+                );
+            }
+            pool = _shuffle(pool);
+            const words = [];
+            const seen = {};
+            for (let i = 0; i < pool.length && words.length < count; i++) {
+                const w = pool[i];
+                if (seen[w]) continue;
+                seen[w] = true;
+                words.push(w);
+            }
+            // yetersizse tekrar doldur
+            while (words.length < count) {
+                words.push(_pickRand(pool));
+            }
+
+            const sentence = nsfw ? _buildNsfwSentence(words) : _buildSafeSentence(words);
+            return { sentence: sentence, words: words, nsfw: nsfw };
+        }
+
+        function _buildSafeSentence(words) {
+            const w = words.slice();
+            const n = w.length;
+            // şablonlar: kelime sayısına göre esnek
+            const templates = [
+                function() {
+                    if (n >= 4) return 'Bir ' + w[0] + ' ' + w[1] + ', ' + w[2] + ' ' + w[3] + (n > 4 ? ' ve ' + w.slice(4).join(' ') : '') + '.';
+                    if (n === 3) return w[0][0].toUpperCase() + w[0].slice(1) + ' ' + w[1] + ' ' + w[2] + '.';
+                    if (n === 2) return w[0][0].toUpperCase() + w[0].slice(1) + ' ve ' + w[1] + ' bir araya geldi.';
+                    return w.join(' ') + '.';
+                },
+                function() {
+                    if (n >= 5) return w[0][0].toUpperCase() + w[0].slice(1) + ' ' + w[1] + ' ' + w[2] + '; ' + w[3] + ' ' + w.slice(4).join(' ') + '.';
+                    if (n >= 3) return 'Herkes ' + w[0] + ' diyordu, oysa asıl mesele ' + w.slice(1).join(' ') + ' idi.';
+                    return 'Bugün her şey ' + w.join(' ') + ' kokuyordu.';
+                },
+                function() {
+                    if (n >= 4) return 'Sword City\'de ' + w[0] + ' ' + w[1] + ' dolaşırken ' + w.slice(2).join(' ') + '.';
+                    return 'Ansızın ' + w.join(' ') + ' belirdi.';
+                },
+                function() {
+                    return w.map(function(x, i) {
+                        return i === 0 ? (x[0].toUpperCase() + x.slice(1)) : x;
+                    }).join(' ') + (n <= 3 ? ' her şeyi değiştirdi.' : ' — ve gece hiç bitmedi.');
+                },
+                function() {
+                    if (n >= 6) return w[0][0].toUpperCase() + w[0].slice(1) + ', ' + w[1] + ' ve ' + w[2] + ' ' + w[3] + '; sonra ' + w.slice(4).join(' ') + '.';
+                    if (n >= 4) return 'Efsaneye göre ' + w.join(', ') + ' bir sır saklıyordu.';
+                    return 'Sadece ' + w.join(' ') + ' kaldı.';
+                }
+            ];
+            return _pickRand(templates)();
+        }
+
+        function _buildNsfwSentence(words) {
+            const w = words.slice();
+            const n = w.length;
+            const templates = [
+                function() {
+                    if (n >= 4) return 'Gece boyunca ' + w[0] + ' ve ' + w[1] + ' ' + w[2] + ' ' + w.slice(3).join(' ') + '.';
+                    if (n === 3) return w[0][0].toUpperCase() + w[0].slice(1) + ' ' + w[1] + ' ' + w[2] + '.';
+                    return 'İkisi de ' + w.join(' ') + ' istiyordu.';
+                },
+                function() {
+                    if (n >= 5) return w[0][0].toUpperCase() + w[0].slice(1) + ' ' + w[1] + ' iken ' + w[2] + ' ' + w.slice(3).join(' ') + '.';
+                    return 'Yatakta sadece ' + w.join(' ') + ' vardı.';
+                },
+                function() {
+                    if (n >= 4) return 'Fısıldayarak "' + w[0] + '" dedi; sonra ' + w.slice(1).join(' ') + '.';
+                    return '"' + w.join(' ') + '" diye inledi.';
+                },
+                function() {
+                    if (n >= 6) return 'Önce ' + w[0] + ', sonra ' + w[1] + ' ve ' + w[2] + '; gece ' + w.slice(3).join(' ') + ' ile bitti.';
+                    if (n >= 3) return 'Kapı kilitliydi. İçeride ' + w.join(', ') + '.';
+                    return 'Sabaha kadar ' + w.join(' ') + '.';
+                },
+                function() {
+                    return 'Kimse duymadı: ' + w.map(function(x, i) {
+                        return i === 0 ? (x[0].toUpperCase() + x.slice(1)) : x;
+                    }).join(' ') + '.';
+                },
+                function() {
+                    if (n >= 4) return 'Çıplak ' + w[0] + ' ' + w[1] + ' üzerinde ' + w.slice(2).join(' ') + '.';
+                    return 'Ter ve ' + w.join(' ') + ' kokuyordu oda.';
+                },
+                function() {
+                    if (n >= 5) return w[0][0].toUpperCase() + w[0].slice(1) + ' onu ' + w[1] + ' ' + w[2] + ', o da ' + w.slice(3).join(' ') + '.';
+                    return 'Daha fazla ' + w.join(' ') + ' istedi.';
+                }
+            ];
+            return _pickRand(templates)();
         }
 
         function openRandomSentence() {
-            const me = getCurrentUser();
-            // giriş zorunlu değil; site menüsü genelde giriş sonrası ama yine de açık bırak
             const html = `
                 <div class="info-card" style="margin-bottom:12px;">
                     <p style="font-size:13px;color:var(--text-muted);line-height:1.5;margin:0;">
-                        Butona bas, rastgele kelimeler seçilsin ve onlardan bir cümle kurulsun.
+                        Rastgele <b>2–10 kelime</b> seçilir, onlardan cümle kurulur.
+                        Bazen normal, bazen <span style="color:var(--danger);">+18</span> çıkar.
                     </p>
                 </div>
                 <div id="rand-result-area">
@@ -10122,7 +10217,6 @@
         }
 
         function runRandomSentence() {
-            // yükleniyor ekranı
             let overlay = document.getElementById('rand-loading-overlay');
             if (!overlay) {
                 overlay = document.createElement('div');
@@ -10155,7 +10249,6 @@
                 const result = _buildRandomSentence();
                 const area = document.getElementById('rand-result-area');
                 if (!area) {
-                    // modal kapalıysa yeniden aç
                     openRandomSentence();
                     setTimeout(function() { _showRandResult(result); }, 50);
                     return;
@@ -10170,9 +10263,13 @@
             const chips = (result.words || []).map(function(w) {
                 return '<span class="rand-word-chip">' + escapeHtml(w) + '</span>';
             }).join('');
+            const badge = result.nsfw
+                ? '<span style="display:inline-block;padding:2px 8px;border-radius:8px;background:rgba(255,61,113,0.2);border:1px solid var(--danger);color:var(--danger);font-size:11px;font-weight:700;margin-bottom:8px;">+18</span>'
+                : '<span style="display:inline-block;padding:2px 8px;border-radius:8px;background:rgba(0,230,118,0.15);border:1px solid var(--success);color:var(--success);font-size:11px;font-weight:700;margin-bottom:8px;">NORMAL</span>';
             area.innerHTML = `
                 <div style="text-align:center;margin-bottom:6px;">
-                    <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;letter-spacing:1px;">SEÇİLEN KELİMELER</div>
+                    ${badge}
+                    <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;letter-spacing:1px;">SEÇİLEN KELİMELER (${(result.words || []).length})</div>
                     ${chips}
                 </div>
                 <div class="rand-sentence-box">${escapeHtml(result.sentence)}</div>
