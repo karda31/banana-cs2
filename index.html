@@ -340,6 +340,70 @@
             box-shadow: 0 0 18px var(--accent-glow);
         }
 
+        /* ========== ÇARK (Eve Tahayır) ========== */
+        .wheel-wrap {
+            position: relative;
+            width: min(280px, 78vw);
+            height: min(280px, 78vw);
+            margin: 16px auto;
+        }
+        .wheel-pointer {
+            position: absolute;
+            top: -6px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 5;
+            font-size: 28px;
+            filter: drop-shadow(0 2px 6px rgba(0,0,0,0.6));
+            line-height: 1;
+        }
+        .wheel-disk {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            border: 4px solid var(--accent);
+            box-shadow: 0 0 28px var(--accent-glow), inset 0 0 20px rgba(0,0,0,0.35);
+            transition: transform 4.5s cubic-bezier(0.12, 0.75, 0.15, 1);
+            position: relative;
+            overflow: hidden;
+        }
+        .wheel-disk.spinning {
+            pointer-events: none;
+        }
+        .wheel-center {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--accent), #aa00ff);
+            border: 3px solid #fff;
+            box-shadow: 0 0 16px var(--accent-glow);
+            z-index: 4;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+        }
+        .wheel-seg-label {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform-origin: 0 0;
+            font-size: 11px;
+            font-weight: 700;
+            color: #fff;
+            text-shadow: 0 1px 3px rgba(0,0,0,0.85);
+            white-space: nowrap;
+            max-width: 90px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            pointer-events: none;
+        }
+
+
         .notif-btn {
             position: relative;
             width: 36px;
@@ -1818,6 +1882,11 @@
                     <div class="folder-name">Console</div>
                     <div class="folder-desc">Komut yaz</div>
                 </div>
+                <div class="folder" onclick="openWheels()">
+                    <div class="folder-icon">🎡</div>
+                    <div class="folder-name">Eve Tahayır</div>
+                    <div class="folder-desc">Çark çevir & kazan</div>
+                </div>
                 <div class="folder" id="mod-folder" onclick="openModerator()" style="display:none;">
                     <div class="folder-icon">🛡️</div>
                     <div class="folder-name">Moderatör</div>
@@ -1920,6 +1989,7 @@
         let _charPricesCache = {}; // karakter adı -> orijinal piyasa fiyatı
         let _tradesCache = [];
         let _casesCache = [];
+        let _wheelsCache = [];
         let _notifsCache = {};
         let _clansCache = [];
         let _shopOrdersCache = [];
@@ -4009,6 +4079,46 @@
             if (firebaseReady) fbSet('cases', _casesCache);
             else safeLocalSet('swordcity_cases_v1', JSON.stringify(_casesCache));
         }
+        // ---------- WHEELS (Eve Tahayır Çarkları) ----------
+        function loadWheels() {
+            return Array.isArray(_wheelsCache) ? _wheelsCache : [];
+        }
+        async function loadWheelsAsync() {
+            if (firebaseReady) {
+                const data = await fbGet('wheels');
+                _wheelsCache = Array.isArray(data) ? data : (data ? Object.values(data) : []);
+                return _wheelsCache;
+            }
+            try { _wheelsCache = JSON.parse(localStorage.getItem('swordcity_wheels_v1') || '[]'); }
+            catch (e) { _wheelsCache = []; }
+            return _wheelsCache;
+        }
+        function saveWheels(list) {
+            _wheelsCache = Array.isArray(list) ? list : [];
+            if (firebaseReady) fbSet('wheels', _wheelsCache);
+            else safeLocalSet('swordcity_wheels_v1', JSON.stringify(_wheelsCache));
+        }
+        function defaultWheelsIfEmpty() {
+            if (loadWheels().length) return;
+            saveWheels([{
+                id: 'w_default_eve',
+                name: 'Eve Tahayır',
+                description: 'Günlük şans çarkı — çevir ve kazan!',
+                cost: 0,
+                dailyLimit: 1,
+                active: true,
+                segments: [
+                    { label: 'Boş', type: 'money', amount: 0, weight: 30, color: '#444' },
+                    { label: '50 $', type: 'money', amount: 50, weight: 25, color: '#2e7d32' },
+                    { label: '100 $', type: 'money', amount: 100, weight: 18, color: '#1565c0' },
+                    { label: '250 $', type: 'money', amount: 250, weight: 12, color: '#6a1b9a' },
+                    { label: '500 $', type: 'money', amount: 500, weight: 8, color: '#c62828' },
+                    { label: '1000 $', type: 'money', amount: 1000, weight: 5, color: '#f9a825' },
+                    { label: 'Jackpot', type: 'money', amount: 5000, weight: 2, color: '#ff00cc' }
+                ]
+            }]);
+        }
+
 
         // ---------- NOTIFICATIONS ----------
         function loadAllNotifs() {
@@ -4408,6 +4518,7 @@
                 loadCharPricesAsync(),
                 loadTradesAsync(),
                 loadCasesAsync(),
+                loadWheelsAsync(),
                 loadAllNotifsAsync(),
                 loadClansAsync(),
                 loadShopOrdersAsync(),
@@ -4417,6 +4528,7 @@
                 loadChatsAsync(),
                 loadBannedNamesAsync()
             ]);
+            try { defaultWheelsIfEmpty(); } catch (e) {}
             startRealtimeListeners();
             console.log("📦 Tüm veriler yüklendi");
         }
@@ -9622,6 +9734,412 @@
         }
 
         // ========== KASALAR ==========
+
+        // ========== EVE TAHAYIR / ÇARK SİSTEMİ ==========
+        function _wheelColors(n) {
+            const palette = ['#c62828','#1565c0','#2e7d32','#f9a825','#6a1b9a','#00838f','#ef6c00','#ad1457','#4527a0','#00695c','#ff00cc','#37474f'];
+            return palette[n % palette.length];
+        }
+
+        function openWheels() {
+            const me = getCurrentUser();
+            if (!me) { toast('Önce giriş yap.', 'error'); return; }
+            const wheels = loadWheels().filter(function(w) { return w && w.active !== false; });
+            const bal = (getUser(me) || {}).balance || 0;
+            let html = `
+                <div class="info-card" style="margin-bottom:12px;">
+                    <div class="info-row"><span class="label">Bakiyen</span><span class="value" style="color:var(--success);">$${Number(bal).toLocaleString('tr-TR')}</span></div>
+                    <p style="font-size:12px;color:var(--text-muted);margin-top:8px;line-height:1.5;">Çarkları çevir, ödül kazan. Moderasyon tarafından yönetilir.</p>
+                </div>
+            `;
+            if (!wheels.length) {
+                html += '<p style="color:var(--text-muted);text-align:center;padding:16px 0;">Henüz aktif çark yok.</p>';
+            } else {
+                wheels.forEach(function(w) {
+                    const segs = (w.segments || []).length;
+                    const cost = Number(w.cost) || 0;
+                    const costTxt = cost <= 0 ? 'Ücretsiz' : ('$' + cost.toLocaleString('tr-TR'));
+                    const lim = Number(w.dailyLimit) || 0;
+                    const limTxt = lim > 0 ? (' · günde ' + lim + ' hak') : '';
+                    html += `
+                        <div class="info-card" style="margin-bottom:10px;">
+                            <div style="font-weight:700;font-size:16px;color:var(--accent-soft);">🎡 ${escapeHtml(w.name || 'Çark')}</div>
+                            <div style="font-size:12px;color:var(--text-muted);margin:6px 0;line-height:1.4;">${escapeHtml(w.description || '')}</div>
+                            <div style="font-size:13px;margin-bottom:10px;">
+                                <span style="color:#ffd54f;font-family:Orbitron,sans-serif;">${costTxt}</span>
+                                <span style="color:var(--text-muted);">${limTxt} · ${segs} dilim</span>
+                            </div>
+                            <button class="primary-btn" style="width:100%;" onclick="openWheelSpin('${escapeHtml(w.id)}')">Çevir</button>
+                        </div>
+                    `;
+                });
+            }
+            if (isModerator(me)) {
+                html += '<button class="mod-btn" style="width:100%;margin-top:8px;" onclick="modManageWheels()">⚙️ Çarkları düzenle (Mod)</button>';
+            }
+            html += '<button class="back-btn" style="margin-top:10px;" onclick="closeModal()">Kapat</button>';
+            openModal('🎡 Eve Tahayır', html);
+        }
+
+        function openWheelSpin(wheelId) {
+            const me = getCurrentUser();
+            if (!me) { toast('Önce giriş yap.', 'error'); return; }
+            const w = loadWheels().find(function(x) { return x.id === wheelId; });
+            if (!w || !w.segments || !w.segments.length) {
+                toast('Çark bulunamadı.', 'error');
+                return;
+            }
+            const segs = w.segments;
+            const n = segs.length;
+            // conic-gradient
+            let gradParts = [];
+            let acc = 0;
+            for (let i = 0; i < n; i++) {
+                const col = segs[i].color || _wheelColors(i);
+                const start = (acc / n) * 360;
+                acc += 1;
+                const end = (acc / n) * 360;
+                gradParts.push(col + ' ' + start + 'deg ' + end + 'deg');
+            }
+            const grad = 'conic-gradient(from -90deg, ' + gradParts.join(', ') + ')';
+
+            // labels positioned roughly at mid-angle of each segment
+            let labelsHtml = '';
+            for (let i = 0; i < n; i++) {
+                const mid = ((i + 0.5) / n) * 360 - 90; // match from -90deg
+                const rad = (mid * Math.PI) / 180;
+                // place label outward from center
+                const r = 38; // % of radius approx via translate
+                labelsHtml += `<div class="wheel-seg-label" style="transform: rotate(${mid + 90}deg) translate(0, -${r}%) rotate(${-(mid + 90)}deg) translate(-50%, -50%);">${escapeHtml(String(segs[i].label || '').slice(0, 12))}</div>`;
+            }
+
+            const cost = Number(w.cost) || 0;
+            const lim = Number(w.dailyLimit) || 0;
+            const user = getUser(me) || {};
+            ensureUserFields(user);
+            const spinsKey = 'wheelSpins_' + wheelId;
+            const spinsMap = user.wheelSpins || {};
+            const today = new Date().toDateString();
+            const used = (spinsMap[spinsKey] && spinsMap[spinsKey].day === today) ? (spinsMap[spinsKey].count || 0) : 0;
+            const left = lim > 0 ? Math.max(0, lim - used) : 999;
+            const canSpin = left > 0 && (cost <= 0 || (Number(user.balance) || 0) >= cost);
+
+            let status = '';
+            if (lim > 0) status += 'Bugün kalan hak: <b>' + left + '</b>';
+            if (cost > 0) status += (status ? ' · ' : '') + 'Maliyet: <b style="color:#ffd54f;">$' + cost.toLocaleString('tr-TR') + '</b>';
+            if (!status) status = 'Sınırsız çevirme';
+
+            const html = `
+                <div class="info-card" style="margin-bottom:8px;">
+                    <div style="font-weight:700;color:var(--accent-soft);">${escapeHtml(w.name || 'Çark')}</div>
+                    <div style="font-size:12px;color:var(--text-muted);margin-top:4px;">${status}</div>
+                </div>
+                <div class="wheel-wrap">
+                    <div class="wheel-pointer">▼</div>
+                    <div class="wheel-disk" id="wheel-disk" style="background: ${grad};">
+                        ${labelsHtml}
+                    </div>
+                    <div class="wheel-center">🎡</div>
+                </div>
+                <div id="wheel-result" style="text-align:center;min-height:28px;font-weight:700;margin:8px 0;color:var(--accent-soft);"></div>
+                <button class="primary-btn" style="width:100%;" id="wheel-spin-btn" ${canSpin ? '' : 'disabled'}
+                    onclick="doWheelSpin('${escapeHtml(wheelId)}')">
+                    ${canSpin ? (cost > 0 ? 'Çevir (−$' + cost.toLocaleString('tr-TR') + ')' : 'Çevir') : 'Hak yok / yetersiz bakiye'}
+                </button>
+                <button class="back-btn" style="margin-top:10px;width:100%;" onclick="openWheels()">← Çarklara dön</button>
+            `;
+            openModal('🎡 ' + (w.name || 'Çark'), html);
+        }
+
+        function doWheelSpin(wheelId) {
+            const me = getCurrentUser();
+            if (!me) return;
+            const w = loadWheels().find(function(x) { return x.id === wheelId; });
+            if (!w || !w.segments || !w.segments.length) {
+                toast('Çark bulunamadı.', 'error');
+                return;
+            }
+            const users = loadUsers();
+            if (!users[me]) return;
+            ensureUserFields(users[me]);
+            const cost = Number(w.cost) || 0;
+            const lim = Number(w.dailyLimit) || 0;
+            const spinsKey = 'wheelSpins_' + wheelId;
+            if (!users[me].wheelSpins) users[me].wheelSpins = {};
+            const today = new Date().toDateString();
+            const rec = users[me].wheelSpins[spinsKey];
+            const used = (rec && rec.day === today) ? (rec.count || 0) : 0;
+            if (lim > 0 && used >= lim) {
+                toast('Bugünkü hakkın bitti.', 'error');
+                return;
+            }
+            if (cost > 0 && (users[me].balance || 0) < cost) {
+                toast('Yetersiz bakiye.', 'error');
+                return;
+            }
+
+            const btn = document.getElementById('wheel-spin-btn');
+            const disk = document.getElementById('wheel-disk');
+            if (btn) btn.disabled = true;
+            if (disk) disk.classList.add('spinning');
+
+            // weighted pick
+            const segs = w.segments;
+            let totalW = 0;
+            segs.forEach(function(s) { totalW += Math.max(1, Number(s.weight) || 1); });
+            let r = Math.random() * totalW;
+            let winIdx = segs.length - 1;
+            for (let i = 0; i < segs.length; i++) {
+                r -= Math.max(1, Number(segs[i].weight) || 1);
+                if (r <= 0) { winIdx = i; break; }
+            }
+            const win = segs[winIdx];
+            const n = segs.length;
+            const segAngle = 360 / n;
+            // pointer at top (-90deg / 12 o'clock). Segment i center at i*segAngle + segAngle/2 from start (-90 handled in CSS)
+            // We rotate disk clockwise by extraTurns*360 + offset so that winIdx lands under pointer.
+            const extraTurns = 5 + Math.floor(Math.random() * 3);
+            const centerOfSeg = winIdx * segAngle + segAngle / 2;
+            // conic from -90deg means seg0 starts at top. After rotation R, point that was at angle A is now at A+R.
+            // We want centerOfSeg (from top, clockwise) to end under pointer (top) → rotate so center goes to 0 from top:
+            // rotation = 360 - centerOfSeg (+ full turns)
+            const targetRot = extraTurns * 360 + (360 - centerOfSeg);
+
+            if (disk) {
+                disk.style.transition = 'none';
+                disk.style.transform = 'rotate(0deg)';
+                // force reflow
+                void disk.offsetWidth;
+                disk.style.transition = 'transform 4.5s cubic-bezier(0.12, 0.75, 0.15, 1)';
+                disk.style.transform = 'rotate(' + targetRot + 'deg)';
+            }
+
+            // apply cost & limit immediately, prize after animation
+            if (cost > 0) users[me].balance = (users[me].balance || 0) - cost;
+            users[me].wheelSpins[spinsKey] = { day: today, count: used + 1 };
+            saveUsers(users);
+
+            setTimeout(function() {
+                const users2 = loadUsers();
+                if (!users2[me]) return;
+                ensureUserFields(users2[me]);
+                let msg = '';
+                const type = (win.type || 'money').toLowerCase();
+                if (type === 'money') {
+                    const amt = Number(win.amount) || 0;
+                    users2[me].balance = (users2[me].balance || 0) + amt;
+                    if (amt > 0) {
+                        msg = '🎉 ' + (win.label || '') + ' → +$' + amt.toLocaleString('tr-TR');
+                        pushNotif(me, '🎡 Çark: +$' + amt.toLocaleString('tr-TR'), 'success');
+                        toast(msg);
+                    } else {
+                        msg = 'Boş geldi: ' + (win.label || '—');
+                        toast(msg, 'info');
+                    }
+                } else if (type === 'item') {
+                    if (!Array.isArray(users2[me].inventory)) users2[me].inventory = [];
+                    users2[me].inventory.push({
+                        id: 'wi_' + Date.now(),
+                        name: win.itemName || win.label || 'Ödül',
+                        category: win.category || 'Diğer',
+                        rarity: win.rarity || 'Normal',
+                        image: win.image || '',
+                        from: 'wheel'
+                    });
+                    if (typeof bumpInvVersion === 'function') bumpInvVersion(users2[me]);
+                    msg = '🎁 Eşya kazandın: ' + (win.itemName || win.label || 'Ödül');
+                    pushNotif(me, '🎡 Çark: ' + msg, 'success');
+                    toast(msg);
+                } else {
+                    msg = 'Sonuç: ' + (win.label || '—');
+                    toast(msg);
+                }
+                saveUsers(users2);
+                const res = document.getElementById('wheel-result');
+                if (res) res.textContent = msg;
+                if (disk) disk.classList.remove('spinning');
+                // refresh buttons state
+                setTimeout(function() { openWheelSpin(wheelId); }, 1200);
+            }, 4600);
+        }
+
+        function modManageWheels() {
+            if (!isModerator()) { toast('Sadece moderatör.', 'error'); return; }
+            const wheels = loadWheels();
+            let html = '<p style="font-size:13px;color:var(--text-muted);margin-bottom:12px;">Çark ekle, düzenle veya sil. Değişiklikler anında kaydedilir.</p>';
+            if (!wheels.length) {
+                html += '<p style="color:var(--text-muted);text-align:center;">Henüz çark yok.</p>';
+            } else {
+                wheels.forEach(function(w, idx) {
+                    const active = w.active !== false;
+                    html += `
+                        <div class="info-card" style="margin-bottom:10px;opacity:${active ? 1 : 0.55};">
+                            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+                                <div>
+                                    <div style="font-weight:700;color:var(--accent-soft);">🎡 ${escapeHtml(w.name || 'Çark')}</div>
+                                    <div style="font-size:11px;color:var(--text-muted);">${(w.segments || []).length} dilim · maliyet $${Number(w.cost||0).toLocaleString('tr-TR')} · limit ${Number(w.dailyLimit)||0}/gün ${active ? '' : '· PASİF'}</div>
+                                </div>
+                            </div>
+                            <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;">
+                                <button class="back-btn" style="flex:1;min-width:90px;" onclick="modEditWheel('${escapeHtml(w.id)}')">✏️ Düzenle</button>
+                                <button class="back-btn" style="flex:1;min-width:90px;" onclick="modToggleWheel('${escapeHtml(w.id)}')">${active ? '⏸ Pasif' : '▶ Aktif'}</button>
+                                <button class="back-btn" style="flex:1;min-width:90px;border-color:var(--danger);color:var(--danger);" onclick="modDeleteWheel('${escapeHtml(w.id)}')">🗑 Sil</button>
+                            </div>
+                        </div>
+                    `;
+                });
+            }
+            html += `
+                <button class="primary-btn" style="width:100%;margin-top:8px;" onclick="modEditWheel(null)">＋ Yeni çark ekle</button>
+                <button class="back-btn" style="width:100%;margin-top:8px;" onclick="showModUserList()">← Mod paneli</button>
+            `;
+            openModal('🎡 Çark Yönetimi', html);
+        }
+
+        function modToggleWheel(id) {
+            if (!isModerator()) return;
+            const list = loadWheels();
+            const w = list.find(function(x) { return x.id === id; });
+            if (!w) return;
+            w.active = !(w.active !== false);
+            saveWheels(list);
+            toast(w.active ? 'Çark aktif.' : 'Çark pasif.');
+            modManageWheels();
+        }
+
+        function modDeleteWheel(id) {
+            if (!isModerator()) return;
+            if (!confirm('Bu çark silinsin mi?')) return;
+            saveWheels(loadWheels().filter(function(x) { return x.id !== id; }));
+            toast('Çark silindi.');
+            modManageWheels();
+        }
+
+        function modEditWheel(id) {
+            if (!isModerator()) return;
+            const isNew = !id;
+            let w = isNew ? {
+                id: 'w_' + Date.now(),
+                name: 'Yeni Çark',
+                description: '',
+                cost: 0,
+                dailyLimit: 1,
+                active: true,
+                segments: [
+                    { label: 'Boş', type: 'money', amount: 0, weight: 20, color: '#555' },
+                    { label: '100 $', type: 'money', amount: 100, weight: 10, color: '#1565c0' }
+                ]
+            } : loadWheels().find(function(x) { return x.id === id; });
+            if (!w) { toast('Çark yok.', 'error'); return; }
+
+            let segsHtml = '';
+            (w.segments || []).forEach(function(s, i) {
+                segsHtml += `
+                    <div class="info-card" style="margin-bottom:8px;padding:10px;" data-seg="${i}">
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+                            <input type="text" class="seg-label" placeholder="Etiket" value="${escapeHtml(s.label || '')}" style="width:100%;">
+                            <select class="seg-type" style="width:100%;">
+                                <option value="money" ${ (s.type||'money')==='money'?'selected':'' }>Para</option>
+                                <option value="item" ${ s.type==='item'?'selected':'' }>Eşya</option>
+                            </select>
+                            <input type="number" class="seg-amount" placeholder="Miktar $" value="${Number(s.amount)||0}" style="width:100%;">
+                            <input type="number" class="seg-weight" placeholder="Ağırlık" value="${Number(s.weight)||1}" min="1" style="width:100%;">
+                            <input type="text" class="seg-item" placeholder="Eşya adı (item)" value="${escapeHtml(s.itemName || '')}" style="width:100%;">
+                            <input type="color" class="seg-color" value="${s.color || _wheelColors(i)}" style="width:100%;height:36px;">
+                        </div>
+                        <button type="button" class="back-btn" style="margin-top:6px;width:100%;border-color:var(--danger);color:var(--danger);" onclick="this.closest('[data-seg]').remove()">Dilim sil</button>
+                    </div>
+                `;
+            });
+
+            const html = `
+                <div class="info-card" style="margin-bottom:12px;">
+                    <label style="font-size:12px;color:var(--text-muted);">Çark adı</label>
+                    <input type="text" id="w-name" value="${escapeHtml(w.name || '')}" style="width:100%;margin-bottom:8px;">
+                    <label style="font-size:12px;color:var(--text-muted);">Açıklama</label>
+                    <input type="text" id="w-desc" value="${escapeHtml(w.description || '')}" style="width:100%;margin-bottom:8px;">
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                        <div>
+                            <label style="font-size:12px;color:var(--text-muted);">Maliyet ($)</label>
+                            <input type="number" id="w-cost" value="${Number(w.cost)||0}" min="0" style="width:100%;">
+                        </div>
+                        <div>
+                            <label style="font-size:12px;color:var(--text-muted);">Günlük limit (0=sınırsız)</label>
+                            <input type="number" id="w-limit" value="${Number(w.dailyLimit)||0}" min="0" style="width:100%;">
+                        </div>
+                    </div>
+                </div>
+                <div style="font-weight:700;margin-bottom:8px;color:var(--accent-soft);">Dilimler</div>
+                <div id="w-segs">${segsHtml}</div>
+                <button class="back-btn" style="width:100%;margin-bottom:10px;" onclick="modAddSegRow()">＋ Dilim ekle</button>
+                <button class="primary-btn" style="width:100%;" onclick="modSaveWheel('${escapeHtml(w.id)}', ${isNew ? 'true' : 'false'})">💾 Kaydet</button>
+                <button class="back-btn" style="width:100%;margin-top:8px;" onclick="modManageWheels()">← Geri</button>
+            `;
+            openModal(isNew ? '＋ Yeni Çark' : '✏️ Çark Düzenle', html);
+        }
+
+        function modAddSegRow() {
+            const box = document.getElementById('w-segs');
+            if (!box) return;
+            const i = box.children.length;
+            const div = document.createElement('div');
+            div.className = 'info-card';
+            div.style.cssText = 'margin-bottom:8px;padding:10px;';
+            div.setAttribute('data-seg', String(i));
+            div.innerHTML = `
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+                    <input type="text" class="seg-label" placeholder="Etiket" value="Yeni" style="width:100%;">
+                    <select class="seg-type" style="width:100%;">
+                        <option value="money" selected>Para</option>
+                        <option value="item">Eşya</option>
+                    </select>
+                    <input type="number" class="seg-amount" placeholder="Miktar $" value="0" style="width:100%;">
+                    <input type="number" class="seg-weight" placeholder="Ağırlık" value="10" min="1" style="width:100%;">
+                    <input type="text" class="seg-item" placeholder="Eşya adı (item)" value="" style="width:100%;">
+                    <input type="color" class="seg-color" value="${_wheelColors(i)}" style="width:100%;height:36px;">
+                </div>
+                <button type="button" class="back-btn" style="margin-top:6px;width:100%;border-color:var(--danger);color:var(--danger);" onclick="this.closest('[data-seg]').remove()">Dilim sil</button>
+            `;
+            box.appendChild(div);
+        }
+
+        function modSaveWheel(id, isNew) {
+            if (!isModerator()) return;
+            const name = ((document.getElementById('w-name') || {}).value || '').trim() || 'Çark';
+            const description = ((document.getElementById('w-desc') || {}).value || '').trim();
+            const cost = Math.max(0, Math.floor(Number((document.getElementById('w-cost') || {}).value) || 0));
+            const dailyLimit = Math.max(0, Math.floor(Number((document.getElementById('w-limit') || {}).value) || 0));
+            const segEls = document.querySelectorAll('#w-segs [data-seg]');
+            const segments = [];
+            segEls.forEach(function(el) {
+                const label = ((el.querySelector('.seg-label') || {}).value || '').trim() || '—';
+                const type = ((el.querySelector('.seg-type') || {}).value || 'money');
+                const amount = Math.floor(Number((el.querySelector('.seg-amount') || {}).value) || 0);
+                const weight = Math.max(1, Math.floor(Number((el.querySelector('.seg-weight') || {}).value) || 1));
+                const itemName = ((el.querySelector('.seg-item') || {}).value || '').trim();
+                const color = ((el.querySelector('.seg-color') || {}).value || '#888');
+                segments.push({ label: label, type: type, amount: amount, weight: weight, itemName: itemName, color: color });
+            });
+            if (!segments.length) {
+                toast('En az 1 dilim gerekli.', 'error');
+                return;
+            }
+            const list = loadWheels();
+            const obj = { id: id, name: name, description: description, cost: cost, dailyLimit: dailyLimit, active: true, segments: segments };
+            if (isNew === true || isNew === 'true') {
+                list.push(obj);
+            } else {
+                const idx = list.findIndex(function(x) { return x.id === id; });
+                if (idx >= 0) {
+                    obj.active = list[idx].active !== false;
+                    list[idx] = obj;
+                } else list.push(obj);
+            }
+            saveWheels(list);
+            toast('Çark kaydedildi.');
+            modManageWheels();
+        }
+
         function openCases() {
             const cases = loadCases();
             const me = getCurrentUser();
@@ -10443,6 +10961,9 @@
                 </button>
                 <button class="mod-btn" onclick="showShopOrders()" style="margin-bottom:8px;">
                     <span style="font-size:20px;">🛒</span> Mağaza Siparişleri
+                </button>
+                <button class="mod-btn" onclick="modManageWheels()" style="margin-bottom:8px;">
+                    <span style="font-size:20px;">🎡</span> Çark Yönetimi
                 </button>
                 <button class="mod-btn" onclick="modManageCases()" style="margin-bottom:8px;">
                     <span style="font-size:20px;">📦</span> Kasa Yönetimi
