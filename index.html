@@ -15516,8 +15516,8 @@ Lütfen daha sonra tekrar gelin.</textarea>
             if (u.idStatus === 'active') { toast('Zaten onayli kimligin var.', 'error'); return; }
 
             let body = '';
-            body += '<p style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Tum alanlar zorunlu. Imzani asagida ciz.</p>';
-            body += '<div class="form-group"><label>Kimlik fotografi *</label>';
+            body += '<p style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Foto istege bagli. Diger alanlar ve imza zorunlu.</p>';
+            body += '<div class="form-group"><label>Kimlik fotografi (istege bagli)</label>';
             body += '<input type="file" id="id-app-photo" accept="image/png,image/jpeg,image/webp" style="width:100%;">';
             body += '<div id="id-app-photo-prev" style="margin-top:8px;"></div></div>';
             body += '<div class="form-group"><label>Ad *</label><input type="text" id="id-app-first" maxlength="40" style="width:100%;padding:10px;background:rgba(0,0,0,0.35);border:1px solid var(--border);border-radius:10px;color:var(--text);"></div>';
@@ -15655,8 +15655,7 @@ Lütfen daha sonra tekrar gelin.</textarea>
             const photo = window._idAppPhotoData || '';
             const sign = getIdSignatureData();
 
-            if (!photo) { toast('Kimlik fotografi gerekli.', 'error'); return; }
-            if (!first || !last) { toast('Ad ve soyad gerekli.', 'error'); return; }
+                        if (!first || !last) { toast('Ad ve soyad gerekli.', 'error'); return; }
             if (!/^\d{11}$/.test(tc)) { toast('TC No 11 haneli olmali.', 'error'); return; }
             if (!gender) { toast('Cinsiyet sec.', 'error'); return; }
             if (!serial) { toast('Seri no gerekli.', 'error'); return; }
