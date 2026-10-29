@@ -36,42 +36,7 @@
             font-family: 'Rajdhani', system-ui, sans-serif;
             min-height: 100vh;
             overflow-x: hidden;
-            padding-bottom: 72px;
         }
-
-        /* Hızlı erişim şeridi */
-        #quick-bar {
-            position: fixed;
-            bottom: 0; left: 0; right: 0;
-            z-index: 90;
-            display: none;
-            justify-content: space-around;
-            align-items: center;
-            gap: 4px;
-            padding: 8px 6px calc(8px + env(safe-area-inset-bottom, 0px));
-            background: linear-gradient(180deg, rgba(22,0,34,0.92), rgba(10,0,20,0.98));
-            border-top: 1px solid var(--border);
-            backdrop-filter: blur(12px);
-        }
-        #quick-bar.show { display: flex; }
-        #quick-bar button {
-            flex: 1;
-            min-width: 0;
-            background: transparent;
-            border: none;
-            color: var(--text-muted);
-            font-family: inherit;
-            font-size: 10px;
-            padding: 4px 2px;
-            cursor: pointer;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 2px;
-        }
-        #quick-bar button span.qb-ico { font-size: 20px; line-height: 1; }
-        #quick-bar button:active { color: var(--accent-soft); }
-
 
         .title-bar {
             background: linear-gradient(90deg, #12001c, #1a0028, #12001c);
@@ -2081,7 +2046,7 @@
                 <div class="folder" onclick="openIdentityCard()">
                     <div class="folder-icon">🪪</div>
                     <div class="folder-name">Kimlik</div>
-                    <div class="folder-desc">Kimlik kartı</div>
+                    <div class="folder-desc">Basvuru & kart</div>
                 </div>
                 <div class="folder" onclick="openCheckIn()">
                     <div class="folder-icon">📍</div>
@@ -2146,16 +2111,6 @@
     </div>
     <div id="site-version-badge">v1.0.0</div>
     <div id="toast" class="toast"></div>
-
-    <!-- Hızlı erişim -->
-    <div id="quick-bar">
-        <button type="button" onclick="openPassport()"><span class="qb-ico">🛂</span>Pasaport</button>
-        <button type="button" onclick="openMaps()"><span class="qb-ico">🗺️</span>Harita</button>
-        <button type="button" onclick="openIdentityCard()"><span class="qb-ico">🪪</span>Kimlik</button>
-        <button type="button" onclick="openCheckIn()"><span class="qb-ico">📍</span>Check-in</button>
-        <button type="button" onclick="openNotifications()"><span class="qb-ico">🔔</span>Bildirim</button>
-        <button type="button" onclick="openSocial()"><span class="qb-ico">👥</span>Sosyal</button>
-    </div>
 
     <!-- Müzik çalar sol alt -->
     <div id="music-player" class="collapsed">
@@ -5124,6 +5079,18 @@
             if (typeof user.checkInMap === 'undefined') user.checkInMap = '';
             if (typeof user.checkInAt === 'undefined') user.checkInAt = null;
             if (typeof user.idPhoto === 'undefined') user.idPhoto = '';
+            if (typeof user.idStatus === 'undefined') user.idStatus = 'none'; // none | pending | active | rejected
+            if (typeof user.idFirstName === 'undefined') user.idFirstName = '';
+            if (typeof user.idLastName === 'undefined') user.idLastName = '';
+            if (typeof user.idTc === 'undefined') user.idTc = '';
+            if (typeof user.idGender === 'undefined') user.idGender = '';
+            if (typeof user.idSerial === 'undefined') user.idSerial = '';
+            if (typeof user.idSignature === 'undefined') user.idSignature = '';
+            if (typeof user.idCountry === 'undefined') user.idCountry = '';
+            if (typeof user.idCitizenship === 'undefined') user.idCitizenship = '';
+            if (typeof user.idMarital === 'undefined') user.idMarital = '';
+            if (typeof user.idNote === 'undefined') user.idNote = '';
+            if (typeof user.idUpdatedAt === 'undefined') user.idUpdatedAt = null;
             return user;
         }
 
@@ -6315,7 +6282,6 @@
         }
 
         function doLogout() {
-            try { var qb=document.getElementById('quick-bar'); if(qb) qb.classList.remove('show'); } catch(e) {}
             // Sadece oturumu kapat — bakiye, level, envanter, tema, dil, müzik ayarları kalır
             const lastUser = getCurrentUser();
             if (lastUser) {
@@ -6350,7 +6316,6 @@
             try { normalizeAllFriendLists(); normalizeAllChatsAliases(); } catch (e) {}
             document.getElementById('auth-screen').classList.add('hidden');
             document.getElementById('main-app').classList.remove('hidden');
-            try { var qb=document.getElementById('quick-bar'); if(qb) qb.classList.add('show'); } catch(e) {}
             const badge = document.getElementById('user-badge');
             badge.innerHTML = '👤 ' + formatDisplayName(username);
             badge.classList.add('show');
@@ -15454,97 +15419,389 @@ Lütfen daha sonra tekrar gelin.</textarea>
 
 
 
+
         // ========== KİMLİK KARTI ==========
+        function idStatusBadge(st) {
+            const s = String(st || 'none');
+            if (s === 'pending') return '<span style="color:var(--warning);font-weight:700;">Beklemede</span>';
+            if (s === 'active') return '<span style="color:var(--success);font-weight:700;">Onayli</span>';
+            if (s === 'rejected') return '<span style="color:var(--danger);font-weight:700;">Reddedildi</span>';
+            return '<span style="color:var(--text-muted);font-weight:700;">Kimliksiz</span>';
+        }
+
+        async function loadIdApps() {
+            try {
+                if (typeof firebaseReady !== 'undefined' && firebaseReady) {
+                    const data = await fbGet('id_apps');
+                    if (data) {
+                        const arr = Array.isArray(data) ? data : Object.values(data);
+                        try { localStorage.setItem('swordcity_id_apps_v1', JSON.stringify(arr)); } catch (e) {}
+                        return arr;
+                    }
+                }
+            } catch (e) {}
+            try { return JSON.parse(localStorage.getItem('swordcity_id_apps_v1') || '[]'); }
+            catch (e2) { return []; }
+        }
+        function saveIdApps(list) {
+            try { localStorage.setItem('swordcity_id_apps_v1', JSON.stringify(list)); } catch (e) {}
+            if (typeof firebaseReady !== 'undefined' && firebaseReady) {
+                try { fbSet('id_apps', list); } catch (e) {}
+            }
+        }
+
         function openIdentityCard(forUser) {
             const me = getCurrentUser();
             const target = forUser || me;
-            if (!target) { toast('Giriş yapmalısın.', 'error'); return; }
+            if (!target) { toast('Giris yapmalisin.', 'error'); return; }
             const users = loadUsers();
             const u = ensureUserFields(users[target] || {});
             const isMe = target === me;
             const isMod = me && isModerator(me);
-            const level = u.passportLevel || '';
-            const status = u.passportStatus || 'none';
-            const checkMap = u.checkInMap || '';
-            const checkAt = u.checkInAt ? new Date(u.checkInAt).toLocaleString('tr-TR') : '';
-            const photo = u.idPhoto
-                ? ('<img src="' + u.idPhoto + '" alt="Kimlik" style="width:88px;height:88px;object-fit:cover;border-radius:14px;border:2px solid var(--border);">')
-                : '<div style="width:88px;height:88px;border-radius:14px;border:2px dashed var(--border);display:flex;align-items:center;justify-content:center;font-size:36px;background:rgba(0,0,0,0.25);">👤</div>';
+            const st = u.idStatus || 'none';
+            const hasId = st === 'active';
 
-            let clanName = '—';
-            try {
-                const cs = loadClans();
-                const c = cs.find(function(x) { return clanMembers(x).indexOf(target) !== -1; });
-                if (c) clanName = c.name;
-            } catch (e) {}
-
-            let html = '';
-            html += '<div class="info-card" style="background:linear-gradient(135deg,rgba(255,0,204,0.12),rgba(100,0,180,0.18));border-color:var(--border);margin-bottom:12px;">';
-            html += '<div style="display:flex;gap:14px;align-items:flex-start;">' + photo;
-            html += '<div style="flex:1;min-width:0;">';
-            html += '<div style="font-size:11px;color:var(--text-muted);letter-spacing:1px;text-transform:uppercase;">Sword City Kimlik</div>';
-            html += '<div style="font-size:20px;font-weight:800;margin-top:4px;">' + formatDisplayName(target) + '</div>';
-            html += '<div style="margin-top:8px;font-size:13px;">';
-            html += '<span style="color:' + passportColor(level) + ';font-weight:800;font-size:18px;">' + passportLevelLabel(level) + '</span>';
-            html += '<span style="margin-left:8px;">' + passportStatusBadge(status) + '</span></div>';
-            html += '<div style="font-size:12px;color:var(--text-muted);margin-top:6px;">Lv. ' + (u.level || 0) + ' · ' + escapeHtml(u.job || 'Meslek yok') + '</div>';
-            html += '</div></div>';
-            html += '<div style="margin-top:12px;display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px;">';
-            html += '<div><span style="color:var(--text-muted);">İtibar</span><br><b>' + (u.reputation != null ? u.reputation : 50) + '</b></div>';
-            html += '<div><span style="color:var(--text-muted);">Uyarı</span><br><b style="color:' + ((u.warnings||0)>0?'var(--danger)':'var(--text)') + ';">' + (u.warnings || 0) + '</b></div>';
-            html += '<div><span style="color:var(--text-muted);">Klan</span><br><b>' + escapeHtml(clanName) + '</b></div>';
-            html += '<div><span style="color:var(--text-muted);">Check-in</span><br><b>' + (checkMap ? escapeHtml(checkMap) : '—') + '</b>';
-            if (checkAt) html += '<div style="font-size:10px;color:var(--text-muted);">' + checkAt + '</div>';
-            html += '</div></div>';
-            if (u.bio) html += '<div style="margin-top:10px;font-size:13px;line-height:1.4;color:var(--text-muted);">' + escapeHtml(u.bio) + '</div>';
-            if (u.customTitle) {
-                html += '<div style="margin-top:8px;"><span class="rarity-badge" style="background:rgba(255,0,204,0.2);color:' + escapeHtml(u.customTitleColor||'var(--accent-soft)') + ';">' + escapeHtml(u.customTitle) + '</span></div>';
+            let body = '';
+            body += '<div class="info-card" style="margin-bottom:12px;">';
+            body += '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">';
+            body += '<div><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;">Durum</div>';
+            body += '<div style="font-size:18px;margin-top:4px;">' + idStatusBadge(st) + '</div></div>';
+            if (hasId && u.idPhoto) {
+                body += '<img src="' + u.idPhoto + '" alt="" style="width:72px;height:72px;object-fit:cover;border-radius:12px;border:1px solid var(--border);">';
             }
-            html += '</div>';
+            body += '</div></div>';
 
-            if (isMe) {
-                html += '<div class="info-card" style="margin-bottom:12px;">';
-                html += '<div style="font-weight:700;margin-bottom:8px;">Kimlik fotoğrafı</div>';
-                html += '<input type="file" id="id-photo-input" accept="image/png,image/jpeg,image/webp" style="width:100%;margin-bottom:8px;" onchange="saveIdPhoto(event)">';
-                html += '<div style="font-size:11px;color:var(--text-muted);">Max 1 MB</div>';
-                if (u.idPhoto) html += '<button class="danger-btn" style="width:100%;margin-top:8px;" onclick="clearIdPhoto()">Fotoğrafı kaldır</button>';
-                html += '</div>';
+            if (hasId) {
+                body += '<div class="info-card" style="margin-bottom:12px;background:linear-gradient(135deg,rgba(255,0,204,0.1),rgba(80,0,160,0.15));">';
+                body += '<div style="font-size:11px;color:var(--text-muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:10px;">Sword City Kimlik</div>';
+                body += '<div class="info-row"><span class="label">Ad</span><span class="value">' + escapeHtml(u.idFirstName || '—') + '</span></div>';
+                body += '<div class="info-row"><span class="label">Soyad</span><span class="value">' + escapeHtml(u.idLastName || '—') + '</span></div>';
+                body += '<div class="info-row"><span class="label">TC No</span><span class="value">' + escapeHtml(u.idTc || '—') + '</span></div>';
+                body += '<div class="info-row"><span class="label">Cinsiyet</span><span class="value">' + escapeHtml(u.idGender || '—') + '</span></div>';
+                body += '<div class="info-row"><span class="label">Seri No</span><span class="value">' + escapeHtml(u.idSerial || '—') + '</span></div>';
+                body += '<div class="info-row"><span class="label">Ulke</span><span class="value">' + escapeHtml(u.idCountry || '—') + '</span></div>';
+                body += '<div class="info-row"><span class="label">Vatandaslik</span><span class="value">' + escapeHtml(u.idCitizenship || '—') + '</span></div>';
+                body += '<div class="info-row"><span class="label">Medeni durum</span><span class="value">' + escapeHtml(u.idMarital || '—') + '</span></div>';
+                if (u.idSignature) {
+                    body += '<div style="margin-top:12px;"><div style="font-size:12px;color:var(--text-muted);margin-bottom:6px;">Imza</div>';
+                    body += '<img src="' + u.idSignature + '" alt="Imza" style="max-width:100%;height:64px;object-fit:contain;background:#fff;border-radius:8px;padding:4px;"></div>';
+                }
+                body += '</div>';
+            } else if (st === 'pending') {
+                body += '<div class="info-card" style="margin-bottom:12px;"><p style="color:var(--warning);">Kimlik basvurun moderatör onayinda.</p>';
+                body += '<div class="info-row"><span class="label">Ad Soyad</span><span class="value">' + escapeHtml((u.idFirstName||'') + ' ' + (u.idLastName||'')) + '</span></div>';
+                body += '<div class="info-row"><span class="label">TC</span><span class="value">' + escapeHtml(u.idTc || '—') + '</span></div></div>';
+                if (isMe) body += '<button class="danger-btn" style="width:100%;margin-bottom:12px;" onclick="cancelIdApplication()">Basvuruyu iptal et</button>';
+            } else {
+                body += '<div class="info-card" style="margin-bottom:12px;"><p style="color:var(--text-muted);">Bu hesap <b>kimliksiz</b>. Basvuru yaparak kimlik alabilirsin.</p>';
+                if (st === 'rejected' && u.idNote) body += '<p style="color:var(--danger);margin-top:8px;">Red: ' + escapeHtml(u.idNote) + '</p>';
+                body += '</div>';
+                if (isMe) body += '<button class="primary-btn" style="width:100%;margin-bottom:12px;" onclick="openIdApplicationForm()">Kimlik basvurusu yap</button>';
             }
 
-            if (isMod && !isMe) {
-                html += '<button class="mod-btn" style="width:100%;margin-bottom:8px;" onclick="openSicilPanel(\'' + String(target).replace(/'/g, '') + '\')">Sicil dosyası</button>';
+            if (isMod) {
+                body += '<button class="mod-btn" style="width:100%;margin-bottom:8px;" onclick="openIdModPanel()">Moderator: Kimlik basvurulari</button>';
+                if (!isMe) body += '<button class="mod-btn" style="width:100%;margin-bottom:8px;" onclick="openSicilPanel(\'' + String(target).replace(/'/g, '') + '\')">Sicil dosyasi</button>';
             }
 
-            openModal('Kimlik', html + '<button class="back-btn" onclick="closeModal()">Kapat</button>');
+            openModal('Kimlik', body + '<button class="back-btn" onclick="closeModal()">Kapat</button>');
         }
 
-        function saveIdPhoto(event) {
-            const me = getCurrentUser();
-            if (!me) return;
-            const file = event.target.files && event.target.files[0];
-            if (!file) return;
-            if (!file.type.startsWith('image/')) { toast('Görsel seç.', 'error'); return; }
-            if (file.size > 1024 * 1024) { toast('Max 1 MB.', 'error'); return; }
-            const reader = new FileReader();
-            reader.onload = function() {
-                const users = loadUsers();
-                const u = ensureUserFields(users[me] || {});
-                u.idPhoto = String(reader.result || '');
-                saveUser(me, u);
-                toast('Kimlik fotoğrafı kaydedildi');
-                openIdentityCard();
-            };
-            reader.readAsDataURL(file);
-        }
-        function clearIdPhoto() {
+        function openIdApplicationForm() {
             const me = getCurrentUser();
             if (!me) return;
             const users = loadUsers();
             const u = ensureUserFields(users[me] || {});
-            u.idPhoto = '';
+            if (u.idStatus === 'pending') { toast('Zaten bekleyen basvurun var.', 'error'); return; }
+            if (u.idStatus === 'active') { toast('Zaten onayli kimligin var.', 'error'); return; }
+
+            let body = '';
+            body += '<p style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Tum alanlar zorunlu. Imzani asagida ciz.</p>';
+            body += '<div class="form-group"><label>Kimlik fotografi *</label>';
+            body += '<input type="file" id="id-app-photo" accept="image/png,image/jpeg,image/webp" style="width:100%;">';
+            body += '<div id="id-app-photo-prev" style="margin-top:8px;"></div></div>';
+            body += '<div class="form-group"><label>Ad *</label><input type="text" id="id-app-first" maxlength="40" style="width:100%;padding:10px;background:rgba(0,0,0,0.35);border:1px solid var(--border);border-radius:10px;color:var(--text);"></div>';
+            body += '<div class="form-group"><label>Soyad *</label><input type="text" id="id-app-last" maxlength="40" style="width:100%;padding:10px;background:rgba(0,0,0,0.35);border:1px solid var(--border);border-radius:10px;color:var(--text);"></div>';
+            body += '<div class="form-group"><label>TC No *</label><input type="text" id="id-app-tc" maxlength="11" inputmode="numeric" placeholder="11 haneli" style="width:100%;padding:10px;background:rgba(0,0,0,0.35);border:1px solid var(--border);border-radius:10px;color:var(--text);"></div>';
+            body += '<div class="form-group"><label>Cinsiyet *</label><select id="id-app-gender" style="width:100%;padding:10px;background:rgba(0,0,0,0.35);border:1px solid var(--border);border-radius:10px;color:var(--text);">';
+            body += '<option value="">Sec</option><option value="Erkek">Erkek</option><option value="Kadin">Kadin</option><option value="Diger">Diger</option></select></div>';
+            body += '<div class="form-group"><label>Seri No *</label><input type="text" id="id-app-serial" maxlength="20" placeholder="Orn: A12B34567" style="width:100%;padding:10px;background:rgba(0,0,0,0.35);border:1px solid var(--border);border-radius:10px;color:var(--text);"></div>';
+            body += '<div class="form-group"><label>Ulke *</label><input type="text" id="id-app-country" maxlength="40" style="width:100%;padding:10px;background:rgba(0,0,0,0.35);border:1px solid var(--border);border-radius:10px;color:var(--text);"></div>';
+            body += '<div class="form-group"><label>Vatandaslik *</label><input type="text" id="id-app-citizen" maxlength="40" style="width:100%;padding:10px;background:rgba(0,0,0,0.35);border:1px solid var(--border);border-radius:10px;color:var(--text);"></div>';
+            body += '<div class="form-group"><label>Evlilik / medeni durum *</label><select id="id-app-marital" style="width:100%;padding:10px;background:rgba(0,0,0,0.35);border:1px solid var(--border);border-radius:10px;color:var(--text);">';
+            body += '<option value="">Sec</option><option value="Bekar">Bekar</option><option value="Evli">Evli</option><option value="Bosanmis">Bosanmis</option><option value="Dul">Dul</option></select></div>';
+            body += '<div class="form-group"><label>Imza * (ciz)</label>';
+            body += '<div style="background:#fff;border-radius:12px;border:1px solid var(--border);overflow:hidden;">';
+            body += '<canvas id="id-sign-canvas" width="320" height="140" style="width:100%;height:140px;display:block;touch-action:none;cursor:crosshair;"></canvas>';
+            body += '</div>';
+            body += '<div style="display:flex;gap:8px;margin-top:8px;">';
+            body += '<button type="button" class="back-btn" style="flex:1;margin:0;" onclick="clearIdSignature()">Temizle</button>';
+            body += '</div></div>';
+            body += '<button class="primary-btn" style="width:100%;margin-top:8px;" onclick="submitIdApplication()">Basvuruyu gonder</button>';
+            body += '<button class="back-btn" onclick="openIdentityCard()">Geri</button>';
+
+            openModal('Kimlik Basvurusu', body);
+            window._idAppPhotoData = '';
+            setTimeout(function() {
+                const inp = document.getElementById('id-app-photo');
+                if (inp) inp.onchange = function(ev) {
+                    const f = ev.target.files && ev.target.files[0];
+                    if (!f) return;
+                    if (!f.type.startsWith('image/')) { toast('Gorsel sec.', 'error'); return; }
+                    if (f.size > 1024 * 1024) { toast('Max 1 MB.', 'error'); return; }
+                    const r = new FileReader();
+                    r.onload = function() {
+                        window._idAppPhotoData = String(r.result || '');
+                        const p = document.getElementById('id-app-photo-prev');
+                        if (p) p.innerHTML = '<img src="' + window._idAppPhotoData + '" style="width:72px;height:72px;object-fit:cover;border-radius:10px;border:1px solid var(--border);">';
+                    };
+                    r.readAsDataURL(f);
+                };
+                initIdSignaturePad();
+            }, 50);
+        }
+
+        function initIdSignaturePad() {
+            const canvas = document.getElementById('id-sign-canvas');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            const ratio = Math.max(window.devicePixelRatio || 1, 1);
+            const w = canvas.clientWidth || 320;
+            const h = 140;
+            canvas.width = Math.floor(w * ratio);
+            canvas.height = Math.floor(h * ratio);
+            ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, w, h);
+            ctx.strokeStyle = '#111';
+            ctx.lineWidth = 2;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            window._idSignDrawing = false;
+            window._idSignHasInk = false;
+
+            function pos(e) {
+                const r = canvas.getBoundingClientRect();
+                const t = (e.touches && e.touches[0]) || e;
+                return { x: t.clientX - r.left, y: t.clientY - r.top };
+            }
+            function start(e) {
+                e.preventDefault();
+                window._idSignDrawing = true;
+                const p = pos(e);
+                ctx.beginPath();
+                ctx.moveTo(p.x, p.y);
+            }
+            function move(e) {
+                if (!window._idSignDrawing) return;
+                e.preventDefault();
+                const p = pos(e);
+                ctx.lineTo(p.x, p.y);
+                ctx.stroke();
+                window._idSignHasInk = true;
+            }
+            function end(e) {
+                if (!window._idSignDrawing) return;
+                e.preventDefault();
+                window._idSignDrawing = false;
+            }
+            canvas.onmousedown = start;
+            canvas.onmousemove = move;
+            canvas.onmouseup = end;
+            canvas.onmouseleave = end;
+            canvas.ontouchstart = start;
+            canvas.ontouchmove = move;
+            canvas.ontouchend = end;
+        }
+        function clearIdSignature() {
+            const canvas = document.getElementById('id-sign-canvas');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            const ratio = Math.max(window.devicePixelRatio || 1, 1);
+            ctx.setTransform(1, 0, 0, 1, 0, 0);
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            const w = canvas.clientWidth || 320;
+            const h = 140;
+            ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, w, h);
+            ctx.strokeStyle = '#111';
+            ctx.lineWidth = 2;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            window._idSignHasInk = false;
+        }
+        function getIdSignatureData() {
+            const canvas = document.getElementById('id-sign-canvas');
+            if (!canvas || !window._idSignHasInk) return '';
+            try { return canvas.toDataURL('image/png'); } catch (e) { return ''; }
+        }
+
+        async function submitIdApplication() {
+            const me = getCurrentUser();
+            if (!me) return;
+            const g = function(id) {
+                const el = document.getElementById(id);
+                return el ? String(el.value || '').trim() : '';
+            };
+            const first = g('id-app-first').slice(0, 40);
+            const last = g('id-app-last').slice(0, 40);
+            const tc = g('id-app-tc').replace(/\s/g, '');
+            const gender = g('id-app-gender');
+            const serial = g('id-app-serial').slice(0, 20);
+            const country = g('id-app-country').slice(0, 40);
+            const citizen = g('id-app-citizen').slice(0, 40);
+            const marital = g('id-app-marital');
+            const photo = window._idAppPhotoData || '';
+            const sign = getIdSignatureData();
+
+            if (!photo) { toast('Kimlik fotografi gerekli.', 'error'); return; }
+            if (!first || !last) { toast('Ad ve soyad gerekli.', 'error'); return; }
+            if (!/^\d{11}$/.test(tc)) { toast('TC No 11 haneli olmali.', 'error'); return; }
+            if (!gender) { toast('Cinsiyet sec.', 'error'); return; }
+            if (!serial) { toast('Seri no gerekli.', 'error'); return; }
+            if (!country || !citizen) { toast('Ulke ve vatandaslik gerekli.', 'error'); return; }
+            if (!marital) { toast('Medeni durum sec.', 'error'); return; }
+            if (!sign) { toast('Imza cizmelisin.', 'error'); return; }
+
+            const users = loadUsers();
+            const u = ensureUserFields(users[me] || {});
+            u.idStatus = 'pending';
+            u.idPhoto = photo;
+            u.idFirstName = first;
+            u.idLastName = last;
+            u.idTc = tc;
+            u.idGender = gender;
+            u.idSerial = serial;
+            u.idSignature = sign;
+            u.idCountry = country;
+            u.idCitizenship = citizen;
+            u.idMarital = marital;
+            u.idNote = '';
+            u.idUpdatedAt = new Date().toISOString();
             saveUser(me, u);
-            toast('Fotoğraf kaldırıldı');
+
+            let apps = await loadIdApps();
+            apps = apps.filter(function(a) { return a && a.username !== me; });
+            apps.unshift({
+                id: 'idapp_' + Date.now(),
+                username: me,
+                firstName: first,
+                lastName: last,
+                tc: tc,
+                gender: gender,
+                serial: serial,
+                country: country,
+                citizenship: citizen,
+                marital: marital,
+                photo: photo,
+                signature: sign,
+                at: new Date().toISOString(),
+                status: 'pending'
+            });
+            if (apps.length > 80) apps.length = 80;
+            saveIdApps(apps);
+
+            try { pushNotif(me, 'Kimlik basvurun alindi.', 'info'); } catch (e) {}
+            toast('Basvuru gonderildi');
             openIdentityCard();
+        }
+
+        async function cancelIdApplication() {
+            const me = getCurrentUser();
+            if (!me) return;
+            if (!confirm('Basvuru iptal edilsin mi?')) return;
+            const users = loadUsers();
+            const u = ensureUserFields(users[me] || {});
+            u.idStatus = 'none';
+            u.idUpdatedAt = new Date().toISOString();
+            saveUser(me, u);
+            let apps = await loadIdApps();
+            apps = apps.filter(function(a) { return !(a && a.username === me && a.status === 'pending'); });
+            saveIdApps(apps);
+            toast('Basvuru iptal edildi');
+            openIdentityCard();
+        }
+
+        async function openIdModPanel() {
+            if (!isModerator()) { toast('Sadece moderator.', 'error'); return; }
+            const apps = await loadIdApps();
+            const pending = apps.filter(function(a) { return a && a.status === 'pending'; });
+            let html = '';
+            if (!pending.length) {
+                html = '<p style="color:var(--text-muted);text-align:center;padding:12px 0;">Bekleyen basvuru yok.</p>';
+            } else {
+                pending.forEach(function(a) {
+                    html += '<div class="info-card" style="margin-bottom:10px;">';
+                    html += '<div style="display:flex;gap:10px;align-items:flex-start;">';
+                    if (a.photo) html += '<img src="' + a.photo + '" style="width:64px;height:64px;object-fit:cover;border-radius:10px;border:1px solid var(--border);">';
+                    html += '<div style="flex:1;min-width:0;">';
+                    html += '<div style="font-weight:700;">' + formatDisplayName(a.username) + '</div>';
+                    html += '<div style="font-size:13px;margin-top:4px;">' + escapeHtml((a.firstName||'') + ' ' + (a.lastName||'')) + '</div>';
+                    html += '<div style="font-size:12px;color:var(--text-muted);">TC ' + escapeHtml(a.tc||'') + ' · ' + escapeHtml(a.gender||'') + ' · ' + escapeHtml(a.serial||'') + '</div>';
+                    html += '<div style="font-size:12px;color:var(--text-muted);">' + escapeHtml(a.country||'') + ' / ' + escapeHtml(a.citizenship||'') + ' · ' + escapeHtml(a.marital||'') + '</div>';
+                    if (a.signature) html += '<img src="' + a.signature + '" style="margin-top:8px;max-width:160px;height:40px;object-fit:contain;background:#fff;border-radius:6px;">';
+                    html += '</div></div>';
+                    html += '<div style="display:flex;gap:8px;margin-top:10px;">';
+                    html += '<button class="primary-btn" style="flex:1;margin:0;" onclick="approveIdApp(\'' + String(a.id).replace(/'/g, '') + '\')">Onayla</button>';
+                    html += '<button class="danger-btn" style="flex:1;margin:0;" onclick="rejectIdApp(\'' + String(a.id).replace(/'/g, '') + '\')">Reddet</button>';
+                    html += '</div></div>';
+                });
+            }
+            openModal('Kimlik Basvurulari (' + pending.length + ')', html + '<button class="back-btn" onclick="openIdentityCard()">Geri</button>');
+        }
+
+        async function approveIdApp(appId) {
+            if (!isModerator()) return;
+            let apps = await loadIdApps();
+            const app = apps.find(function(a) { return a && a.id === appId; });
+            if (!app || app.status !== 'pending') { toast('Basvuru yok.', 'error'); return; }
+            const users = loadUsers();
+            const u = ensureUserFields(users[app.username] || {});
+            u.idStatus = 'active';
+            u.idFirstName = app.firstName || '';
+            u.idLastName = app.lastName || '';
+            u.idTc = app.tc || '';
+            u.idGender = app.gender || '';
+            u.idSerial = app.serial || '';
+            u.idCountry = app.country || '';
+            u.idCitizenship = app.citizenship || '';
+            u.idMarital = app.marital || '';
+            u.idPhoto = app.photo || u.idPhoto || '';
+            u.idSignature = app.signature || '';
+            u.idNote = '';
+            u.idUpdatedAt = new Date().toISOString();
+            saveUser(app.username, u);
+            app.status = 'approved';
+            app.resolvedAt = new Date().toISOString();
+            app.resolvedBy = getCurrentUser();
+            saveIdApps(apps);
+            try { pushNotif(app.username, 'Kimlik basvurun onaylandi.', 'success'); } catch (e) {}
+            try { pushModLog('id_approve', app.username + ' kimlik onay'); } catch (e) {}
+            toast('Onaylandi');
+            openIdModPanel();
+        }
+
+        async function rejectIdApp(appId) {
+            if (!isModerator()) return;
+            const reason = prompt('Red sebebi (istege bagli):') || '';
+            let apps = await loadIdApps();
+            const app = apps.find(function(a) { return a && a.id === appId; });
+            if (!app || app.status !== 'pending') { toast('Basvuru yok.', 'error'); return; }
+            const users = loadUsers();
+            const u = ensureUserFields(users[app.username] || {});
+            u.idStatus = 'rejected';
+            u.idNote = String(reason).slice(0, 200);
+            u.idUpdatedAt = new Date().toISOString();
+            saveUser(app.username, u);
+            app.status = 'rejected';
+            app.resolvedAt = new Date().toISOString();
+            app.resolvedBy = getCurrentUser();
+            saveIdApps(apps);
+            try { pushNotif(app.username, 'Kimlik basvurun reddedildi' + (reason ? (': ' + reason) : ''), 'error'); } catch (e) {}
+            try { pushModLog('id_reject', app.username); } catch (e) {}
+            toast('Reddedildi');
+            openIdModPanel();
         }
 
         // ========== SICIL (mod dosyasi) ==========
