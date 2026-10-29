@@ -2038,6 +2038,11 @@
                     <div class="folder-name">Haritalar</div>
                     <div class="folder-desc">Bölgeler & Loot</div>
                 </div>
+                <div class="folder" onclick="openPassport()">
+                    <div class="folder-icon">🛂</div>
+                    <div class="folder-name">Pasaport</div>
+                    <div class="folder-desc">Başvuru & Seviye</div>
+                </div>
                 <div class="folder" onclick="openConsole()">
                     <div class="folder-icon">💻</div>
                     <div class="folder-name">Console</div>
@@ -4973,6 +4978,12 @@
             // Profil yorumları (Steam tarzı)
             if (!Array.isArray(user.profileComments)) user.profileComments = [];
             if (typeof user.commentsDisabled === 'undefined') user.commentsDisabled = false;
+            // Pasaport
+            if (typeof user.passportLevel === 'undefined') user.passportLevel = '';
+            if (typeof user.passportStatus === 'undefined') user.passportStatus = 'none'; // none | pending | active | rejected
+            if (typeof user.passportAppliedLevel === 'undefined') user.passportAppliedLevel = '';
+            if (typeof user.passportNote === 'undefined') user.passportNote = '';
+            if (typeof user.passportUpdatedAt === 'undefined') user.passportUpdatedAt = null;
             return user;
         }
 
@@ -15099,6 +15110,334 @@ Lütfen daha sonra tekrar gelin.</textarea>
         }
 
 
+
+
+
+        // ========== PASAPORT SİSTEMİ ==========
+        const PASSPORT_LEVELS = ['A1', 'A2', 'A3', 'B1', 'B2', 'B3', 'C1', 'C2', 'C3', 'D5'];
+
+        function passportRank(level) {
+            const i = PASSPORT_LEVELS.indexOf(String(level || '').toUpperCase());
+            return i < 0 ? 0 : i + 1;
+        }
+
+        function passportLevelLabel(level) {
+            const lv = String(level || '').toUpperCase();
+            if (!lv || PASSPORT_LEVELS.indexOf(lv) < 0) return 'Yok';
+            return lv;
+        }
+
+        function passportStatusBadge(st) {
+            const s = String(st || 'none');
+            if (s === 'pending') return '<span style="color:var(--warning);font-weight:700;">⏳ Beklemede</span>';
+            if (s === 'active') return '<span style="color:var(--success);font-weight:700;">✓ Aktif</span>';
+            if (s === 'rejected') return '<span style="color:var(--danger);font-weight:700;">✕ Reddedildi</span>';
+            return '<span style="color:var(--text-muted);font-weight:700;">— Yok</span>';
+        }
+
+        function passportColor(level) {
+            const r = passportRank(level);
+            if (r >= 10) return '#ffd700';
+            if (r >= 7) return '#c400ff';
+            if (r >= 4) return '#4aa3ff';
+            if (r >= 1) return '#00e676';
+            return 'var(--text-muted)';
+        }
+
+        async function loadPassportApps() {
+            try {
+                if (typeof firebaseReady !== 'undefined' && firebaseReady) {
+                    const data = await fbGet('passport_apps');
+                    if (data) {
+                        const arr = Array.isArray(data) ? data : Object.values(data);
+                        try { localStorage.setItem('swordcity_passport_apps_v1', JSON.stringify(arr)); } catch (e) {}
+                        return arr;
+                    }
+                }
+            } catch (e) {}
+            try {
+                return JSON.parse(localStorage.getItem('swordcity_passport_apps_v1') || '[]');
+            } catch (e2) { return []; }
+        }
+
+        function savePassportApps(list) {
+            try { localStorage.setItem('swordcity_passport_apps_v1', JSON.stringify(list)); } catch (e) {}
+            if (typeof firebaseReady !== 'undefined' && firebaseReady) {
+                try { fbSet('passport_apps', list); } catch (e) {}
+            }
+        }
+
+        async function openPassport() {
+            const me = getCurrentUser();
+            if (!me) { toast('Giriş yapmalısın.', 'error'); return; }
+            const users = loadUsers();
+            const u = ensureUserFields(users[me] || {});
+            const isMod = isModerator(me);
+            const level = u.passportLevel || '';
+            const status = u.passportStatus || 'none';
+            const applied = u.passportAppliedLevel || '';
+
+            let levelOpts = PASSPORT_LEVELS.map(function(lv) {
+                const cur = passportRank(level);
+                const need = passportRank(lv);
+                const disabled = (status === 'active' && need <= cur) || (status === 'pending');
+                return `<option value="${lv}" ${disabled ? 'disabled' : ''}>${lv}${need <= cur && status === 'active' ? ' (mevcut veya altı)' : ''}</option>`;
+            }).join('');
+
+            let body = `
+                <div class="info-card" style="margin-bottom:12px;">
+                    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+                        <div>
+                            <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;">Pasaport seviyesi</div>
+                            <div style="font-size:28px;font-weight:800;color:${passportColor(level)};font-family:Orbitron,sans-serif;">${passportLevelLabel(level)}</div>
+                        </div>
+                        <div style="text-align:right;">
+                            <div style="font-size:11px;color:var(--text-muted);">Durum</div>
+                            <div>${passportStatusBadge(status)}</div>
+                        </div>
+                    </div>
+                    ${status === 'pending' ? `<div style="margin-top:10px;font-size:13px;color:var(--warning);">Başvurulan seviye: <b>${escapeHtml(applied)}</b> — moderatör onayı bekleniyor.</div>` : ''}
+                    ${status === 'rejected' && u.passportNote ? `<div style="margin-top:10px;font-size:13px;color:var(--danger);">Red notu: ${escapeHtml(u.passportNote)}</div>` : ''}
+                    ${u.passportUpdatedAt ? `<div style="margin-top:8px;font-size:11px;color:var(--text-muted);">Son işlem: ${new Date(u.passportUpdatedAt).toLocaleString('tr-TR')}</div>` : ''}
+                </div>
+                <div class="info-card" style="margin-bottom:12px;">
+                    <div style="font-weight:700;margin-bottom:6px;">Seviye sırası</div>
+                    <div style="font-size:12px;color:var(--text-muted);line-height:1.5;">A1 &lt; A2 &lt; A3 &lt; B1 &lt; B2 &lt; B3 &lt; C1 &lt; C2 &lt; C3 &lt; D5</div>
+                    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;">
+                        ${PASSPORT_LEVELS.map(function(lv) {
+                            const active = String(level).toUpperCase() === lv;
+                            return `<span style="padding:4px 10px;border-radius:20px;font-size:12px;font-weight:700;border:1px solid ${active ? passportColor(lv) : 'var(--border)'};color:${active ? passportColor(lv) : 'var(--text-muted)'};background:${active ? 'rgba(255,0,204,0.12)' : 'transparent'};">${lv}</span>`;
+                        }).join('')}
+                    </div>
+                </div>`;
+
+            if (status !== 'pending') {
+                body += `
+                <div class="info-card" style="margin-bottom:12px;">
+                    <div style="font-weight:700;margin-bottom:8px;">Pasaport başvurusu</div>
+                    <div class="form-group">
+                        <label>İstenen seviye</label>
+                        <select id="pass-apply-level" style="width:100%;padding:10px;background:rgba(0,0,0,0.35);border:1px solid var(--border);border-radius:10px;color:var(--text);">
+                            ${levelOpts}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Not (isteğe bağlı)</label>
+                        <textarea id="pass-apply-note" rows="2" placeholder="Kısa açıklama..." style="width:100%;padding:10px;background:rgba(0,0,0,0.35);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:inherit;resize:vertical;"></textarea>
+                    </div>
+                    <button class="primary-btn" style="width:100%;" onclick="submitPassportApplication()">🛂 Başvuru Yap</button>
+                </div>`;
+            } else {
+                body += `<button class="danger-btn" style="width:100%;margin-bottom:12px;" onclick="cancelPassportApplication()">Başvuruyu İptal Et</button>`;
+            }
+
+            if (isMod) {
+                body += `<button class="mod-btn" style="width:100%;margin-bottom:8px;" onclick="openPassportModPanel()">🛡️ Mod: Pasaport Başvuruları</button>`;
+            }
+
+            openModal('🛂 Pasaport', body + `<button class="back-btn" onclick="closeModal()">← Kapat</button>`);
+        }
+
+        async function submitPassportApplication() {
+            const me = getCurrentUser();
+            if (!me) return;
+            const levelEl = document.getElementById('pass-apply-level');
+            const noteEl = document.getElementById('pass-apply-note');
+            const level = levelEl ? String(levelEl.value || '').toUpperCase() : '';
+            const note = noteEl ? String(noteEl.value || '').trim().slice(0, 300) : '';
+            if (PASSPORT_LEVELS.indexOf(level) < 0) { toast('Geçersiz seviye.', 'error'); return; }
+
+            const users = loadUsers();
+            const u = ensureUserFields(users[me] || {});
+            if (u.passportStatus === 'pending') { toast('Zaten bekleyen başvurun var.', 'error'); return; }
+            if (u.passportStatus === 'active' && passportRank(level) <= passportRank(u.passportLevel)) {
+                toast('Mevcut seviyenden yüksek bir seviye seç.', 'error');
+                return;
+            }
+
+            u.passportStatus = 'pending';
+            u.passportAppliedLevel = level;
+            u.passportNote = note;
+            u.passportUpdatedAt = new Date().toISOString();
+            users[me] = u;
+            saveUser(me, u);
+
+            let apps = await loadPassportApps();
+            apps = apps.filter(function(a) { return a && a.username !== me; });
+            apps.unshift({
+                id: 'pass_' + Date.now(),
+                username: me,
+                level: level,
+                note: note,
+                currentLevel: u.passportLevel || '',
+                at: new Date().toISOString(),
+                status: 'pending'
+            });
+            if (apps.length > 100) apps.length = 100;
+            savePassportApps(apps);
+
+            toast('Pasaport başvurusu gönderildi.');
+            try { pushNotif(me, '🛂 Pasaport başvurun alındı: ' + level, 'info'); } catch (e) {}
+            openPassport();
+        }
+
+        async function cancelPassportApplication() {
+            const me = getCurrentUser();
+            if (!me) return;
+            if (!confirm('Başvuruyu iptal etmek istiyor musun?')) return;
+            const users = loadUsers();
+            const u = ensureUserFields(users[me] || {});
+            if (u.passportStatus !== 'pending') { toast('Bekleyen başvuru yok.', 'error'); return; }
+            u.passportStatus = u.passportLevel ? 'active' : 'none';
+            u.passportAppliedLevel = '';
+            u.passportNote = '';
+            u.passportUpdatedAt = new Date().toISOString();
+            saveUser(me, u);
+
+            let apps = await loadPassportApps();
+            apps = apps.filter(function(a) { return !(a && a.username === me && a.status === 'pending'); });
+            savePassportApps(apps);
+            toast('Başvuru iptal edildi.');
+            openPassport();
+        }
+
+        async function openPassportModPanel() {
+            if (!isModerator()) { toast('Sadece moderatör.', 'error'); return; }
+            const apps = await loadPassportApps();
+            const pending = apps.filter(function(a) { return a && a.status === 'pending'; });
+            const users = loadUsers();
+
+            let html = '';
+            if (!pending.length) {
+                html = '<p style="color:var(--text-muted);text-align:center;padding:16px 0;">Bekleyen başvuru yok.</p>';
+            } else {
+                pending.forEach(function(a) {
+                    const u = ensureUserFields(users[a.username] || {});
+                    html += `
+                        <div class="info-card" style="margin-bottom:10px;">
+                            <div style="font-weight:700;font-size:15px;">👤 ${formatDisplayName(a.username)}</div>
+                            <div class="info-row"><span class="label">Mevcut</span><span class="value" style="color:${passportColor(a.currentLevel || u.passportLevel)};">${passportLevelLabel(a.currentLevel || u.passportLevel)}</span></div>
+                            <div class="info-row"><span class="label">İstenen</span><span class="value" style="color:${passportColor(a.level)};font-weight:800;">${escapeHtml(a.level)}</span></div>
+                            ${a.note ? `<div class="info-row"><span class="label">Not</span><span class="value">${escapeHtml(a.note)}</span></div>` : ''}
+                            <div style="font-size:11px;color:var(--text-muted);margin:6px 0 10px;">${a.at ? new Date(a.at).toLocaleString('tr-TR') : ''}</div>
+                            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                                <button class="primary-btn" style="flex:1;margin:0;" onclick="approvePassportApp('${String(a.id).replace(/'/g, '')}')">✓ Onayla</button>
+                                <button class="danger-btn" style="flex:1;margin:0;" onclick="rejectPassportApp('${String(a.id).replace(/'/g, '')}')">✕ Reddet</button>
+                            </div>
+                        </div>`;
+                });
+            }
+
+            // Manuel seviye ata
+            const names = Object.keys(users).sort();
+            const nameOpts = names.map(function(n) { return `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`; }).join('');
+            const lvOpts = PASSPORT_LEVELS.map(function(lv) { return `<option value="${lv}">${lv}</option>`; }).join('');
+
+            html += `
+                <div class="info-card" style="margin-top:12px;">
+                    <div style="font-weight:700;margin-bottom:8px;">Manuel seviye ata</div>
+                    <div class="form-group"><label>Oyuncu</label>
+                        <select id="pass-mod-user" style="width:100%;padding:10px;background:rgba(0,0,0,0.35);border:1px solid var(--border);border-radius:10px;color:var(--text);">${nameOpts}</select>
+                    </div>
+                    <div class="form-group"><label>Seviye</label>
+                        <select id="pass-mod-level" style="width:100%;padding:10px;background:rgba(0,0,0,0.35);border:1px solid var(--border);border-radius:10px;color:var(--text);">
+                            <option value="">Pasaportu kaldır</option>
+                            ${lvOpts}
+                        </select>
+                    </div>
+                    <button class="primary-btn" style="width:100%;" onclick="modSetPassportLevel()">Kaydet</button>
+                </div>`;
+
+            openModal('🛡️ Pasaport Başvuruları (' + pending.length + ')', html + `
+                <button class="back-btn" style="margin-top:10px;" onclick="openPassport()">← Pasaport</button>
+            `);
+        }
+
+        async function approvePassportApp(appId) {
+            if (!isModerator()) return;
+            let apps = await loadPassportApps();
+            const app = apps.find(function(a) { return a && a.id === appId; });
+            if (!app || app.status !== 'pending') { toast('Başvuru bulunamadı.', 'error'); return; }
+            const users = loadUsers();
+            const u = ensureUserFields(users[app.username] || {});
+            u.passportLevel = app.level;
+            u.passportStatus = 'active';
+            u.passportAppliedLevel = '';
+            u.passportNote = '';
+            u.passportUpdatedAt = new Date().toISOString();
+            saveUser(app.username, u);
+
+            app.status = 'approved';
+            app.resolvedAt = new Date().toISOString();
+            app.resolvedBy = getCurrentUser();
+            savePassportApps(apps);
+
+            try { pushNotif(app.username, '🛂 Pasaport onaylandı: ' + app.level, 'success'); } catch (e) {}
+            try { pushModLog('passport', app.username + ' → ' + app.level + ' onaylandı'); } catch (e) {}
+            toast('Onaylandı: ' + app.username + ' → ' + app.level);
+            openPassportModPanel();
+        }
+
+        async function rejectPassportApp(appId) {
+            if (!isModerator()) return;
+            const reason = prompt('Red sebebi (isteğe bağlı):') || '';
+            let apps = await loadPassportApps();
+            const app = apps.find(function(a) { return a && a.id === appId; });
+            if (!app || app.status !== 'pending') { toast('Başvuru bulunamadı.', 'error'); return; }
+            const users = loadUsers();
+            const u = ensureUserFields(users[app.username] || {});
+            u.passportStatus = u.passportLevel ? 'active' : 'rejected';
+            u.passportAppliedLevel = '';
+            u.passportNote = String(reason).slice(0, 200);
+            u.passportUpdatedAt = new Date().toISOString();
+            saveUser(app.username, u);
+
+            app.status = 'rejected';
+            app.resolvedAt = new Date().toISOString();
+            app.resolvedBy = getCurrentUser();
+            app.rejectReason = String(reason).slice(0, 200);
+            savePassportApps(apps);
+
+            try { pushNotif(app.username, '🛂 Pasaport başvurusu reddedildi' + (reason ? ': ' + reason : ''), 'error'); } catch (e) {}
+            try { pushModLog('passport', app.username + ' başvurusu reddedildi'); } catch (e) {}
+            toast('Reddedildi.');
+            openPassportModPanel();
+        }
+
+        function modSetPassportLevel() {
+            if (!isModerator()) return;
+            const userEl = document.getElementById('pass-mod-user');
+            const levelEl = document.getElementById('pass-mod-level');
+            const username = userEl ? String(userEl.value || '') : '';
+            const level = levelEl ? String(levelEl.value || '').toUpperCase() : '';
+            if (!username) { toast('Oyuncu seç.', 'error'); return; }
+            if (level && PASSPORT_LEVELS.indexOf(level) < 0) { toast('Geçersiz seviye.', 'error'); return; }
+
+            const users = loadUsers();
+            const u = ensureUserFields(users[username] || {});
+            if (level) {
+                u.passportLevel = level;
+                u.passportStatus = 'active';
+            } else {
+                u.passportLevel = '';
+                u.passportStatus = 'none';
+            }
+            u.passportAppliedLevel = '';
+            u.passportNote = '';
+            u.passportUpdatedAt = new Date().toISOString();
+            saveUser(username, u);
+
+            // pending app temizle
+            loadPassportApps().then(function(apps) {
+                apps = apps.filter(function(a) { return !(a && a.username === username && a.status === 'pending'); });
+                savePassportApps(apps);
+            });
+
+            try { pushNotif(username, level ? ('🛂 Pasaportun güncellendi: ' + level) : '🛂 Pasaportun kaldırıldı', 'info'); } catch (e) {}
+            try { pushModLog('passport', username + ' manuel: ' + (level || 'kaldırıldı')); } catch (e) {}
+            toast('Pasaport güncellendi.');
+            openPassportModPanel();
+        }
 
 
         // ========== HARİTALAR (moderatör yönetir) ==========
