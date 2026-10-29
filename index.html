@@ -15120,12 +15120,16 @@ Lütfen daha sonra tekrar gelin.</textarea>
                     tips: 'Sabah saatlerinde bitki toplama bonusu var. Gece yaratık spawn oranı artar.',
                     dangers: 'Zehirli bitkiler, küçük kurt sürüleri',
                     weather: 'Yağmur / Sis',
-                    pvp: 'IRL buluşma yok',
-                    party: 'IRL 1-4 kişi',
+                    pvp: 'Güvenli bölge',
+                    party: '4 kişiye kadar',
                     cooldown: 'Yok',
                     dropRate: 'Yüksek',
                     special: 'İlk girişte ücretsiz starter sandık',
                     notes: 'Tutorial bölgesine yakındır.',
+                    custom: [
+                        { title: 'Pasaport', value: 'gerekli değil' },
+                        { title: 'Yaş sınırı', value: '16+' }
+                    ],
                     updatedAt: null,
                     updatedBy: null
                 },
@@ -15144,8 +15148,8 @@ Lütfen daha sonra tekrar gelin.</textarea>
                     tips: 'Fener veya ışık büyüsü şart. Kör edici flaşlara dikkat.',
                     dangers: 'Çökme riski, karanlık yaratıklar',
                     weather: 'Yeraltı (sabit)',
-                    pvp: 'IRL opsiyonel',
-                    party: 'IRL 2-5 kişi',
+                    pvp: 'Kontrollü (mod onayı)',
+                    party: '5 kişiye kadar',
                     cooldown: '30 dk (boss)',
                     dropRate: 'Orta',
                     special: 'Kristal rezonans — belirli saatlerde ekstra drop',
@@ -15168,8 +15172,8 @@ Lütfen daha sonra tekrar gelin.</textarea>
                     tips: 'Kutsal su ve arındırma büyüsü taşıyın. Gece girişi riskli.',
                     dangers: 'Lanet debuff, yangın tuzakları',
                     weather: 'Fırtına / Kül yağmuru',
-                    pvp: 'IRL açık',
-                    party: 'IRL 3-6 kişi önerilir',
+                    pvp: 'Serbest bölge',
+                    party: '6 kişiye kadar',
                     cooldown: '1 saat (boss)',
                     dropRate: 'Düşük-Orta',
                     special: 'Boss sonrası geçici buff alanı',
@@ -15192,8 +15196,8 @@ Lütfen daha sonra tekrar gelin.</textarea>
                     tips: 'Isınma iksiri zorunlu. Kayma zeminlerinde dikkatli olun.',
                     dangers: 'Hipotermi, çığ, buz elementleri',
                     weather: 'Kar fırtınası',
-                    pvp: 'IRL buluşma yok',
-                    party: 'IRL 2-5 kişi',
+                    pvp: 'Güvenli bölge',
+                    party: '5 kişiye kadar',
                     cooldown: '45 dk',
                     dropRate: 'Orta',
                     special: 'Buz kalkanı craft malzemeleri bol',
@@ -15216,8 +15220,8 @@ Lütfen daha sonra tekrar gelin.</textarea>
                     tips: 'Zehir direnci ekipmanı şart. Sis içinde ses takibi yapın.',
                     dangers: 'Zehir, yutucu çamur, gölge pusuları',
                     weather: 'Yoğun sis',
-                    pvp: 'IRL açık',
-                    party: 'IRL 2-4 kişi',
+                    pvp: 'Serbest bölge',
+                    party: '4 kişiye kadar',
                     cooldown: 'Yok',
                     dropRate: 'Yüksek (bitki)',
                     special: 'Gece görünmezlik artışı',
@@ -15240,8 +15244,8 @@ Lütfen daha sonra tekrar gelin.</textarea>
                     tips: 'Oksijen yönetimi kritik. Takım koordine olmalı.',
                     dangers: 'Boğulma, akıntı tuzakları, derin yaratıklar',
                     weather: 'Su altı akıntısı',
-                    pvp: 'IRL buluşma yok',
-                    party: 'IRL 4-8 kişi önerilir',
+                    pvp: 'Güvenli (etkinlik)',
+                    party: '8 kişiye kadar',
                     cooldown: '2 saat',
                     dropRate: 'Düşük',
                     special: 'Sezon etkinliğiyle açılacak',
@@ -15264,8 +15268,8 @@ Lütfen daha sonra tekrar gelin.</textarea>
                     tips: 'Gölge alanlarda dinlenin. Su stoku taşıyın.',
                     dangers: 'Sıcaklık hasarı, kum fırtınası, tuzaklar',
                     weather: 'Aşırı sıcak / Fırtına',
-                    pvp: 'IRL açık',
-                    party: 'IRL 1-5 kişi',
+                    pvp: 'Serbest bölge',
+                    party: '5 kişiye kadar',
                     cooldown: 'Yok',
                     dropRate: 'Orta',
                     special: 'Gece serinliği — drop artışı',
@@ -15288,8 +15292,8 @@ Lütfen daha sonra tekrar gelin.</textarea>
                     tips: 'Sadece hazır ekipler. Rezerv ekipman şart.',
                     dangers: 'Anlık ölüm bölgeleri, debuff zincirleri',
                     weather: 'Kaos fırtınası',
-                    pvp: 'IRL hardcore',
-                    party: 'IRL 5-10 kişi',
+                    pvp: 'Serbest / riskli',
+                    party: '10 kişiye kadar',
                     cooldown: '3 saat',
                     dropRate: 'Çok düşük',
                     special: 'Haftalık liderlik ödülleri',
@@ -15419,8 +15423,8 @@ Lütfen daha sonra tekrar gelin.</textarea>
                 ['Tehlikeler', escapeHtml(m.dangers || '—')],
                 ['İpuçları', escapeHtml(m.tips || '—')],
                 ['Hava / Ortam', escapeHtml(m.weather || '—')],
-                ['IRL', escapeHtml(m.pvp || '—')],
-                ['IRL parti', escapeHtml(m.party || '—')],
+                ['Bölge kuralı', escapeHtml(m.pvp || '—')],
+                ['Maks. kişi', escapeHtml(m.party || '—')],
                 ['Boss cooldown', escapeHtml(m.cooldown || '—')],
                 ['Özel mekanik', escapeHtml(m.special || '—')],
                 ['Notlar', escapeHtml(m.notes || '—')]
@@ -15428,6 +15432,13 @@ Lütfen daha sonra tekrar gelin.</textarea>
             let body = rows.map(function(r) {
                 return `<div class="info-row" style="align-items:flex-start;"><span class="label" style="min-width:120px;">${r[0]}</span><span class="value" style="text-align:left;line-height:1.4;">${r[1]}</span></div>`;
             }).join('');
+            // Özel başlıklar (moderatör ekler)
+            if (Array.isArray(m.custom)) {
+                m.custom.forEach(function(c) {
+                    if (!c || !c.title) return;
+                    body += `<div class="info-row" style="align-items:flex-start;"><span class="label" style="min-width:120px;">${escapeHtml(c.title)}</span><span class="value" style="text-align:left;line-height:1.4;">${escapeHtml(c.value || '—')}</span></div>`;
+                });
+            }
             if (m.updatedAt) {
                 body += `<div style="font-size:11px;color:var(--text-muted);margin-top:10px;">Son güncelleme: ${new Date(m.updatedAt).toLocaleString('tr-TR')}${m.updatedBy ? ' · ' + escapeHtml(m.updatedBy) : ''}</div>`;
             }
@@ -15466,8 +15477,8 @@ Lütfen daha sonra tekrar gelin.</textarea>
                 ['dangers', 'Tehlikeler', m.dangers || '', true],
                 ['tips', 'İpuçları', m.tips || '', true],
                 ['weather', 'Hava / Ortam', m.weather || ''],
-                ['pvp', 'IRL (in real life)', m.pvp || ''],
-                ['party', 'IRL parti boyutu', m.party || ''],
+                ['pvp', 'Bölge kuralı (güvenli / serbest / kontrollü)', m.pvp || ''],
+                ['party', 'Maks. kişi / kapasite', m.party || ''],
                 ['cooldown', 'Boss cooldown', m.cooldown || ''],
                 ['special', 'Özel mekanik', m.special || ''],
                 ['notes', 'Ek notlar', m.notes || '', true]
@@ -15479,12 +15490,43 @@ Lütfen daha sonra tekrar gelin.</textarea>
                 }
                 return `<div class="form-group"><label>${label}</label><input type="text" id="map-f-${key}" value="${escapeHtml(val)}" style="width:100%;padding:10px;background:rgba(0,0,0,0.35);border:1px solid var(--border);border-radius:10px;color:var(--text);"></div>`;
             }).join('');
+            // Özel başlıklar
+            const customs = Array.isArray(m.custom) ? m.custom : [];
+            let customHtml = '<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);">';
+            customHtml += '<div style="font-weight:700;margin-bottom:8px;">📋 Özel başlıklar</div>';
+            customHtml += '<p style="font-size:11px;color:var(--text-muted);margin-bottom:8px;">Örn: Pasaport → gerekli değil · Randevu → zorunlu</p>';
+            customHtml += '<div id="map-custom-list">';
+            if (customs.length) {
+                customs.forEach(function(c, i) {
+                    customHtml += `<div class="map-custom-row" data-i="${i}" style="display:flex;gap:6px;margin-bottom:6px;align-items:center;">
+                        <input type="text" class="map-c-title" placeholder="Başlık" value="${escapeHtml(c.title || '')}" style="flex:1;padding:8px;background:rgba(0,0,0,0.35);border:1px solid var(--border);border-radius:8px;color:var(--text);">
+                        <input type="text" class="map-c-value" placeholder="Değer" value="${escapeHtml(c.value || '')}" style="flex:1;padding:8px;background:rgba(0,0,0,0.35);border:1px solid var(--border);border-radius:8px;color:var(--text);">
+                        <button type="button" class="danger-btn" style="width:auto;padding:8px 10px;margin:0;" onclick="this.parentElement.remove()">✕</button>
+                    </div>`;
+                });
+            }
+            customHtml += '</div>';
+            customHtml += '<button type="button" class="back-btn" style="width:100%;margin-top:6px;" onclick="addMapCustomRow()">➕ Başlık ekle</button>';
+            customHtml += '</div>';
+
             openModal(isNew ? '➕ Yeni Harita' : '✏️ Harita Düzenle', `
                 <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Tüm alanlar opsiyonel (ad zorunlu). Kaydedince herkese yansır.</p>
-                <div style="max-height:55vh;overflow-y:auto;padding-right:4px;">${form}</div>
+                <div style="max-height:55vh;overflow-y:auto;padding-right:4px;">${form}${customHtml}</div>
                 <button class="primary-btn" style="width:100%;margin-top:10px;" onclick="saveMapFromEditor('${isNew ? '' : String(id).replace(/'/g, '')}')">Kaydet</button>
                 <button class="back-btn" onclick="${isNew ? 'openMaps()' : "openMapDetail('" + String(id).replace(/'/g, '') + "')"}">← Geri</button>
             `);
+        }
+
+        function addMapCustomRow() {
+            const list = document.getElementById('map-custom-list');
+            if (!list) return;
+            const div = document.createElement('div');
+            div.className = 'map-custom-row';
+            div.style.cssText = 'display:flex;gap:6px;margin-bottom:6px;align-items:center;';
+            div.innerHTML = `<input type="text" class="map-c-title" placeholder="Başlık (örn: Pasaport)" value="" style="flex:1;padding:8px;background:rgba(0,0,0,0.35);border:1px solid var(--border);border-radius:8px;color:var(--text);">
+                <input type="text" class="map-c-value" placeholder="Değer (örn: gerekli değil)" value="" style="flex:1;padding:8px;background:rgba(0,0,0,0.35);border:1px solid var(--border);border-radius:8px;color:var(--text);">
+                <button type="button" class="danger-btn" style="width:auto;padding:8px 10px;margin:0;" onclick="this.parentElement.remove()">✕</button>`;
+            list.appendChild(div);
         }
 
         async function saveMapFromEditor(id) {
@@ -15497,6 +15539,16 @@ Lütfen daha sonra tekrar gelin.</textarea>
             if (!name) { toast('Harita adı zorunlu.', 'error'); return; }
             const list = await loadMapsList();
             const me = getCurrentUser();
+            const custom = [];
+            document.querySelectorAll('#map-custom-list .map-custom-row').forEach(function(row) {
+                const tEl = row.querySelector('.map-c-title');
+                const vEl = row.querySelector('.map-c-value');
+                const title = tEl ? String(tEl.value || '').trim().slice(0, 40) : '';
+                const value = vEl ? String(vEl.value || '').trim().slice(0, 200) : '';
+                if (title) custom.push({ title: title, value: value });
+            });
+            if (custom.length > 20) custom.length = 20;
+
             const payload = {
                 id: id || ('map_' + Date.now()),
                 name: name.slice(0, 48),
@@ -15518,6 +15570,7 @@ Lütfen daha sonra tekrar gelin.</textarea>
                 cooldown: get('cooldown').slice(0, 40),
                 special: get('special').slice(0, 200),
                 notes: get('notes').slice(0, 300),
+                custom: custom,
                 updatedAt: new Date().toISOString(),
                 updatedBy: me
             };
