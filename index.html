@@ -2914,13 +2914,44 @@
             if (!isModerator()) { toast('Sadece moderatör.', 'error'); return; }
             const list = loadModLog();
             let rows = list.slice(0, 80).map(function(e) {
-                return `<div class="user-list-item" style="cursor:default;flex-direction:column;align-items:flex-start;gap:4px;">
-                    <div style="font-size:12px;color:var(--accent-soft);">${escapeHtml(e.action)} · ${escapeHtml(e.by || '')}</div>
-                    <div style="font-size:13px;">${escapeHtml(e.detail || '')}</div>
-                    <div style="font-size:11px;color:var(--text-muted);">${e.at ? new Date(e.at).toLocaleString('tr-TR') : ''}</div>
+                const eid = String(e.id || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+                return `<div class="user-list-item" style="cursor:default;align-items:flex-start;gap:8px;">
+                    <div style="flex:1;min-width:0;">
+                        <div style="font-size:12px;color:var(--accent-soft);">${escapeHtml(e.action)} · ${escapeHtml(e.by || '')}</div>
+                        <div style="font-size:13px;">${escapeHtml(e.detail || '')}</div>
+                        <div style="font-size:11px;color:var(--text-muted);">${e.at ? new Date(e.at).toLocaleString('tr-TR') : ''}</div>
+                    </div>
+                    <button type="button" class="danger-btn" style="width:auto;padding:6px 10px;margin:0;white-space:nowrap;" onclick="deleteOneModLog('${eid}')" title="Bu logu sil">🗑</button>
                 </div>`;
             }).join('') || '<p style="color:var(--text-muted);">Log boş.</p>';
-            openModal('📋 Mod Log', rows + '<button class="back-btn" onclick="showModUserList()">← Geri</button>');
+            openModal('📋 Mod Log', rows + `
+                <button class="danger-btn" onclick="clearAllModLog()" ${list.length ? '' : 'style="opacity:0.4;" disabled'}>Tüm logu temizle</button>
+                <button class="back-btn" onclick="showModUserList()">← Geri</button>
+            `);
+        }
+
+        function deleteOneModLog(id) {
+            if (!isModerator()) return;
+            if (!id) return;
+            _modLogCache = loadModLog().filter(function(e) { return e && e.id !== id; });
+            try { localStorage.setItem('swordcity_mod_log_v1', JSON.stringify(_modLogCache)); } catch (e) {}
+            if (typeof firebaseReady !== 'undefined' && firebaseReady) {
+                try { fbSet('mod_log', _modLogCache); } catch (e) {}
+            }
+            toast('Log silindi.');
+            openModLogPanel();
+        }
+
+        function clearAllModLog() {
+            if (!isModerator()) return;
+            if (!confirm('Tüm mod log silinsin mi?')) return;
+            _modLogCache = [];
+            try { localStorage.setItem('swordcity_mod_log_v1', JSON.stringify([])); } catch (e) {}
+            if (typeof firebaseReady !== 'undefined' && firebaseReady) {
+                try { fbSet('mod_log', []); } catch (e) {}
+            }
+            toast('Mod log temizlendi.');
+            openModLogPanel();
         }
 
         // ---- Trade history ----
@@ -3835,6 +3866,10 @@
             Object.keys(local).forEach(function(k) { keys[k] = true; });
             Object.keys(remote).forEach(function(k) { keys[k] = true; });
             Object.keys(keys).forEach(function(k) {
+                // Moderatörün sildiği hesaplar geri gelmesin
+                try {
+                    if (typeof isUserMarkedDeleted === 'function' && isUserMarkedDeleted(k)) return;
+                } catch (e) {}
                 const a = local[k]; // local
                 const b = remote[k]; // remote
                 if (a && typeof a === 'object' && !(b && typeof b === 'object')) {
@@ -3922,6 +3957,11 @@
                 pickField('friends', true);
                 pickField('card', false);
                 pickField('txCount', true);
+                pickField('banned', false);
+                pickField('banUntil', false);
+                pickField('banReason', false);
+                pickField('passportLevel', false);
+                pickField('passportStatus', false);
                 if (!merged.password) merged.password = a.password || b.password || '';
                 // Şifre: local varsa koru (seed ezmesin)
                 if (a.password) merged.password = a.password;
@@ -3987,6 +4027,11 @@
             } else {
                 _usersCache = local && Object.keys(local).length ? local : (_usersCache || {});
             }
+            try {
+                Object.keys(_usersCache || {}).forEach(function(nm) {
+                    if (typeof isUserMarkedDeleted === 'function' && isUserMarkedDeleted(nm)) delete _usersCache[nm];
+                });
+            } catch (e) {}
             // Oturum kullanıcısının localStorage kaydı daha yeniyse geri koy — bakiye hariç remote (mod) günceli koru
             try {
                 const me = (typeof getCurrentUser === 'function') ? getCurrentUser() : (localStorage.getItem(SESSION_KEY) || '');
@@ -4460,6 +4505,14 @@
                 if (remote && typeof remote === 'object' && Object.keys(remote).length > 0) {
                     // prev = local öncelikli birleştirme (menüde gezerken profil sıfırlanmasın)
                     _usersCache = mergeUsers(remote, prev);
+                    // Silinmiş hesapları tekrar düşür
+                    try {
+                        Object.keys(_usersCache || {}).forEach(function(nm) {
+                            if (typeof isUserMarkedDeleted === 'function' && isUserMarkedDeleted(nm)) {
+                                delete _usersCache[nm];
+                            }
+                        });
+                    } catch (e) {}
                     try {
                         // previousNames hayaletlerini bir kez daha temizle
                         var _ghostDrop = false;
@@ -4710,7 +4763,17 @@
                 loadSupportTicketsAsync(),
                 loadFriendRequestsAsync(),
                 loadChatsAsync(),
-                loadBannedNamesAsync()
+                loadBannedNamesAsync(),
+                (async function() {
+                    try {
+                        if (typeof firebaseReady !== 'undefined' && firebaseReady) {
+                            const d = await fbGet('deleted_users');
+                            if (Array.isArray(d)) saveDeletedUsers(d);
+                            else if (d && typeof d === 'object') saveDeletedUsers(Object.values(d));
+                        }
+                    } catch (e) {}
+                    window._deletedUsersSet = null;
+                })()
             ]);
             try { defaultWheelsIfEmpty(); } catch (e) {}
             startRealtimeListeners();
@@ -4790,10 +4853,16 @@
                 list.forEach(function(n) {
                     const when = n.at ? new Date(n.at).toLocaleString('tr-TR') : '';
                     const color = n.type === 'danger' ? 'var(--danger)' : (n.type === 'success' ? 'var(--success)' : 'var(--accent-soft)');
+                    const nid = String(n.id || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
                     html += `
                         <div class="info-card" style="border-left:3px solid ${color};">
-                            <div style="font-size:14px;line-height:1.4;">${escapeHtml(n.text)}</div>
-                            <div style="color:var(--text-muted);font-size:11px;margin-top:6px;">${when}</div>
+                            <div style="display:flex;gap:10px;align-items:flex-start;">
+                                <div style="flex:1;min-width:0;">
+                                    <div style="font-size:14px;line-height:1.4;">${escapeHtml(n.text)}</div>
+                                    <div style="color:var(--text-muted);font-size:11px;margin-top:6px;">${when}</div>
+                                </div>
+                                <button type="button" class="danger-btn" style="width:auto;padding:6px 10px;margin:0;white-space:nowrap;" onclick="deleteOneNotif('${nid}')" title="Bu bildirimi sil">🗑</button>
+                            </div>
                         </div>
                     `;
                 });
@@ -4802,6 +4871,18 @@
             openModal('🔔 Bildirimler', html + `
                 <button class="danger-btn" onclick="clearMyNotifs()" ${list.length ? '' : 'style="opacity:0.4;" disabled'}>Tümünü temizle</button>
             `);
+        }
+
+        function deleteOneNotif(id) {
+            const me = getCurrentUser();
+            if (!me || !id) return;
+            const all = loadAllNotifs();
+            if (!all[me]) return;
+            all[me] = all[me].filter(function(n) { return n && n.id !== id; });
+            saveAllNotifs(all);
+            updateNotifBadge();
+            toast('Bildirim silindi.');
+            openNotifications();
         }
 
         function clearMyNotifs() {
@@ -12267,6 +12348,8 @@
         }
 
         function modBanUser(username) {
+            if (!isModerator()) { toast('Sadece moderatör.', 'error'); return; }
+            if (isModerator(username)) { toast('Kurucu banlanamaz.', 'error'); return; }
             const amountStr = prompt(
                 username + ' ne kadar ban yesin?\n\n' +
                 'Sayı yaz (örn: 30, 1, 7)\n' +
@@ -12303,9 +12386,9 @@
                 } else if (u === 'g' || u === 'gun' || u === 'gün' || u === 'day') {
                     ms = amount * 24 * 60 * 60 * 1000;
                 } else if (u === 'a' || u === 'ay' || u === 'month') {
-                    ms = amount * 30 * 24 * 60 * 60 * 1000; // ~30 gün
+                    ms = amount * 30 * 24 * 60 * 60 * 1000;
                 } else if (u === 'y' || u === 'yil' || u === 'yıl' || u === 'year') {
-                    ms = amount * 365 * 24 * 60 * 60 * 1000; // ~365 gün
+                    ms = amount * 365 * 24 * 60 * 60 * 1000;
                 } else {
                     toast('Geçersiz birim. s / d / sa / g / a / y kullan.', 'error');
                     return;
@@ -12321,11 +12404,14 @@
                 toast('Kullanıcı bulunamadı.', 'error');
                 return;
             }
-            ensureUserFields(users[username]);
-            users[username].banned = true;
-            users[username].banUntil = banUntil;
-            users[username].banReason = reason.trim();
-            saveUsers(users);
+            const u = ensureUserFields(users[username]);
+            u.banned = true;
+            u.banUntil = banUntil;
+            u.banReason = String(reason || '').trim();
+            u.updatedAt = new Date().toISOString();
+            saveUser(username, u);
+
+            try { pushModLog('ban', username + ' → ' + formatBanUntil(banUntil) + (u.banReason ? ' · ' + u.banReason : '')); } catch (e) {}
 
             if (getCurrentUser() === username) {
                 doLogout();
@@ -12333,20 +12419,24 @@
                 return;
             }
 
-            pushNotif(username, '🚫 BAN YEDİNİZ. Bitiş: ' + formatBanUntil(banUntil) + (reason ? ' · Sebep: ' + reason.trim() : ''), 'danger');
+            try { pushNotif(username, '🚫 BAN YEDİNİZ. Bitiş: ' + formatBanUntil(banUntil) + (u.banReason ? ' · Sebep: ' + u.banReason : ''), 'danger'); } catch (e) {}
             toast('🚫 ' + username + ' banlandı (' + formatBanUntil(banUntil) + ')');
             modSelectUser(username);
         }
 
         function modUnbanUser(username) {
+            if (!isModerator()) { toast('Sadece moderatör.', 'error'); return; }
             if (!confirm(username + ' banını kaldırmak istiyor musun?')) return;
             const users = loadUsers();
-            if (!users[username]) return;
-            ensureUserFields(users[username]);
-            users[username].banned = false;
-            users[username].banUntil = null;
-            users[username].banReason = '';
-            saveUsers(users);
+            if (!users[username]) { toast('Kullanıcı bulunamadı.', 'error'); return; }
+            const u = ensureUserFields(users[username]);
+            u.banned = false;
+            u.banUntil = null;
+            u.banReason = '';
+            u.updatedAt = new Date().toISOString();
+            saveUser(username, u);
+            try { pushModLog('unban', username + ' banı kaldırıldı'); } catch (e) {}
+            try { pushNotif(username, '✅ Banın kaldırıldı.', 'success'); } catch (e) {}
             toast('✅ ' + username + ' banı kaldırıldı.');
             modSelectUser(username);
         }
@@ -12780,10 +12870,38 @@
         }
 
         function modDeleteUser(username) {
-            if (!confirm('⚠️ ' + username + ' hesabını kalıcı olarak silmek istediğine emin misin?')) return;
+            if (!isModerator()) { toast('Sadece moderatör.', 'error'); return; }
+            if (isModerator(username)) { toast('Kurucu hesabı silinemez.', 'error'); return; }
+            if (!confirm('⚠️ ' + username + ' hesabını kalıcı olarak silmek istediğine emin misin?\n\nBu işlem geri alınamaz.')) return;
+            if (!confirm('Son onay: ' + username + ' gerçekten silinsin mi?')) return;
+
             const users = loadUsers();
+            if (!users[username]) {
+                toast('Kullanıcı zaten yok.', 'error');
+                showModUserList();
+                return;
+            }
+
+            // Tombstone — merge / realtime geri getirmesin
+            try { markUserDeleted(username); } catch (e) {}
+
             delete users[username];
-            saveUsers(users);
+            _usersCache = users;
+            try { safeLocalSet('swordcity_users_v3', JSON.stringify(_usersCache)); } catch (e) {}
+
+            // Firebase'den de sil
+            if (typeof firebaseReady !== 'undefined' && firebaseReady && typeof db !== 'undefined' && db) {
+                try { db.ref('users/' + username).remove(); } catch (e) { console.warn('fb delete user', e); }
+                try { db.ref('presence/' + username).remove(); } catch (e) {}
+            }
+
+            // Bildirimleri temizle
+            try {
+                const all = loadAllNotifs();
+                if (all[username]) { delete all[username]; saveAllNotifs(all); }
+            } catch (e) {}
+
+            try { pushModLog('delete_user', username + ' hesabı silindi'); } catch (e) {}
 
             if (getCurrentUser() === username) {
                 doLogout();
@@ -12791,6 +12909,38 @@
             }
             toast('✅ ' + username + ' silindi.');
             showModUserList();
+        }
+
+        function loadDeletedUsers() {
+            try {
+                const raw = localStorage.getItem('swordcity_deleted_users_v1');
+                const arr = raw ? JSON.parse(raw) : [];
+                return Array.isArray(arr) ? arr : [];
+            } catch (e) { return []; }
+        }
+        function saveDeletedUsers(list) {
+            try { localStorage.setItem('swordcity_deleted_users_v1', JSON.stringify(list || [])); } catch (e) {}
+            if (typeof firebaseReady !== 'undefined' && firebaseReady) {
+                try { fbSet('deleted_users', list || []); } catch (e) {}
+            }
+        }
+        function markUserDeleted(username) {
+            const n = String(username || '').toLowerCase().trim();
+            if (!n) return;
+            let list = loadDeletedUsers();
+            if (list.indexOf(n) === -1) list.push(n);
+            if (list.length > 500) list = list.slice(-500);
+            saveDeletedUsers(list);
+            window._deletedUsersSet = null;
+        }
+        function isUserMarkedDeleted(username) {
+            const n = String(username || '').toLowerCase().trim();
+            if (!n) return false;
+            if (!window._deletedUsersSet) {
+                window._deletedUsersSet = {};
+                loadDeletedUsers().forEach(function(x) { window._deletedUsersSet[String(x).toLowerCase()] = true; });
+            }
+            return !!window._deletedUsersSet[n];
         }
 
         document.addEventListener('keydown', function(e) {
