@@ -5092,6 +5092,7 @@
             if (typeof user.idNote === 'undefined') user.idNote = '';
             if (typeof user.idUpdatedAt === 'undefined') user.idUpdatedAt = null;
             if (!Array.isArray(user.idExtra)) user.idExtra = [];
+            if (!Array.isArray(user.idFields)) user.idFields = null; // null = varsayilan sablon
             return user;
         }
 
@@ -15451,6 +15452,36 @@ Lütfen daha sonra tekrar gelin.</textarea>
             }
         }
 
+
+        function defaultIdFieldsFromUser(u) {
+            u = u || {};
+            return [
+                { title: 'Ad', value: u.idFirstName || '' },
+                { title: 'Soyad', value: u.idLastName || '' },
+                { title: 'TC No', value: u.idTc || '' },
+                { title: 'Cinsiyet', value: u.idGender || '' },
+                { title: 'Seri No', value: u.idSerial || '' },
+                { title: 'Ulke', value: u.idCountry || '' },
+                { title: 'Vatandaslik', value: u.idCitizenship || '' },
+                { title: 'Medeni durum', value: u.idMarital || '' }
+            ];
+        }
+        function getIdFields(u) {
+            u = ensureUserFields(u || {});
+            if (Array.isArray(u.idFields) && u.idFields.length) {
+                return u.idFields.map(function(f) {
+                    return { title: String((f && f.title) || '').slice(0, 40), value: String((f && f.value) || '').slice(0, 200) };
+                }).filter(function(f) { return f.title; });
+            }
+            var base = defaultIdFieldsFromUser(u);
+            if (Array.isArray(u.idExtra)) {
+                u.idExtra.forEach(function(ex) {
+                    if (ex && ex.title) base.push({ title: String(ex.title).slice(0, 40), value: String(ex.value || '').slice(0, 200) });
+                });
+            }
+            return base;
+        }
+
         function openIdentityCard(forUser) {
             const me = getCurrentUser();
             const target = forUser || me;
@@ -15475,18 +15506,12 @@ Lütfen daha sonra tekrar gelin.</textarea>
             if (hasId) {
                 body += '<div class="info-card" style="margin-bottom:12px;background:linear-gradient(135deg,rgba(255,0,204,0.1),rgba(80,0,160,0.15));">';
                 body += '<div style="font-size:11px;color:var(--text-muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:10px;">Sword City Kimlik</div>';
-                body += '<div class="info-row"><span class="label">Ad</span><span class="value">' + escapeHtml(u.idFirstName || '—') + '</span></div>';
-                body += '<div class="info-row"><span class="label">Soyad</span><span class="value">' + escapeHtml(u.idLastName || '—') + '</span></div>';
-                body += '<div class="info-row"><span class="label">TC No</span><span class="value">' + escapeHtml(u.idTc || '—') + '</span></div>';
-                body += '<div class="info-row"><span class="label">Cinsiyet</span><span class="value">' + escapeHtml(u.idGender || '—') + '</span></div>';
-                body += '<div class="info-row"><span class="label">Seri No</span><span class="value">' + escapeHtml(u.idSerial || '—') + '</span></div>';
-                body += '<div class="info-row"><span class="label">Ulke</span><span class="value">' + escapeHtml(u.idCountry || '—') + '</span></div>';
-                body += '<div class="info-row"><span class="label">Vatandaslik</span><span class="value">' + escapeHtml(u.idCitizenship || '—') + '</span></div>';
-                body += '<div class="info-row"><span class="label">Medeni durum</span><span class="value">' + escapeHtml(u.idMarital || '—') + '</span></div>';
-                if (Array.isArray(u.idExtra)) {
-                    u.idExtra.forEach(function(ex) {
-                        if (!ex || !ex.title) return;
-                        body += '<div class="info-row"><span class="label">' + escapeHtml(ex.title) + '</span><span class="value">' + escapeHtml(ex.value || '—') + '</span></div>';
+                var fields = getIdFields(u);
+                if (!fields.length) {
+                    body += '<p style="color:var(--text-muted);">Baslik yok</p>';
+                } else {
+                    fields.forEach(function(f) {
+                        body += '<div class="info-row"><span class="label">' + escapeHtml(f.title) + '</span><span class="value">' + escapeHtml(f.value || '—') + '</span></div>';
                     });
                 }
                 if (u.idSignature) {
@@ -15497,7 +15522,7 @@ Lütfen daha sonra tekrar gelin.</textarea>
                 if (isMod) {
                     const un = String(target).replace(/'/g, '');
                     body += '<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px;">';
-                    body += '<button class="mod-btn" style="width:100%;margin:0;" onclick="openIdExtraEditor(\'' + un + '\')">Baslik ekle / duzenle</button>';
+                    body += '<button class="mod-btn" style="width:100%;margin:0;" onclick="openIdExtraEditor(\'' + un + '\')">Tum basliklari duzenle</button>';
                     body += '<button class="danger-btn" style="width:100%;margin:0;" onclick="modRevokeIdentity(\'' + un + '\')">Kimligi kaldir</button>';
                     body += '</div>';
                 }
@@ -15737,13 +15762,14 @@ Lütfen daha sonra tekrar gelin.</textarea>
         }
 
 
+
         function openIdExtraEditor(username) {
             if (!isModerator()) { toast('Sadece moderator.', 'error'); return; }
             const users = loadUsers();
             const u = ensureUserFields(users[username] || {});
-            const extras = Array.isArray(u.idExtra) ? u.idExtra : [];
+            const fields = getIdFields(u);
             let rows = '';
-            extras.forEach(function(ex, i) {
+            fields.forEach(function(ex) {
                 rows += '<div class="id-extra-row" style="display:flex;gap:6px;margin-bottom:6px;align-items:center;">';
                 rows += '<input type="text" class="id-ex-title" placeholder="Baslik" value="' + escapeHtml(ex.title || '') + '" style="width:38%;padding:8px;background:rgba(0,0,0,0.35);border:1px solid var(--border);border-radius:8px;color:var(--text);">';
                 rows += '<input type="text" class="id-ex-value" placeholder="Deger" value="' + escapeHtml(ex.value || '') + '" style="flex:1;padding:8px;background:rgba(0,0,0,0.35);border:1px solid var(--border);border-radius:8px;color:var(--text);">';
@@ -15751,7 +15777,7 @@ Lütfen daha sonra tekrar gelin.</textarea>
                 rows += '</div>';
             });
             let body = '';
-            body += '<p style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Kimlikte gorunecek ekstra basliklar. Ornek: Kan grubu, Meslek kodu...</p>';
+            body += '<p style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Varsayilan basliklar dahil hepsi silinebilir / yeniden adlandirilabilir. Kaydedince kimlikte boyle gorunur.</p>';
             body += '<div id="id-extra-list">' + rows + '</div>';
             body += '<div style="display:flex;gap:8px;margin:8px 0 12px;">';
             body += '<button type="button" class="back-btn" style="flex:1;margin:0;" onclick="addIdExtraRow()">Baslik ekle</button>';
@@ -15761,6 +15787,7 @@ Lütfen daha sonra tekrar gelin.</textarea>
             body += '<button class="back-btn" onclick="openIdentityCard(\'' + String(username).replace(/'/g, '') + '\')">Geri</button>';
             openModal('Kimlik basliklari — ' + escapeHtml(username), body);
         }
+
         function addIdExtraRow() {
             const list = document.getElementById('id-extra-list');
             if (!list) return;
@@ -15780,21 +15807,38 @@ Lütfen daha sonra tekrar gelin.</textarea>
         }
         function saveIdExtras(username) {
             if (!isModerator()) return;
-            const extras = [];
+            const fields = [];
             document.querySelectorAll('#id-extra-list .id-extra-row').forEach(function(row) {
                 const tEl = row.querySelector('.id-ex-title');
                 const vEl = row.querySelector('.id-ex-value');
                 const title = tEl ? String(tEl.value || '').trim().slice(0, 40) : '';
                 const value = vEl ? String(vEl.value || '').trim().slice(0, 200) : '';
-                if (title) extras.push({ title: title, value: value });
+                if (title) fields.push({ title: title, value: value });
             });
-            if (extras.length > 20) extras.length = 20;
+            if (fields.length > 30) fields.length = 30;
             const users = loadUsers();
             const u = ensureUserFields(users[username] || {});
-            u.idExtra = extras;
+            u.idFields = fields;
+            u.idExtra = []; // artik idFields icinde
+            // Bilinen alanlari da senkronla (eski kod uyumu)
+            function pick(title) {
+                const t = title.toLowerCase();
+                for (var i = 0; i < fields.length; i++) {
+                    if (String(fields[i].title || '').toLowerCase() === t) return fields[i].value || '';
+                }
+                return '';
+            }
+            u.idFirstName = pick('ad') || pick('isim') || u.idFirstName || '';
+            u.idLastName = pick('soyad') || u.idLastName || '';
+            u.idTc = pick('tc no') || pick('tc') || u.idTc || '';
+            u.idGender = pick('cinsiyet') || u.idGender || '';
+            u.idSerial = pick('seri no') || pick('seri') || u.idSerial || '';
+            u.idCountry = pick('ulke') || pick('ülke') || u.idCountry || '';
+            u.idCitizenship = pick('vatandaslik') || pick('vatandaşlık') || u.idCitizenship || '';
+            u.idMarital = pick('medeni durum') || u.idMarital || '';
             u.idUpdatedAt = new Date().toISOString();
             saveUser(username, u);
-            try { pushModLog('id_extra', username + ' baslik guncellendi (' + extras.length + ')'); } catch (e) {}
+            try { pushModLog('id_fields', username + ' baslik guncellendi (' + fields.length + ')'); } catch (e) {}
             toast('Basliklar kaydedildi');
             openIdentityCard(username);
         }
@@ -15815,6 +15859,7 @@ Lütfen daha sonra tekrar gelin.</textarea>
             u.idMarital = '';
             u.idPhoto = '';
             u.idExtra = [];
+            u.idFields = null;
             u.idNote = '';
             u.idUpdatedAt = new Date().toISOString();
             saveUser(username, u);
@@ -15875,6 +15920,8 @@ Lütfen daha sonra tekrar gelin.</textarea>
             u.idPhoto = app.photo || u.idPhoto || '';
             u.idSignature = app.signature || '';
             u.idNote = '';
+            u.idFields = defaultIdFieldsFromUser(u);
+            u.idExtra = [];
             u.idUpdatedAt = new Date().toISOString();
             saveUser(app.username, u);
             app.status = 'approved';
