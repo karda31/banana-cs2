@@ -36,7 +36,42 @@
             font-family: 'Rajdhani', system-ui, sans-serif;
             min-height: 100vh;
             overflow-x: hidden;
+            padding-bottom: 72px;
         }
+
+        /* Hızlı erişim şeridi */
+        #quick-bar {
+            position: fixed;
+            bottom: 0; left: 0; right: 0;
+            z-index: 90;
+            display: none;
+            justify-content: space-around;
+            align-items: center;
+            gap: 4px;
+            padding: 8px 6px calc(8px + env(safe-area-inset-bottom, 0px));
+            background: linear-gradient(180deg, rgba(22,0,34,0.92), rgba(10,0,20,0.98));
+            border-top: 1px solid var(--border);
+            backdrop-filter: blur(12px);
+        }
+        #quick-bar.show { display: flex; }
+        #quick-bar button {
+            flex: 1;
+            min-width: 0;
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            font-family: inherit;
+            font-size: 10px;
+            padding: 4px 2px;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 2px;
+        }
+        #quick-bar button span.qb-ico { font-size: 20px; line-height: 1; }
+        #quick-bar button:active { color: var(--accent-soft); }
+
 
         .title-bar {
             background: linear-gradient(90deg, #12001c, #1a0028, #12001c);
@@ -1936,7 +1971,7 @@
                 <div class="folder" onclick="openJeweler()">
                     <div class="folder-icon">🥇</div>
                     <div class="folder-name">Kuyumcu</div>
-                    <div class="folder-desc">Altın bozdur / al</div>
+                    <div class="folder-desc">Altın · Zümrüt · Elmas</div>
                 </div>
                 <div class="folder" onclick="showAchievements()">
                     <div class="folder-icon">🏆</div>
@@ -2043,6 +2078,16 @@
                     <div class="folder-name">Pasaport</div>
                     <div class="folder-desc">Başvuru & Seviye</div>
                 </div>
+                <div class="folder" onclick="openIdentityCard()">
+                    <div class="folder-icon">🪪</div>
+                    <div class="folder-name">Kimlik</div>
+                    <div class="folder-desc">Kimlik kartı</div>
+                </div>
+                <div class="folder" onclick="openCheckIn()">
+                    <div class="folder-icon">📍</div>
+                    <div class="folder-name">Check-in</div>
+                    <div class="folder-desc">Bölgede bulun</div>
+                </div>
                 <div class="folder" onclick="openConsole()">
                     <div class="folder-icon">💻</div>
                     <div class="folder-name">Console</div>
@@ -2101,6 +2146,16 @@
     </div>
     <div id="site-version-badge">v1.0.0</div>
     <div id="toast" class="toast"></div>
+
+    <!-- Hızlı erişim -->
+    <div id="quick-bar">
+        <button type="button" onclick="openPassport()"><span class="qb-ico">🛂</span>Pasaport</button>
+        <button type="button" onclick="openMaps()"><span class="qb-ico">🗺️</span>Harita</button>
+        <button type="button" onclick="openIdentityCard()"><span class="qb-ico">🪪</span>Kimlik</button>
+        <button type="button" onclick="openCheckIn()"><span class="qb-ico">📍</span>Check-in</button>
+        <button type="button" onclick="openNotifications()"><span class="qb-ico">🔔</span>Bildirim</button>
+        <button type="button" onclick="openSocial()"><span class="qb-ico">👥</span>Sosyal</button>
+    </div>
 
     <!-- Müzik çalar sol alt -->
     <div id="music-player" class="collapsed">
@@ -5065,6 +5120,10 @@
             if (typeof user.passportAppliedLevel === 'undefined') user.passportAppliedLevel = '';
             if (typeof user.passportNote === 'undefined') user.passportNote = '';
             if (typeof user.passportUpdatedAt === 'undefined') user.passportUpdatedAt = null;
+            if (!Array.isArray(user.sicil)) user.sicil = [];
+            if (typeof user.checkInMap === 'undefined') user.checkInMap = '';
+            if (typeof user.checkInAt === 'undefined') user.checkInAt = null;
+            if (typeof user.idPhoto === 'undefined') user.idPhoto = '';
             return user;
         }
 
@@ -6256,6 +6315,7 @@
         }
 
         function doLogout() {
+            try { var qb=document.getElementById('quick-bar'); if(qb) qb.classList.remove('show'); } catch(e) {}
             // Sadece oturumu kapat — bakiye, level, envanter, tema, dil, müzik ayarları kalır
             const lastUser = getCurrentUser();
             if (lastUser) {
@@ -6290,6 +6350,7 @@
             try { normalizeAllFriendLists(); normalizeAllChatsAliases(); } catch (e) {}
             document.getElementById('auth-screen').classList.add('hidden');
             document.getElementById('main-app').classList.remove('hidden');
+            try { var qb=document.getElementById('quick-bar'); if(qb) qb.classList.add('show'); } catch(e) {};
             const badge = document.getElementById('user-badge');
             badge.innerHTML = '👤 ' + formatDisplayName(username);
             badge.classList.add('show');
@@ -7215,6 +7276,10 @@
             const price = Math.max(1, Math.floor(Number(m.price) || 1));
             const gold = Math.floor(Number(u.gold) || 0);
             const bal = Math.floor(Number(u.balance) || 0);
+            const emerald = Math.floor(Number(u.emerald) || 0);
+            const diamond = Math.floor(Number(u.diamond) || 0);
+            const emPrice = Math.max(1, Math.floor(price * 5));   // altın < zümrüt
+            const diaPrice = Math.max(1, Math.floor(price * 25)); // zümrüt < elmas
             const hist = (m.history || []).slice(-8).map(function(h) {
                 return '<span style="display:inline-block;padding:2px 6px;margin:2px;border-radius:6px;background:rgba(255,213,79,0.12);color:#ffd54f;font-size:11px;">$' + (h.p || 0) + '</span>';
             }).join('');
@@ -7238,26 +7303,131 @@
                     ${hist ? '<div style="margin-top:10px;"><span style="font-size:11px;color:var(--text-muted);">Son fiyatlar: </span>' + hist + '</div>' : ''}
                 </div>
                 <div class="info-card" style="margin-bottom:12px;">
-                    <div class="info-row"><span class="label">🥇 Altının</span><span class="value" style="color:#ffd54f;">${gold.toLocaleString('tr-TR')}</span></div>
                     <div class="info-row"><span class="label">💵 Bakiye</span><span class="value" style="color:var(--success);">$${bal.toLocaleString('tr-TR')}</span></div>
+                    <div class="info-row"><span class="label">🥇 Altın</span><span class="value" style="color:#ffd54f;">${gold.toLocaleString('tr-TR')}</span></div>
+                    <div class="info-row"><span class="label">💚 Zümrüt</span><span class="value" style="color:#69f0ae;">${emerald.toLocaleString('tr-TR')}</span></div>
+                    <div class="info-row"><span class="label">💎 Elmas</span><span class="value" style="color:#80d8ff;">${diamond.toLocaleString('tr-TR')}</span></div>
+                    <div style="font-size:11px;color:var(--text-muted);margin-top:8px;">Sıra: Altın &lt; Zümrüt &lt; Elmas · 1 Zümrüt ≈ $${emPrice.toLocaleString('tr-TR')} · 1 Elmas ≈ $${diaPrice.toLocaleString('tr-TR')}</div>
                 </div>
                 <div class="info-card" style="margin-bottom:12px;">
-                    <div style="font-weight:700;margin-bottom:8px;">Altın bozdur (sat)</div>
+                    <div style="font-weight:700;margin-bottom:8px;">🥇 Altın ↔ $</div>
                     <div class="form-group"><label>Miktar (gold)</label>
                     <input type="number" id="jeweler-sell-amt" value="1" min="1" step="1" style="width:100%;padding:10px;border-radius:10px;background:rgba(0,0,0,0.35);border:1px solid var(--border);color:var(--text);"></div>
-                    <button class="primary-btn" style="width:100%;" onclick="jewelerSellGold()">🥇 Bozdur → $</button>
-                    <div style="font-size:11px;color:var(--text-muted);margin-top:6px;">Anlık fiyattan $ alırsın. Örn: 10 gold × $${price} = $${(10*price).toLocaleString('tr-TR')}</div>
+                    <div style="display:flex;gap:8px;">
+                        <button class="primary-btn" style="flex:1;margin:0;" onclick="jewelerSellGold()">Bozdur → $</button>
+                        <button class="primary-btn" style="flex:1;margin:0;" onclick="jewelerBuyGold()">$ → Al</button>
+                    </div>
+                    <div style="font-size:11px;color:var(--text-muted);margin-top:6px;">Satış $${price} · Alış ~$${Math.ceil(price*1.05)} (kâr %5)</div>
                 </div>
                 <div class="info-card" style="margin-bottom:12px;">
-                    <div style="font-weight:700;margin-bottom:8px;">Altın satın al</div>
-                    <div class="form-group"><label>Miktar (gold)</label>
-                    <input type="number" id="jeweler-buy-amt" value="1" min="1" step="1" style="width:100%;padding:10px;border-radius:10px;background:rgba(0,0,0,0.35);border:1px solid var(--border);color:var(--text);"></div>
-                    <button class="primary-btn" style="width:100%;" onclick="jewelerBuyGold()">💵 Altın Al</button>
-                    <div style="font-size:11px;color:var(--text-muted);margin-top:6px;">Alım fiyatı satışın %5 üstü (kuyumcu kârı).</div>
+                    <div style="font-weight:700;margin-bottom:8px;">💚 Zümrüt ↔ $</div>
+                    <div class="form-group"><label>Miktar (zümrüt)</label>
+                    <input type="number" id="jeweler-em-amt" value="1" min="1" step="1" style="width:100%;padding:10px;border-radius:10px;background:rgba(0,0,0,0.35);border:1px solid var(--border);color:var(--text);"></div>
+                    <div style="display:flex;gap:8px;">
+                        <button class="primary-btn" style="flex:1;margin:0;" onclick="jewelerSellGem('emerald')">Bozdur → $</button>
+                        <button class="primary-btn" style="flex:1;margin:0;" onclick="jewelerBuyGem('emerald')">$ → Al</button>
+                    </div>
+                    <div style="font-size:11px;color:var(--text-muted);margin-top:6px;">1 Zümrüt = 5× altın fiyatı ($${emPrice})</div>
+                </div>
+                <div class="info-card" style="margin-bottom:12px;">
+                    <div style="font-weight:700;margin-bottom:8px;">💎 Elmas ↔ $</div>
+                    <div class="form-group"><label>Miktar (elmas)</label>
+                    <input type="number" id="jeweler-dia-amt" value="1" min="1" step="1" style="width:100%;padding:10px;border-radius:10px;background:rgba(0,0,0,0.35);border:1px solid var(--border);color:var(--text);"></div>
+                    <div style="display:flex;gap:8px;">
+                        <button class="primary-btn" style="flex:1;margin:0;" onclick="jewelerSellGem('diamond')">Bozdur → $</button>
+                        <button class="primary-btn" style="flex:1;margin:0;" onclick="jewelerBuyGem('diamond')">$ → Al</button>
+                    </div>
+                    <div style="font-size:11px;color:var(--text-muted);margin-top:6px;">1 Elmas = 25× altın fiyatı ($${diaPrice})</div>
+                </div>
+                <div class="info-card" style="margin-bottom:12px;">
+                    <div style="font-weight:700;margin-bottom:8px;">Yükselt / Düşür</div>
+                    <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">5 Altın → 1 Zümrüt · 5 Zümrüt → 1 Elmas</div>
+                    <div style="display:flex;flex-direction:column;gap:6px;">
+                        <button class="mod-btn" style="margin:0;" onclick="jewelerUpgrade('gold_to_em')">5 🥇 → 1 💚</button>
+                        <button class="mod-btn" style="margin:0;" onclick="jewelerUpgrade('em_to_dia')">5 💚 → 1 💎</button>
+                        <button class="back-btn" style="margin:0;" onclick="jewelerUpgrade('dia_to_em')">1 💎 → 5 💚</button>
+                        <button class="back-btn" style="margin:0;" onclick="jewelerUpgrade('em_to_gold')">1 💚 → 5 🥇</button>
+                    </div>
                 </div>
                 ${isModerator(me) ? '<button class="mod-btn" style="width:100%;margin-bottom:8px;" onclick="openGoldMarketMod()">⚙️ Piyasa ayarı (Mod)</button>' : ''}
                 <button class="back-btn" onclick="window._jewelerOpen=false;closeModal()">Kapat</button>
             `);
+        }
+
+        function jewelerGemUnitPrice(kind) {
+            const price = getGoldPrice();
+            if (kind === 'diamond') return Math.max(1, Math.floor(price * 25));
+            return Math.max(1, Math.floor(price * 5)); // emerald
+        }
+        function jewelerSellGem(kind) {
+            const me = getCurrentUser();
+            if (!me) return;
+            const id = kind === 'diamond' ? 'jeweler-dia-amt' : 'jeweler-em-amt';
+            let amt = parseInt((document.getElementById(id) || {}).value, 10);
+            if (!amt || amt < 1) { toast('Geçerli miktar gir.', 'error'); return; }
+            const users = loadUsers();
+            if (!users[me]) return;
+            ensureUserFields(users[me]);
+            const key = kind === 'diamond' ? 'diamond' : 'emerald';
+            const have = Math.floor(Number(users[me][key]) || 0);
+            if (have < amt) { toast('Yetersiz ' + (kind === 'diamond' ? 'elmas' : 'zümrüt') + '.', 'error'); return; }
+            const unit = jewelerGemUnitPrice(kind);
+            const gain = amt * unit;
+            users[me][key] = have - amt;
+            users[me].balance = (Number(users[me].balance) || 0) + gain;
+            saveUser(me, users[me]);
+            toast('+$' + gain.toLocaleString('tr-TR'));
+            openJeweler();
+        }
+        function jewelerBuyGem(kind) {
+            const me = getCurrentUser();
+            if (!me) return;
+            const id = kind === 'diamond' ? 'jeweler-dia-amt' : 'jeweler-em-amt';
+            let amt = parseInt((document.getElementById(id) || {}).value, 10);
+            if (!amt || amt < 1) { toast('Geçerli miktar gir.', 'error'); return; }
+            const users = loadUsers();
+            if (!users[me]) return;
+            ensureUserFields(users[me]);
+            const unit = Math.ceil(jewelerGemUnitPrice(kind) * 1.05);
+            const cost = amt * unit;
+            const bal = Number(users[me].balance) || 0;
+            if (bal < cost) { toast('Yetersiz bakiye. $' + cost.toLocaleString('tr-TR'), 'error'); return; }
+            const key = kind === 'diamond' ? 'diamond' : 'emerald';
+            users[me].balance = bal - cost;
+            users[me][key] = (Math.floor(Number(users[me][key]) || 0)) + amt;
+            saveUser(me, users[me]);
+            toast((kind === 'diamond' ? 'Elmas' : 'Zümrüt') + ' alındı (−$' + cost.toLocaleString('tr-TR') + ')');
+            openJeweler();
+        }
+        function jewelerUpgrade(mode) {
+            const me = getCurrentUser();
+            if (!me) return;
+            const users = loadUsers();
+            if (!users[me]) return;
+            ensureUserFields(users[me]);
+            const u = users[me];
+            const g = Math.floor(Number(u.gold) || 0);
+            const e = Math.floor(Number(u.emerald) || 0);
+            const d = Math.floor(Number(u.diamond) || 0);
+            if (mode === 'gold_to_em') {
+                if (g < 5) { toast('En az 5 altın gerekir.', 'error'); return; }
+                u.gold = g - 5; u.emerald = e + 1;
+                toast('5 🥇 → 1 💚');
+            } else if (mode === 'em_to_dia') {
+                if (e < 5) { toast('En az 5 zümrüt gerekir.', 'error'); return; }
+                u.emerald = e - 5; u.diamond = d + 1;
+                toast('5 💚 → 1 💎');
+            } else if (mode === 'dia_to_em') {
+                if (d < 1) { toast('Elmas yok.', 'error'); return; }
+                u.diamond = d - 1; u.emerald = e + 5;
+                toast('1 💎 → 5 💚');
+            } else if (mode === 'em_to_gold') {
+                if (e < 1) { toast('Zümrüt yok.', 'error'); return; }
+                u.emerald = e - 1; u.gold = g + 5;
+                toast('1 💚 → 5 🥇');
+            } else return;
+            saveUser(me, u);
+            openJeweler();
         }
 
         function jewelerSellGold() {
@@ -11654,6 +11824,8 @@
                                 <button class="mod-btn" style="margin-top:0;" onclick="modResolveReport('${r.id}','warn')">⚠️ Uyarı + kapat</button>
                                 <button class="mod-btn" style="margin-top:0;" onclick="modResolveReport('${r.id}','fine')">💸 Ceza + kapat</button>
                                 <button class="mod-btn" style="margin-top:0;" onclick="modResolveReport('${r.id}','rep')">📉 İtibar −5 + kapat</button>
+                                <button class="mod-btn" style="margin-top:0;" onclick="modResolveReport('${r.id}','pass_down')">🛂 Pasaport düşür + kapat</button>
+                                <button class="danger-btn" style="margin-top:0;" onclick="modResolveReport('${r.id}','ban')">🚫 Ban öner + kapat</button>
                                 <button class="mod-btn" style="margin-top:0;" onclick="modResolveReport('${r.id}','dismiss')">✅ Sadece kapat</button>
                             </div>
                         </div>
@@ -11683,6 +11855,17 @@
             } else if (action === 'rep' && r.seller) {
                 adjustReputation(r.seller, -5, 'şikayet sonucu');
                 toast('Satıcı itibar −5');
+            } else if (action === 'pass_down' && r.seller) {
+                try { demotePassportFromReport(r.seller); } catch (e) {}
+            } else if (action === 'ban' && r.seller) {
+                try {
+                    const users = loadUsers();
+                    const u = ensureUserFields(users[r.seller] || {});
+                    if (!Array.isArray(u.sicil)) u.sicil = [];
+                    u.sicil.push({ text: 'Şikayet sonrası ban önerildi / uygulandı: ' + (r.reason || ''), by: getCurrentUser(), at: new Date().toISOString() });
+                    saveUser(r.seller, u);
+                } catch (e) {}
+                try { modBanUser(r.seller); } catch (e) {}
             } else {
                 toast('Şikayet kapatıldı.');
             }
@@ -11933,6 +12116,12 @@
                 </button>
                 <button class="mod-btn" onclick="modViewInventory('${username}')">
                     <span style="font-size:20px;">📋</span> Envanteri Gör / Foto Düzenle
+                </button>
+                <button class="mod-btn" onclick="openSicilPanel('${username}')">
+                    <span style="font-size:20px;">📁</span> Sicil Dosyası
+                </button>
+                <button class="mod-btn" onclick="openIdentityCard('${username}')">
+                    <span style="font-size:20px;">🪪</span> Kimlik Kartı
                 </button>
                 <button class="mod-btn" onclick="modResetPassword('${username}')">
                     <span style="font-size:20px;">🔑</span> Şifre Sıfırla
@@ -15263,8 +15452,262 @@ Lütfen daha sonra tekrar gelin.</textarea>
 
 
 
+
+        // ========== KİMLİK KARTI ==========
+        function openIdentityCard(forUser) {
+            const me = getCurrentUser();
+            const target = forUser || me;
+            if (!target) { toast('Giriş yapmalısın.', 'error'); return; }
+            const users = loadUsers();
+            const u = ensureUserFields(users[target] || {});
+            const isMe = target === me;
+            const isMod = me && isModerator(me);
+            const level = u.passportLevel || '';
+            const status = u.passportStatus || 'none';
+            const checkMap = u.checkInMap || '';
+            const checkAt = u.checkInAt ? new Date(u.checkInAt).toLocaleString('tr-TR') : '';
+            const photo = u.idPhoto
+                ? `<img src="${u.idPhoto}" alt="Kimlik" style="width:88px;height:88px;object-fit:cover;border-radius:14px;border:2px solid var(--border);">`
+                : `<div style="width:88px;height:88px;border-radius:14px;border:2px dashed var(--border);display:flex;align-items:center;justify-content:center;font-size:36px;background:rgba(0,0,0,0.25);">👤</div>`;
+
+            let html = `
+                <div class="info-card" style="background:linear-gradient(135deg,rgba(255,0,204,0.12),rgba(100,0,180,0.18));border-color:var(--border);margin-bottom:12px;">
+                    <div style="display:flex;gap:14px;align-items:flex-start;">
+                        ${photo}
+                        <div style="flex:1;min-width:0;">
+                            <div style="font-size:11px;color:var(--text-muted);letter-spacing:1px;text-transform:uppercase;">Sword City Kimlik</div>
+                            <div style="font-size:20px;font-weight:800;margin-top:4px;">${formatDisplayName(target)}</div>
+                            <div style="margin-top:8px;font-size:13px;">
+                                <span style="color:${passportColor(level)};font-weight:800;font-size:18px;">${passportLevelLabel(level)}</span>
+                                <span style="margin-left:8px;">${passportStatusBadge(status)}</span>
+                            </div>
+                            <div style="font-size:12px;color:var(--text-muted);margin-top:6px;">Lv. ${u.level || 0} · ${escapeHtml(u.job || 'Meslek yok')}</div>
+                        </div>
+                    </div>
+                    <div style="margin-top:12px;display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px;">
+                        <div><span style="color:var(--text-muted);">İtibar</span><br><b>${u.reputation != null ? u.reputation : 50}</b></div>
+                        <div><span style="color:var(--text-muted);">Uyarı</span><br><b style="color:${(u.warnings||0)>0?'var(--danger)':'var(--text)'};">${u.warnings || 0}</b></div>
+                        <div><span style="color:var(--text-muted);">Klan</span><br><b>${escapeHtml((function(){ try { const cs=loadClans(); const c=cs.find(function(x){return clanMembers(x).indexOf(target)!==-1;}); return c?c.name:'—'; } catch(e){return '—'; })())}</b></div>
+                        <div><span style="color:var(--text-muted);">Check-in</span><br><b>${checkMap ? escapeHtml(checkMap) : '—'}</b>${checkAt ? '<div style="font-size:10px;color:var(--text-muted);">'+checkAt+'</div>' : ''}</div>
+                    </div>
+                    ${u.bio ? `<div style="margin-top:10px;font-size:13px;line-height:1.4;color:var(--text-muted);">${escapeHtml(u.bio)}</div>` : ''}
+                    ${u.customTitle ? `<div style="margin-top:8px;"><span class="rarity-badge" style="background:rgba(255,0,204,0.2);color:${escapeHtml(u.customTitleColor||'var(--accent-soft)')};">${escapeHtml(u.customTitle)}</span></div>` : ''}
+                </div>`;
+
+            if (isMe) {
+                html += `
+                <div class="info-card" style="margin-bottom:12px;">
+                    <div style="font-weight:700;margin-bottom:8px;">Kimlik fotoğrafı</div>
+                    <input type="file" id="id-photo-input" accept="image/png,image/jpeg,image/webp" style="width:100%;margin-bottom:8px;" onchange="saveIdPhoto(event)">
+                    <div style="font-size:11px;color:var(--text-muted);">Max 1 MB · sadece sen yüklersin</div>
+                    ${u.idPhoto ? '<button class="danger-btn" style="width:100%;margin-top:8px;" onclick="clearIdPhoto()">Fotoğrafı kaldır</button>' : ''}
+                </div>`;
+            }
+
+            if (isMod && !isMe) {
+                html += `<button class="mod-btn" style="width:100%;margin-bottom:8px;" onclick="openSicilPanel('${String(target).replace(/'/g, '')}')">📁 Sicil dosyası</button>`;
+            }
+
+            openModal('🪪 Kimlik', html + `
+                <button class="back-btn" onclick="closeModal()">← Kapat</button>
+            `);
+        }
+
+        function saveIdPhoto(event) {
+            const me = getCurrentUser();
+            if (!me) return;
+            const file = event.target.files && event.target.files[0];
+            if (!file) return;
+            if (!file.type.startsWith('image/')) { toast('Görsel seç.', 'error'); return; }
+            if (file.size > 1024 * 1024) { toast('Max 1 MB.', 'error'); return; }
+            const reader = new FileReader();
+            reader.onload = function() {
+                const users = loadUsers();
+                const u = ensureUserFields(users[me] || {});
+                u.idPhoto = String(reader.result || '');
+                saveUser(me, u);
+                toast('Kimlik fotoğrafı kaydedildi');
+                openIdentityCard();
+            };
+            reader.readAsDataURL(file);
+        }
+        function clearIdPhoto() {
+            const me = getCurrentUser();
+            if (!me) return;
+            const users = loadUsers();
+            const u = ensureUserFields(users[me] || {});
+            u.idPhoto = '';
+            saveUser(me, u);
+            toast('Fotoğraf kaldırıldı');
+            openIdentityCard();
+        }
+
+        // ========== SICİL (mod dosyası) ==========
+        function openSicilPanel(username) {
+            if (!isModerator()) { toast('Sadece moderatör.', 'error'); return; }
+            const users = loadUsers();
+            const u = ensureUserFields(users[username] || {});
+            const notes = Array.isArray(u.sicil) ? u.sicil.slice() : [];
+            let rows = '';
+            if (!notes.length) {
+                rows = '<p style="color:var(--text-muted);text-align:center;padding:12px 0;">Sicil boş.</p>';
+            } else {
+                notes.slice().reverse().forEach(function(n, idx) {
+                    const realIdx = notes.length - 1 - idx;
+                    rows += `<div class="info-card" style="margin-bottom:8px;">
+                        <div style="font-size:13px;line-height:1.4;">${escapeHtml(n.text || '')}</div>
+                        <div style="font-size:11px;color:var(--text-muted);margin-top:6px;">${escapeHtml(n.by || '')} · ${n.at ? new Date(n.at).toLocaleString('tr-TR') : ''}</div>
+                        <button class="danger-btn" style="width:auto;padding:6px 10px;margin-top:8px;" onclick="deleteSicilNote('${String(username).replace(/'/g, '')}', ${realIdx})">🗑 Sil</button>
+                    </div>`;
+                });
+            }
+            openModal('📁 Sicil — ' + escapeHtml(username), `
+                <div class="info-card" style="margin-bottom:12px;">
+                    <div class="info-row"><span class="label">Pasaport</span><span class="value" style="color:${passportColor(u.passportLevel)};">${passportLevelLabel(u.passportLevel)}</span></div>
+                    <div class="info-row"><span class="label">Uyarı</span><span class="value">${u.warnings || 0}</span></div>
+                    <div class="info-row"><span class="label">Ban</span><span class="value">${isUserBanned(u) ? '🚫 ' + formatBanUntil(u.banUntil) : 'Yok'}</span></div>
+                </div>
+                <div class="form-group"><label>Yeni not</label>
+                    <textarea id="sicil-text" rows="3" placeholder="RP olayı, uyarı gerekçesi..." style="width:100%;padding:10px;background:rgba(0,0,0,0.35);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:inherit;"></textarea>
+                </div>
+                <button class="primary-btn" style="width:100%;margin-bottom:12px;" onclick="addSicilNote('${String(username).replace(/'/g, '')}')">Not ekle</button>
+                <div style="max-height:40vh;overflow-y:auto;">${rows}</div>
+                <button class="back-btn" onclick="modSelectUser('${String(username).replace(/'/g, '')}')">← Geri</button>
+            `);
+        }
+        function addSicilNote(username) {
+            if (!isModerator()) return;
+            const el = document.getElementById('sicil-text');
+            const text = el ? String(el.value || '').trim().slice(0, 500) : '';
+            if (!text) { toast('Not boş olamaz.', 'error'); return; }
+            const users = loadUsers();
+            const u = ensureUserFields(users[username] || {});
+            if (!Array.isArray(u.sicil)) u.sicil = [];
+            u.sicil.push({ text: text, by: getCurrentUser(), at: new Date().toISOString() });
+            if (u.sicil.length > 50) u.sicil = u.sicil.slice(-50);
+            saveUser(username, u);
+            try { pushModLog('sicil', username + ': ' + text.slice(0, 60)); } catch (e) {}
+            toast('Sicile eklendi');
+            openSicilPanel(username);
+        }
+        function deleteSicilNote(username, index) {
+            if (!isModerator()) return;
+            const users = loadUsers();
+            const u = ensureUserFields(users[username] || {});
+            if (!Array.isArray(u.sicil) || index < 0 || index >= u.sicil.length) return;
+            if (!confirm('Bu not silinsin mi?')) return;
+            u.sicil.splice(index, 1);
+            saveUser(username, u);
+            toast('Not silindi');
+            openSicilPanel(username);
+        }
+
+        // ========== CHECK-IN ==========
+        async function openCheckIn() {
+            const me = getCurrentUser();
+            if (!me) { toast('Giriş yapmalısın.', 'error'); return; }
+            const maps = await loadMapsList();
+            const users = loadUsers();
+            const meU = ensureUserFields(users[me] || {});
+            const myMap = meU.checkInMap || '';
+            const myAt = meU.checkInAt ? new Date(meU.checkInAt).toLocaleString('tr-TR') : '';
+
+            // Who is where
+            const byMap = {};
+            Object.keys(users).forEach(function(n) {
+                const u = ensureUserFields(users[n] || {});
+                if (u.checkInMap) {
+                    if (!byMap[u.checkInMap]) byMap[u.checkInMap] = [];
+                    byMap[u.checkInMap].push(n);
+                }
+            });
+
+            let mapOpts = '<option value="">— Bölge seç —</option>';
+            maps.forEach(function(m) {
+                if (!m || !m.name) return;
+                const sel = myMap === m.name ? ' selected' : '';
+                mapOpts += `<option value="${escapeHtml(m.name)}"${sel}>${escapeHtml((m.emoji||'🗺️') + ' ' + m.name)}</option>`;
+            });
+
+            let live = '';
+            Object.keys(byMap).sort().forEach(function(mapName) {
+                const people = byMap[mapName];
+                live += `<div class="info-card" style="margin-bottom:8px;">
+                    <div style="font-weight:700;margin-bottom:6px;">📍 ${escapeHtml(mapName)} <span style="color:var(--text-muted);font-weight:500;font-size:12px;">(${people.length})</span></div>
+                    <div style="font-size:13px;line-height:1.5;">${people.map(function(p){ return formatDisplayName(p); }).join(' · ')}</div>
+                </div>`;
+            });
+            if (!live) live = '<p style="color:var(--text-muted);text-align:center;">Kimse check-in yapmamış.</p>';
+
+            openModal('📍 Check-in', `
+                <div class="info-card" style="margin-bottom:12px;">
+                    <div style="font-size:12px;color:var(--text-muted);">Şu an</div>
+                    <div style="font-size:18px;font-weight:700;margin-top:4px;">${myMap ? '📍 ' + escapeHtml(myMap) : 'Bölge seçilmedi'}</div>
+                    ${myAt ? '<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">' + myAt + '</div>' : ''}
+                </div>
+                <div class="form-group"><label>Bölge</label>
+                    <select id="checkin-map" style="width:100%;padding:10px;background:rgba(0,0,0,0.35);border:1px solid var(--border);border-radius:10px;color:var(--text);">${mapOpts}</select>
+                </div>
+                <button class="primary-btn" style="width:100%;margin-bottom:8px;" onclick="doCheckIn()">📍 Check-in yap</button>
+                <button class="back-btn" style="width:100%;margin-bottom:12px;" onclick="clearCheckIn()">Check-out</button>
+                <div style="font-weight:700;margin-bottom:8px;">Kim nerede?</div>
+                <div style="max-height:40vh;overflow-y:auto;">${live}</div>
+                <button class="back-btn" onclick="closeModal()">← Kapat</button>
+            `);
+        }
+        function doCheckIn() {
+            const me = getCurrentUser();
+            if (!me) return;
+            const el = document.getElementById('checkin-map');
+            const mapName = el ? String(el.value || '').trim() : '';
+            if (!mapName) { toast('Bölge seç.', 'error'); return; }
+            const users = loadUsers();
+            const u = ensureUserFields(users[me] || {});
+            u.checkInMap = mapName.slice(0, 48);
+            u.checkInAt = new Date().toISOString();
+            saveUser(me, u);
+            toast('📍 Check-in: ' + mapName);
+            openCheckIn();
+        }
+        function clearCheckIn() {
+            const me = getCurrentUser();
+            if (!me) return;
+            const users = loadUsers();
+            const u = ensureUserFields(users[me] || {});
+            u.checkInMap = '';
+            u.checkInAt = null;
+            saveUser(me, u);
+            toast('Check-out yapıldı');
+            openCheckIn();
+        }
+
+
         // ========== PASAPORT SİSTEMİ ==========
         const PASSPORT_LEVELS = ['A1', 'A2', 'A3', 'B1', 'B2', 'B3', 'C1', 'C2', 'C3', 'D5'];
+
+        function demotePassportFromReport(username) {
+            if (!username) return;
+            const users = loadUsers();
+            const u = ensureUserFields(users[username] || {});
+            const cur = String(u.passportLevel || '').toUpperCase();
+            const idx = PASSPORT_LEVELS.indexOf(cur);
+            if (idx <= 0) {
+                u.passportLevel = '';
+                u.passportStatus = 'none';
+                toast('Pasaport kaldırıldı (zaten en düşük / yok)');
+            } else {
+                u.passportLevel = PASSPORT_LEVELS[idx - 1];
+                u.passportStatus = 'active';
+                toast('Pasaport düşürüldü: ' + u.passportLevel);
+            }
+            u.passportUpdatedAt = new Date().toISOString();
+            if (!Array.isArray(u.sicil)) u.sicil = [];
+            u.sicil.push({ text: 'Pasaport düşürüldü (şikayet): ' + (cur || 'yok') + ' → ' + (u.passportLevel || 'yok'), by: getCurrentUser(), at: new Date().toISOString() });
+            saveUser(username, u);
+            try { pushNotif(username, '🛂 Pasaportun düşürüldü: ' + (u.passportLevel || 'yok'), 'warning'); } catch (e) {}
+            try { pushModLog('pass_down', username + ' ' + cur + ' → ' + (u.passportLevel || 'yok')); } catch (e) {}
+        }
+
 
         function passportRank(level) {
             const i = PASSPORT_LEVELS.indexOf(String(level || '').toUpperCase());
