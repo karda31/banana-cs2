@@ -5091,6 +5091,7 @@
             if (typeof user.idMarital === 'undefined') user.idMarital = '';
             if (typeof user.idNote === 'undefined') user.idNote = '';
             if (typeof user.idUpdatedAt === 'undefined') user.idUpdatedAt = null;
+            if (!Array.isArray(user.idExtra)) user.idExtra = [];
             return user;
         }
 
@@ -15482,11 +15483,24 @@ Lütfen daha sonra tekrar gelin.</textarea>
                 body += '<div class="info-row"><span class="label">Ulke</span><span class="value">' + escapeHtml(u.idCountry || '—') + '</span></div>';
                 body += '<div class="info-row"><span class="label">Vatandaslik</span><span class="value">' + escapeHtml(u.idCitizenship || '—') + '</span></div>';
                 body += '<div class="info-row"><span class="label">Medeni durum</span><span class="value">' + escapeHtml(u.idMarital || '—') + '</span></div>';
+                if (Array.isArray(u.idExtra)) {
+                    u.idExtra.forEach(function(ex) {
+                        if (!ex || !ex.title) return;
+                        body += '<div class="info-row"><span class="label">' + escapeHtml(ex.title) + '</span><span class="value">' + escapeHtml(ex.value || '—') + '</span></div>';
+                    });
+                }
                 if (u.idSignature) {
                     body += '<div style="margin-top:12px;"><div style="font-size:12px;color:var(--text-muted);margin-bottom:6px;">Imza</div>';
                     body += '<img src="' + u.idSignature + '" alt="Imza" style="max-width:100%;height:64px;object-fit:contain;background:#fff;border-radius:8px;padding:4px;"></div>';
                 }
                 body += '</div>';
+                if (isMod) {
+                    const un = String(target).replace(/'/g, '');
+                    body += '<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px;">';
+                    body += '<button class="mod-btn" style="width:100%;margin:0;" onclick="openIdExtraEditor(\'' + un + '\')">Baslik ekle / duzenle</button>';
+                    body += '<button class="danger-btn" style="width:100%;margin:0;" onclick="modRevokeIdentity(\'' + un + '\')">Kimligi kaldir</button>';
+                    body += '</div>';
+                }
             } else if (st === 'pending') {
                 body += '<div class="info-card" style="margin-bottom:12px;"><p style="color:var(--warning);">Kimlik basvurun moderatör onayinda.</p>';
                 body += '<div class="info-row"><span class="label">Ad Soyad</span><span class="value">' + escapeHtml((u.idFirstName||'') + ' ' + (u.idLastName||'')) + '</span></div>';
@@ -15720,6 +15734,98 @@ Lütfen daha sonra tekrar gelin.</textarea>
             saveIdApps(apps);
             toast('Basvuru iptal edildi');
             openIdentityCard();
+        }
+
+
+        function openIdExtraEditor(username) {
+            if (!isModerator()) { toast('Sadece moderator.', 'error'); return; }
+            const users = loadUsers();
+            const u = ensureUserFields(users[username] || {});
+            const extras = Array.isArray(u.idExtra) ? u.idExtra : [];
+            let rows = '';
+            extras.forEach(function(ex, i) {
+                rows += '<div class="id-extra-row" style="display:flex;gap:6px;margin-bottom:6px;align-items:center;">';
+                rows += '<input type="text" class="id-ex-title" placeholder="Baslik" value="' + escapeHtml(ex.title || '') + '" style="width:38%;padding:8px;background:rgba(0,0,0,0.35);border:1px solid var(--border);border-radius:8px;color:var(--text);">';
+                rows += '<input type="text" class="id-ex-value" placeholder="Deger" value="' + escapeHtml(ex.value || '') + '" style="flex:1;padding:8px;background:rgba(0,0,0,0.35);border:1px solid var(--border);border-radius:8px;color:var(--text);">';
+                rows += '<button type="button" class="danger-btn" style="width:auto;padding:8px 10px;margin:0;" onclick="this.closest(\'.id-extra-row\').remove()">Sil</button>';
+                rows += '</div>';
+            });
+            let body = '';
+            body += '<p style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Kimlikte gorunecek ekstra basliklar. Ornek: Kan grubu, Meslek kodu...</p>';
+            body += '<div id="id-extra-list">' + rows + '</div>';
+            body += '<div style="display:flex;gap:8px;margin:8px 0 12px;">';
+            body += '<button type="button" class="back-btn" style="flex:1;margin:0;" onclick="addIdExtraRow()">Baslik ekle</button>';
+            body += '<button type="button" class="danger-btn" style="flex:1;margin:0;" onclick="clearIdExtraRows()">Tumunu sil</button>';
+            body += '</div>';
+            body += '<button class="primary-btn" style="width:100%;" onclick="saveIdExtras(\'' + String(username).replace(/'/g, '') + '\')">Kaydet</button>';
+            body += '<button class="back-btn" onclick="openIdentityCard(\'' + String(username).replace(/'/g, '') + '\')">Geri</button>';
+            openModal('Kimlik basliklari — ' + escapeHtml(username), body);
+        }
+        function addIdExtraRow() {
+            const list = document.getElementById('id-extra-list');
+            if (!list) return;
+            const div = document.createElement('div');
+            div.className = 'id-extra-row';
+            div.style.cssText = 'display:flex;gap:6px;margin-bottom:6px;align-items:center;';
+            div.innerHTML = '<input type="text" class="id-ex-title" placeholder="Baslik" value="" style="width:38%;padding:8px;background:rgba(0,0,0,0.35);border:1px solid var(--border);border-radius:8px;color:var(--text);">' +
+                '<input type="text" class="id-ex-value" placeholder="Deger" value="" style="flex:1;padding:8px;background:rgba(0,0,0,0.35);border:1px solid var(--border);border-radius:8px;color:var(--text);">' +
+                '<button type="button" class="danger-btn" style="width:auto;padding:8px 10px;margin:0;" onclick="this.closest(\'.id-extra-row\').remove()">Sil</button>';
+            list.appendChild(div);
+        }
+        function clearIdExtraRows() {
+            const list = document.getElementById('id-extra-list');
+            if (!list) return;
+            if (list.children.length && !confirm('Tum ekstra basliklar silinsin mi?')) return;
+            list.innerHTML = '';
+        }
+        function saveIdExtras(username) {
+            if (!isModerator()) return;
+            const extras = [];
+            document.querySelectorAll('#id-extra-list .id-extra-row').forEach(function(row) {
+                const tEl = row.querySelector('.id-ex-title');
+                const vEl = row.querySelector('.id-ex-value');
+                const title = tEl ? String(tEl.value || '').trim().slice(0, 40) : '';
+                const value = vEl ? String(vEl.value || '').trim().slice(0, 200) : '';
+                if (title) extras.push({ title: title, value: value });
+            });
+            if (extras.length > 20) extras.length = 20;
+            const users = loadUsers();
+            const u = ensureUserFields(users[username] || {});
+            u.idExtra = extras;
+            u.idUpdatedAt = new Date().toISOString();
+            saveUser(username, u);
+            try { pushModLog('id_extra', username + ' baslik guncellendi (' + extras.length + ')'); } catch (e) {}
+            toast('Basliklar kaydedildi');
+            openIdentityCard(username);
+        }
+        function modRevokeIdentity(username) {
+            if (!isModerator()) return;
+            if (!confirm(username + ' kimligi kaldirilsin mi? Kullanici tekrar kimliksiz olur.')) return;
+            const users = loadUsers();
+            const u = ensureUserFields(users[username] || {});
+            u.idStatus = 'none';
+            u.idFirstName = '';
+            u.idLastName = '';
+            u.idTc = '';
+            u.idGender = '';
+            u.idSerial = '';
+            u.idSignature = '';
+            u.idCountry = '';
+            u.idCitizenship = '';
+            u.idMarital = '';
+            u.idPhoto = '';
+            u.idExtra = [];
+            u.idNote = '';
+            u.idUpdatedAt = new Date().toISOString();
+            saveUser(username, u);
+            loadIdApps().then(function(apps) {
+                apps = apps.filter(function(a) { return !(a && a.username === username && a.status === 'pending'); });
+                saveIdApps(apps);
+            });
+            try { pushNotif(username, 'Kimligin moderator tarafindan kaldirildi.', 'warning'); } catch (e) {}
+            try { pushModLog('id_revoke', username + ' kimlik kaldirildi'); } catch (e) {}
+            toast('Kimlik kaldirildi');
+            openIdentityCard(username);
         }
 
         async function openIdModPanel() {
