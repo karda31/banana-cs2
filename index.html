@@ -6350,7 +6350,7 @@
             try { normalizeAllFriendLists(); normalizeAllChatsAliases(); } catch (e) {}
             document.getElementById('auth-screen').classList.add('hidden');
             document.getElementById('main-app').classList.remove('hidden');
-            try { var qb=document.getElementById('quick-bar'); if(qb) qb.classList.add('show'); } catch(e) {};
+            try { var qb=document.getElementById('quick-bar'); if(qb) qb.classList.add('show'); } catch(e) {}
             const badge = document.getElementById('user-badge');
             badge.innerHTML = '👤 ' + formatDisplayName(username);
             badge.classList.add('show');
@@ -15453,6 +15453,7 @@ Lütfen daha sonra tekrar gelin.</textarea>
 
 
 
+
         // ========== KİMLİK KARTI ==========
         function openIdentityCard(forUser) {
             const me = getCurrentUser();
@@ -15467,50 +15468,54 @@ Lütfen daha sonra tekrar gelin.</textarea>
             const checkMap = u.checkInMap || '';
             const checkAt = u.checkInAt ? new Date(u.checkInAt).toLocaleString('tr-TR') : '';
             const photo = u.idPhoto
-                ? `<img src="${u.idPhoto}" alt="Kimlik" style="width:88px;height:88px;object-fit:cover;border-radius:14px;border:2px solid var(--border);">`
-                : `<div style="width:88px;height:88px;border-radius:14px;border:2px dashed var(--border);display:flex;align-items:center;justify-content:center;font-size:36px;background:rgba(0,0,0,0.25);">👤</div>`;
+                ? ('<img src="' + u.idPhoto + '" alt="Kimlik" style="width:88px;height:88px;object-fit:cover;border-radius:14px;border:2px solid var(--border);">')
+                : '<div style="width:88px;height:88px;border-radius:14px;border:2px dashed var(--border);display:flex;align-items:center;justify-content:center;font-size:36px;background:rgba(0,0,0,0.25);">👤</div>';
 
-            let html = `
-                <div class="info-card" style="background:linear-gradient(135deg,rgba(255,0,204,0.12),rgba(100,0,180,0.18));border-color:var(--border);margin-bottom:12px;">
-                    <div style="display:flex;gap:14px;align-items:flex-start;">
-                        ${photo}
-                        <div style="flex:1;min-width:0;">
-                            <div style="font-size:11px;color:var(--text-muted);letter-spacing:1px;text-transform:uppercase;">Sword City Kimlik</div>
-                            <div style="font-size:20px;font-weight:800;margin-top:4px;">${formatDisplayName(target)}</div>
-                            <div style="margin-top:8px;font-size:13px;">
-                                <span style="color:${passportColor(level)};font-weight:800;font-size:18px;">${passportLevelLabel(level)}</span>
-                                <span style="margin-left:8px;">${passportStatusBadge(status)}</span>
-                            </div>
-                            <div style="font-size:12px;color:var(--text-muted);margin-top:6px;">Lv. ${u.level || 0} · ${escapeHtml(u.job || 'Meslek yok')}</div>
-                        </div>
-                    </div>
-                    <div style="margin-top:12px;display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px;">
-                        <div><span style="color:var(--text-muted);">İtibar</span><br><b>${u.reputation != null ? u.reputation : 50}</b></div>
-                        <div><span style="color:var(--text-muted);">Uyarı</span><br><b style="color:${(u.warnings||0)>0?'var(--danger)':'var(--text)'};">${u.warnings || 0}</b></div>
-                        <div><span style="color:var(--text-muted);">Klan</span><br><b>${escapeHtml((function(){ try { const cs=loadClans(); const c=cs.find(function(x){return clanMembers(x).indexOf(target)!==-1;}); return c?c.name:'—'; } catch(e){return '—'; })())}</b></div>
-                        <div><span style="color:var(--text-muted);">Check-in</span><br><b>${checkMap ? escapeHtml(checkMap) : '—'}</b>${checkAt ? '<div style="font-size:10px;color:var(--text-muted);">'+checkAt+'</div>' : ''}</div>
-                    </div>
-                    ${u.bio ? `<div style="margin-top:10px;font-size:13px;line-height:1.4;color:var(--text-muted);">${escapeHtml(u.bio)}</div>` : ''}
-                    ${u.customTitle ? `<div style="margin-top:8px;"><span class="rarity-badge" style="background:rgba(255,0,204,0.2);color:${escapeHtml(u.customTitleColor||'var(--accent-soft)')};">${escapeHtml(u.customTitle)}</span></div>` : ''}
-                </div>`;
+            let clanName = '—';
+            try {
+                const cs = loadClans();
+                const c = cs.find(function(x) { return clanMembers(x).indexOf(target) !== -1; });
+                if (c) clanName = c.name;
+            } catch (e) {}
+
+            let html = '';
+            html += '<div class="info-card" style="background:linear-gradient(135deg,rgba(255,0,204,0.12),rgba(100,0,180,0.18));border-color:var(--border);margin-bottom:12px;">';
+            html += '<div style="display:flex;gap:14px;align-items:flex-start;">' + photo;
+            html += '<div style="flex:1;min-width:0;">';
+            html += '<div style="font-size:11px;color:var(--text-muted);letter-spacing:1px;text-transform:uppercase;">Sword City Kimlik</div>';
+            html += '<div style="font-size:20px;font-weight:800;margin-top:4px;">' + formatDisplayName(target) + '</div>';
+            html += '<div style="margin-top:8px;font-size:13px;">';
+            html += '<span style="color:' + passportColor(level) + ';font-weight:800;font-size:18px;">' + passportLevelLabel(level) + '</span>';
+            html += '<span style="margin-left:8px;">' + passportStatusBadge(status) + '</span></div>';
+            html += '<div style="font-size:12px;color:var(--text-muted);margin-top:6px;">Lv. ' + (u.level || 0) + ' · ' + escapeHtml(u.job || 'Meslek yok') + '</div>';
+            html += '</div></div>';
+            html += '<div style="margin-top:12px;display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px;">';
+            html += '<div><span style="color:var(--text-muted);">İtibar</span><br><b>' + (u.reputation != null ? u.reputation : 50) + '</b></div>';
+            html += '<div><span style="color:var(--text-muted);">Uyarı</span><br><b style="color:' + ((u.warnings||0)>0?'var(--danger)':'var(--text)') + ';">' + (u.warnings || 0) + '</b></div>';
+            html += '<div><span style="color:var(--text-muted);">Klan</span><br><b>' + escapeHtml(clanName) + '</b></div>';
+            html += '<div><span style="color:var(--text-muted);">Check-in</span><br><b>' + (checkMap ? escapeHtml(checkMap) : '—') + '</b>';
+            if (checkAt) html += '<div style="font-size:10px;color:var(--text-muted);">' + checkAt + '</div>';
+            html += '</div></div>';
+            if (u.bio) html += '<div style="margin-top:10px;font-size:13px;line-height:1.4;color:var(--text-muted);">' + escapeHtml(u.bio) + '</div>';
+            if (u.customTitle) {
+                html += '<div style="margin-top:8px;"><span class="rarity-badge" style="background:rgba(255,0,204,0.2);color:' + escapeHtml(u.customTitleColor||'var(--accent-soft)') + ';">' + escapeHtml(u.customTitle) + '</span></div>';
+            }
+            html += '</div>';
 
             if (isMe) {
-                html += `
-                <div class="info-card" style="margin-bottom:12px;">
-                    <div style="font-weight:700;margin-bottom:8px;">Kimlik fotoğrafı</div>
-                    <input type="file" id="id-photo-input" accept="image/png,image/jpeg,image/webp" style="width:100%;margin-bottom:8px;" onchange="saveIdPhoto(event)">
-                    <div style="font-size:11px;color:var(--text-muted);">Max 1 MB · sadece sen yüklersin</div>
-                    ${u.idPhoto ? '<button class="danger-btn" style="width:100%;margin-top:8px;" onclick="clearIdPhoto()">Fotoğrafı kaldır</button>' : ''}
-                </div>`;
+                html += '<div class="info-card" style="margin-bottom:12px;">';
+                html += '<div style="font-weight:700;margin-bottom:8px;">Kimlik fotoğrafı</div>';
+                html += '<input type="file" id="id-photo-input" accept="image/png,image/jpeg,image/webp" style="width:100%;margin-bottom:8px;" onchange="saveIdPhoto(event)">';
+                html += '<div style="font-size:11px;color:var(--text-muted);">Max 1 MB</div>';
+                if (u.idPhoto) html += '<button class="danger-btn" style="width:100%;margin-top:8px;" onclick="clearIdPhoto()">Fotoğrafı kaldır</button>';
+                html += '</div>';
             }
 
             if (isMod && !isMe) {
-                html += `<button class="mod-btn" style="width:100%;margin-bottom:8px;" onclick="openSicilPanel('${String(target).replace(/'/g, '')}')">📁 Sicil dosyası</button>`;
+                html += '<button class="mod-btn" style="width:100%;margin-bottom:8px;" onclick="openSicilPanel(\'' + String(target).replace(/'/g, '') + '\')">Sicil dosyası</button>';
             }
 
-            openModal('🪪 Kimlik', html + `
-                <button class="back-btn" onclick="closeModal()">← Kapat</button>
-            `);
+            openModal('Kimlik', html + '<button class="back-btn" onclick="closeModal()">Kapat</button>');
         }
 
         function saveIdPhoto(event) {
@@ -15542,7 +15547,7 @@ Lütfen daha sonra tekrar gelin.</textarea>
             openIdentityCard();
         }
 
-        // ========== SICİL (mod dosyası) ==========
+        // ========== SICIL (mod dosyasi) ==========
         function openSicilPanel(username) {
             if (!isModerator()) { toast('Sadece moderatör.', 'error'); return; }
             const users = loadUsers();
@@ -15554,26 +15559,25 @@ Lütfen daha sonra tekrar gelin.</textarea>
             } else {
                 notes.slice().reverse().forEach(function(n, idx) {
                     const realIdx = notes.length - 1 - idx;
-                    rows += `<div class="info-card" style="margin-bottom:8px;">
-                        <div style="font-size:13px;line-height:1.4;">${escapeHtml(n.text || '')}</div>
-                        <div style="font-size:11px;color:var(--text-muted);margin-top:6px;">${escapeHtml(n.by || '')} · ${n.at ? new Date(n.at).toLocaleString('tr-TR') : ''}</div>
-                        <button class="danger-btn" style="width:auto;padding:6px 10px;margin-top:8px;" onclick="deleteSicilNote('${String(username).replace(/'/g, '')}', ${realIdx})">🗑 Sil</button>
-                    </div>`;
+                    rows += '<div class="info-card" style="margin-bottom:8px;">';
+                    rows += '<div style="font-size:13px;line-height:1.4;">' + escapeHtml(n.text || '') + '</div>';
+                    rows += '<div style="font-size:11px;color:var(--text-muted);margin-top:6px;">' + escapeHtml(n.by || '') + ' · ' + (n.at ? new Date(n.at).toLocaleString('tr-TR') : '') + '</div>';
+                    rows += '<button class="danger-btn" style="width:auto;padding:6px 10px;margin-top:8px;" onclick="deleteSicilNote(\'' + String(username).replace(/'/g, '') + '\', ' + realIdx + ')">Sil</button>';
+                    rows += '</div>';
                 });
             }
-            openModal('📁 Sicil — ' + escapeHtml(username), `
-                <div class="info-card" style="margin-bottom:12px;">
-                    <div class="info-row"><span class="label">Pasaport</span><span class="value" style="color:${passportColor(u.passportLevel)};">${passportLevelLabel(u.passportLevel)}</span></div>
-                    <div class="info-row"><span class="label">Uyarı</span><span class="value">${u.warnings || 0}</span></div>
-                    <div class="info-row"><span class="label">Ban</span><span class="value">${isUserBanned(u) ? '🚫 ' + formatBanUntil(u.banUntil) : 'Yok'}</span></div>
-                </div>
-                <div class="form-group"><label>Yeni not</label>
-                    <textarea id="sicil-text" rows="3" placeholder="RP olayı, uyarı gerekçesi..." style="width:100%;padding:10px;background:rgba(0,0,0,0.35);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:inherit;"></textarea>
-                </div>
-                <button class="primary-btn" style="width:100%;margin-bottom:12px;" onclick="addSicilNote('${String(username).replace(/'/g, '')}')">Not ekle</button>
-                <div style="max-height:40vh;overflow-y:auto;">${rows}</div>
-                <button class="back-btn" onclick="modSelectUser('${String(username).replace(/'/g, '')}')">← Geri</button>
-            `);
+            let body = '';
+            body += '<div class="info-card" style="margin-bottom:12px;">';
+            body += '<div class="info-row"><span class="label">Pasaport</span><span class="value" style="color:' + passportColor(u.passportLevel) + ';">' + passportLevelLabel(u.passportLevel) + '</span></div>';
+            body += '<div class="info-row"><span class="label">Uyarı</span><span class="value">' + (u.warnings || 0) + '</span></div>';
+            body += '<div class="info-row"><span class="label">Ban</span><span class="value">' + (isUserBanned(u) ? ('Ban: ' + formatBanUntil(u.banUntil)) : 'Yok') + '</span></div>';
+            body += '</div>';
+            body += '<div class="form-group"><label>Yeni not</label>';
+            body += '<textarea id="sicil-text" rows="3" placeholder="RP olayı, uyarı gerekçesi..." style="width:100%;padding:10px;background:rgba(0,0,0,0.35);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:inherit;"></textarea></div>';
+            body += '<button class="primary-btn" style="width:100%;margin-bottom:12px;" onclick="addSicilNote(\'' + String(username).replace(/'/g, '') + '\')">Not ekle</button>';
+            body += '<div style="max-height:40vh;overflow-y:auto;">' + rows + '</div>';
+            body += '<button class="back-btn" onclick="modSelectUser(\'' + String(username).replace(/'/g, '') + '\')">Geri</button>';
+            openModal('Sicil — ' + escapeHtml(username), body);
         }
         function addSicilNote(username) {
             if (!isModerator()) return;
@@ -15612,7 +15616,6 @@ Lütfen daha sonra tekrar gelin.</textarea>
             const myMap = meU.checkInMap || '';
             const myAt = meU.checkInAt ? new Date(meU.checkInAt).toLocaleString('tr-TR') : '';
 
-            // Who is where
             const byMap = {};
             Object.keys(users).forEach(function(n) {
                 const u = ensureUserFields(users[n] || {});
@@ -15626,34 +15629,33 @@ Lütfen daha sonra tekrar gelin.</textarea>
             maps.forEach(function(m) {
                 if (!m || !m.name) return;
                 const sel = myMap === m.name ? ' selected' : '';
-                mapOpts += `<option value="${escapeHtml(m.name)}"${sel}>${escapeHtml((m.emoji||'🗺️') + ' ' + m.name)}</option>`;
+                mapOpts += '<option value="' + escapeHtml(m.name) + '"' + sel + '>' + escapeHtml((m.emoji || '') + ' ' + m.name) + '</option>';
             });
 
             let live = '';
             Object.keys(byMap).sort().forEach(function(mapName) {
                 const people = byMap[mapName];
-                live += `<div class="info-card" style="margin-bottom:8px;">
-                    <div style="font-weight:700;margin-bottom:6px;">📍 ${escapeHtml(mapName)} <span style="color:var(--text-muted);font-weight:500;font-size:12px;">(${people.length})</span></div>
-                    <div style="font-size:13px;line-height:1.5;">${people.map(function(p){ return formatDisplayName(p); }).join(' · ')}</div>
-                </div>`;
+                live += '<div class="info-card" style="margin-bottom:8px;">';
+                live += '<div style="font-weight:700;margin-bottom:6px;">' + escapeHtml(mapName) + ' <span style="color:var(--text-muted);font-weight:500;font-size:12px;">(' + people.length + ')</span></div>';
+                live += '<div style="font-size:13px;line-height:1.5;">' + people.map(function(p){ return formatDisplayName(p); }).join(' · ') + '</div>';
+                live += '</div>';
             });
             if (!live) live = '<p style="color:var(--text-muted);text-align:center;">Kimse check-in yapmamış.</p>';
 
-            openModal('📍 Check-in', `
-                <div class="info-card" style="margin-bottom:12px;">
-                    <div style="font-size:12px;color:var(--text-muted);">Şu an</div>
-                    <div style="font-size:18px;font-weight:700;margin-top:4px;">${myMap ? '📍 ' + escapeHtml(myMap) : 'Bölge seçilmedi'}</div>
-                    ${myAt ? '<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">' + myAt + '</div>' : ''}
-                </div>
-                <div class="form-group"><label>Bölge</label>
-                    <select id="checkin-map" style="width:100%;padding:10px;background:rgba(0,0,0,0.35);border:1px solid var(--border);border-radius:10px;color:var(--text);">${mapOpts}</select>
-                </div>
-                <button class="primary-btn" style="width:100%;margin-bottom:8px;" onclick="doCheckIn()">📍 Check-in yap</button>
-                <button class="back-btn" style="width:100%;margin-bottom:12px;" onclick="clearCheckIn()">Check-out</button>
-                <div style="font-weight:700;margin-bottom:8px;">Kim nerede?</div>
-                <div style="max-height:40vh;overflow-y:auto;">${live}</div>
-                <button class="back-btn" onclick="closeModal()">← Kapat</button>
-            `);
+            let body = '';
+            body += '<div class="info-card" style="margin-bottom:12px;">';
+            body += '<div style="font-size:12px;color:var(--text-muted);">Şu an</div>';
+            body += '<div style="font-size:18px;font-weight:700;margin-top:4px;">' + (myMap ? escapeHtml(myMap) : 'Bölge seçilmedi') + '</div>';
+            if (myAt) body += '<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">' + myAt + '</div>';
+            body += '</div>';
+            body += '<div class="form-group"><label>Bolge</label>';
+            body += '<select id="checkin-map" style="width:100%;padding:10px;background:rgba(0,0,0,0.35);border:1px solid var(--border);border-radius:10px;color:var(--text);">' + mapOpts + '</select></div>';
+            body += '<button class="primary-btn" style="width:100%;margin-bottom:8px;" onclick="doCheckIn()">Check-in yap</button>';
+            body += '<button class="back-btn" style="width:100%;margin-bottom:12px;" onclick="clearCheckIn()">Check-out</button>';
+            body += '<div style="font-weight:700;margin-bottom:8px;">Kim nerede?</div>';
+            body += '<div style="max-height:40vh;overflow-y:auto;">' + live + '</div>';
+            body += '<button class="back-btn" onclick="closeModal()">Kapat</button>';
+            openModal('Check-in', body);
         }
         function doCheckIn() {
             const me = getCurrentUser();
@@ -15666,7 +15668,7 @@ Lütfen daha sonra tekrar gelin.</textarea>
             u.checkInMap = mapName.slice(0, 48);
             u.checkInAt = new Date().toISOString();
             saveUser(me, u);
-            toast('📍 Check-in: ' + mapName);
+            toast('Check-in: ' + mapName);
             openCheckIn();
         }
         function clearCheckIn() {
@@ -15680,7 +15682,6 @@ Lütfen daha sonra tekrar gelin.</textarea>
             toast('Check-out yapıldı');
             openCheckIn();
         }
-
 
         // ========== PASAPORT SİSTEMİ ==========
         const PASSPORT_LEVELS = ['A1', 'A2', 'A3', 'B1', 'B2', 'B3', 'C1', 'C2', 'C3', 'D5'];
