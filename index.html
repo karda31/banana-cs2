@@ -15501,13 +15501,15 @@ Lütfen daha sonra tekrar gelin.</textarea>
                     customHtml += `<div class="map-custom-row" data-i="${i}" style="display:flex;gap:6px;margin-bottom:6px;align-items:center;">
                         <input type="text" class="map-c-title" placeholder="Başlık" value="${escapeHtml(c.title || '')}" style="flex:1;padding:8px;background:rgba(0,0,0,0.35);border:1px solid var(--border);border-radius:8px;color:var(--text);">
                         <input type="text" class="map-c-value" placeholder="Değer" value="${escapeHtml(c.value || '')}" style="flex:1;padding:8px;background:rgba(0,0,0,0.35);border:1px solid var(--border);border-radius:8px;color:var(--text);">
-                        <button type="button" class="danger-btn" style="width:auto;padding:8px 10px;margin:0;" onclick="this.parentElement.remove()">✕</button>
+                        <button type="button" class="danger-btn" style="width:auto;padding:8px 12px;margin:0;white-space:nowrap;" onclick="this.closest('.map-custom-row').remove()" title="Bu başlığı sil">🗑 Sil</button>
                     </div>`;
                 });
             }
             customHtml += '</div>';
-            customHtml += '<button type="button" class="back-btn" style="width:100%;margin-top:6px;" onclick="addMapCustomRow()">➕ Başlık ekle</button>';
-            customHtml += '</div>';
+            customHtml += '<div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap;">';
+            customHtml += '<button type="button" class="back-btn" style="flex:1;margin:0;" onclick="addMapCustomRow()">➕ Başlık ekle</button>';
+            customHtml += '<button type="button" class="danger-btn" style="flex:1;margin:0;" onclick="clearAllMapCustomRows()">🗑 Tümünü sil</button>';
+            customHtml += '</div></div>';
 
             openModal(isNew ? '➕ Yeni Harita' : '✏️ Harita Düzenle', `
                 <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Tüm alanlar opsiyonel (ad zorunlu). Kaydedince herkese yansır.</p>
@@ -15525,8 +15527,15 @@ Lütfen daha sonra tekrar gelin.</textarea>
             div.style.cssText = 'display:flex;gap:6px;margin-bottom:6px;align-items:center;';
             div.innerHTML = `<input type="text" class="map-c-title" placeholder="Başlık (örn: Pasaport)" value="" style="flex:1;padding:8px;background:rgba(0,0,0,0.35);border:1px solid var(--border);border-radius:8px;color:var(--text);">
                 <input type="text" class="map-c-value" placeholder="Değer (örn: gerekli değil)" value="" style="flex:1;padding:8px;background:rgba(0,0,0,0.35);border:1px solid var(--border);border-radius:8px;color:var(--text);">
-                <button type="button" class="danger-btn" style="width:auto;padding:8px 10px;margin:0;" onclick="this.parentElement.remove()">✕</button>`;
+                <button type="button" class="danger-btn" style="width:auto;padding:8px 12px;margin:0;white-space:nowrap;" onclick="this.closest('.map-custom-row').remove()" title="Bu başlığı sil">🗑 Sil</button>`;
             list.appendChild(div);
+        }
+
+        function clearAllMapCustomRows() {
+            const list = document.getElementById('map-custom-list');
+            if (!list) return;
+            if (list.children.length && !confirm('Tüm özel başlıklar silinsin mi?')) return;
+            list.innerHTML = '';
         }
 
         async function saveMapFromEditor(id) {
