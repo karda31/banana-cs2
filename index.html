@@ -15100,8 +15100,73 @@ Lütfen daha sonra tekrar gelin.</textarea>
 
 
 
+
         // ========== HARİTALAR (moderatör yönetir) ==========
         let _mapsCache = null;
+
+        // Sabit şablon başlıklar (yeni haritada varsayılan; mod silebilir / değiştirebilir)
+        function defaultMapFieldTemplate() {
+            return [
+                { title: 'Durum', value: 'aktif' },
+                { title: 'Zorluk', value: '' },
+                { title: 'Seviye', value: '' },
+                { title: 'Açıklama', value: '' },
+                { title: 'Neler bulunur', value: '' },
+                { title: 'Çıkacak karakterler', value: '' },
+                { title: 'Boss / Elit', value: '' },
+                { title: 'Loot kalitesi', value: '' },
+                { title: 'Drop oranı', value: '' },
+                { title: 'Tehlikeler', value: '' },
+                { title: 'İpuçları', value: '' },
+                { title: 'Hava / Ortam', value: '' },
+                { title: 'Bölge kuralı', value: '' },
+                { title: 'Maks. kişi', value: '' },
+                { title: 'Boss cooldown', value: '' },
+                { title: 'Özel mekanik', value: '' },
+                { title: 'Notlar', value: '' }
+            ];
+        }
+
+        function legacyMapToFields(m) {
+            if (!m) return defaultMapFieldTemplate();
+            if (Array.isArray(m.fields) && m.fields.length) {
+                return m.fields.map(function(f) {
+                    return { title: String((f && f.title) || '').slice(0, 40), value: String((f && f.value) || '').slice(0, 800) };
+                }).filter(function(f) { return f.title; });
+            }
+            // Eski format → fields dizisine çevir
+            var pairs = [
+                ['Durum', m.status],
+                ['Zorluk', m.difficulty],
+                ['Seviye', m.level],
+                ['Açıklama', m.description],
+                ['Neler bulunur', m.finds],
+                ['Çıkacak karakterler', m.characters],
+                ['Boss / Elit', m.bosses],
+                ['Loot kalitesi', m.loot],
+                ['Drop oranı', m.dropRate],
+                ['Tehlikeler', m.dangers],
+                ['İpuçları', m.tips],
+                ['Hava / Ortam', m.weather],
+                ['Bölge kuralı', m.pvp],
+                ['Maks. kişi', m.party],
+                ['Boss cooldown', m.cooldown],
+                ['Özel mekanik', m.special],
+                ['Notlar', m.notes]
+            ];
+            var fields = [];
+            pairs.forEach(function(p) {
+                if (p[1] != null && String(p[1]).trim() !== '') {
+                    fields.push({ title: p[0], value: String(p[1]) });
+                }
+            });
+            if (Array.isArray(m.custom)) {
+                m.custom.forEach(function(c) {
+                    if (c && c.title) fields.push({ title: String(c.title).slice(0, 40), value: String(c.value || '').slice(0, 800) });
+                });
+            }
+            return fields.length ? fields : defaultMapFieldTemplate();
+        }
 
         function defaultMapsList() {
             return [
@@ -15109,26 +15174,19 @@ Lütfen daha sonra tekrar gelin.</textarea>
                     id: 'map_sword_forest',
                     name: 'Kılıç Ormanı',
                     emoji: '🌲',
-                    status: 'aktif',
-                    difficulty: 'Kolay',
-                    level: '1-10',
-                    description: 'Yeni başlayanlar için güvenli bir başlangıç bölgesi. Yoğun ağaçlar ve küçük yaratıklarla dolu.',
-                    finds: 'Odun, Bitki, Basit Silah Parçası, Küçük İksir, Deri',
-                    characters: 'Orman Koruyucusu, Tüccar Elara, Çırak Savaşçı',
-                    bosses: 'Yaşlı Ağaç Ruhu (nadir)',
-                    loot: 'Sıradan / Nadir',
-                    tips: 'Sabah saatlerinde bitki toplama bonusu var. Gece yaratık spawn oranı artar.',
-                    dangers: 'Zehirli bitkiler, küçük kurt sürüleri',
-                    weather: 'Yağmur / Sis',
-                    pvp: 'Güvenli bölge',
-                    party: '4 kişiye kadar',
-                    cooldown: 'Yok',
-                    dropRate: 'Yüksek',
-                    special: 'İlk girişte ücretsiz starter sandık',
-                    notes: 'Tutorial bölgesine yakındır.',
-                    custom: [
+                    fields: [
+                        { title: 'Durum', value: 'aktif' },
+                        { title: 'Zorluk', value: 'Kolay' },
+                        { title: 'Seviye', value: '1-10' },
+                        { title: 'Açıklama', value: 'Yeni başlayanlar için güvenli bir başlangıç bölgesi. Yoğun ağaçlar ve küçük yaratıklarla dolu.' },
+                        { title: 'Neler bulunur', value: 'Odun, Bitki, Basit Silah Parçası, Küçük İksir, Deri' },
+                        { title: 'Çıkacak karakterler', value: 'Orman Koruyucusu, Tüccar Elara, Çırak Savaşçı' },
+                        { title: 'Boss / Elit', value: 'Yaşlı Ağaç Ruhu (nadir)' },
+                        { title: 'Bölge kuralı', value: 'Güvenli bölge' },
+                        { title: 'Maks. kişi', value: '4 kişiye kadar' },
                         { title: 'Pasaport', value: 'gerekli değil' },
-                        { title: 'Yaş sınırı', value: '16+' }
+                        { title: 'Yaş sınırı', value: '16+' },
+                        { title: 'Notlar', value: 'Tutorial bölgesine yakındır.' }
                     ],
                     updatedAt: null,
                     updatedBy: null
@@ -15137,23 +15195,18 @@ Lütfen daha sonra tekrar gelin.</textarea>
                     id: 'map_crystal_caves',
                     name: 'Kristal Mağaralar',
                     emoji: '💎',
-                    status: 'aktif',
-                    difficulty: 'Orta',
-                    level: '10-25',
-                    description: 'Parlak kristallerle dolu yeraltı ağı. Işık yansımaları yön duygusunu bozabilir.',
-                    finds: 'Kristal Parçası, Gümüş Cevher, Rün Taşı, Işık İksiri',
-                    characters: 'Madenci Duran, Kristal Cadısı Mira',
-                    bosses: 'Kristal Golem',
-                    loot: 'Nadir / Efsanevi',
-                    tips: 'Fener veya ışık büyüsü şart. Kör edici flaşlara dikkat.',
-                    dangers: 'Çökme riski, karanlık yaratıklar',
-                    weather: 'Yeraltı (sabit)',
-                    pvp: 'Kontrollü (mod onayı)',
-                    party: '5 kişiye kadar',
-                    cooldown: '30 dk (boss)',
-                    dropRate: 'Orta',
-                    special: 'Kristal rezonans — belirli saatlerde ekstra drop',
-                    notes: 'Harita içinde gizli odalar bulunur.',
+                    fields: [
+                        { title: 'Durum', value: 'aktif' },
+                        { title: 'Zorluk', value: 'Orta' },
+                        { title: 'Seviye', value: '10-25' },
+                        { title: 'Açıklama', value: 'Parlak kristallerle dolu yeraltı ağı. Işık yansımaları yön duygusunu bozabilir.' },
+                        { title: 'Neler bulunur', value: 'Kristal Parçası, Gümüş Cevher, Rün Taşı, Işık İksiri' },
+                        { title: 'Çıkacak karakterler', value: 'Madenci Duran, Kristal Cadısı Mira' },
+                        { title: 'Boss / Elit', value: 'Kristal Golem' },
+                        { title: 'Bölge kuralı', value: 'Kontrollü (mod onayı)' },
+                        { title: 'Maks. kişi', value: '5 kişiye kadar' },
+                        { title: 'İpuçları', value: 'Fener veya ışık büyüsü şart.' }
+                    ],
                     updatedAt: null,
                     updatedBy: null
                 },
@@ -15161,23 +15214,18 @@ Lütfen daha sonra tekrar gelin.</textarea>
                     id: 'map_ash_ruins',
                     name: 'Kül Harabeleri',
                     emoji: '🏚️',
-                    status: 'aktif',
-                    difficulty: 'Zor',
-                    level: '25-40',
-                    description: 'Eski bir imparatorluğun yanmış kalıntıları. Lanetli ruhlar dolaşır.',
-                    finds: 'Kül Çeliği, Antik Parşömen, Lanetli Mücevher, Ruh Parçası',
-                    characters: 'Hayalet Muhafız, Arkeolog Veyra',
-                    bosses: 'Kül Lordu Azrath',
-                    loot: 'Efsanevi / Mitik',
-                    tips: 'Kutsal su ve arındırma büyüsü taşıyın. Gece girişi riskli.',
-                    dangers: 'Lanet debuff, yangın tuzakları',
-                    weather: 'Fırtına / Kül yağmuru',
-                    pvp: 'Serbest bölge',
-                    party: '6 kişiye kadar',
-                    cooldown: '1 saat (boss)',
-                    dropRate: 'Düşük-Orta',
-                    special: 'Boss sonrası geçici buff alanı',
-                    notes: 'Klan savaşları burada sık yapılır.',
+                    fields: [
+                        { title: 'Durum', value: 'aktif' },
+                        { title: 'Zorluk', value: 'Zor' },
+                        { title: 'Seviye', value: '25-40' },
+                        { title: 'Açıklama', value: 'Eski bir imparatorluğun yanmış kalıntıları. Lanetli ruhlar dolaşır.' },
+                        { title: 'Neler bulunur', value: 'Kül Çeliği, Antik Parşömen, Lanetli Mücevher, Ruh Parçası' },
+                        { title: 'Çıkacak karakterler', value: 'Hayalet Muhafız, Arkeolog Veyra' },
+                        { title: 'Boss / Elit', value: 'Kül Lordu Azrath' },
+                        { title: 'Bölge kuralı', value: 'Serbest bölge' },
+                        { title: 'Maks. kişi', value: '6 kişiye kadar' },
+                        { title: 'Tehlikeler', value: 'Lanet debuff, yangın tuzakları' }
+                    ],
                     updatedAt: null,
                     updatedBy: null
                 },
@@ -15185,23 +15233,16 @@ Lütfen daha sonra tekrar gelin.</textarea>
                     id: 'map_frozen_peak',
                     name: 'Donuk Zirve',
                     emoji: '🏔️',
-                    status: 'aktif',
-                    difficulty: 'Zor',
-                    level: '30-45',
-                    description: 'Buzullarla kaplı dağ zirvesi. Soğuk hasarı sürekli işler.',
-                    finds: 'Buz Kristali, Kutup Kürkü, Soğuk Çekirdek, Yeti Dişi',
-                    characters: 'Dağ Rehberi Tor, Buz Şamanı',
-                    bosses: 'Zirve Yetisi',
-                    loot: 'Nadir / Efsanevi',
-                    tips: 'Isınma iksiri zorunlu. Kayma zeminlerinde dikkatli olun.',
-                    dangers: 'Hipotermi, çığ, buz elementleri',
-                    weather: 'Kar fırtınası',
-                    pvp: 'Güvenli bölge',
-                    party: '5 kişiye kadar',
-                    cooldown: '45 dk',
-                    dropRate: 'Orta',
-                    special: 'Buz kalkanı craft malzemeleri bol',
-                    notes: 'Yüksek irtifa debuffı vardır.',
+                    fields: [
+                        { title: 'Durum', value: 'aktif' },
+                        { title: 'Zorluk', value: 'Zor' },
+                        { title: 'Seviye', value: '30-45' },
+                        { title: 'Açıklama', value: 'Buzullarla kaplı dağ zirvesi. Soğuk hasarı sürekli işler.' },
+                        { title: 'Neler bulunur', value: 'Buz Kristali, Kutup Kürkü, Soğuk Çekirdek, Yeti Dişi' },
+                        { title: 'Boss / Elit', value: 'Zirve Yetisi' },
+                        { title: 'Bölge kuralı', value: 'Güvenli bölge' },
+                        { title: 'Maks. kişi', value: '5 kişiye kadar' }
+                    ],
                     updatedAt: null,
                     updatedBy: null
                 },
@@ -15209,23 +15250,15 @@ Lütfen daha sonra tekrar gelin.</textarea>
                     id: 'map_shadow_marsh',
                     name: 'Gölge Bataklığı',
                     emoji: '🐸',
-                    status: 'aktif',
-                    difficulty: 'Orta-Zor',
-                    level: '15-30',
-                    description: 'Sisli bataklık. Görüş mesafesi düşük, zehir yaygın.',
-                    finds: 'Zehir Glandı, Bataklık Mantarı, Sis Özü, Kurbağa Derisi',
-                    characters: 'Bataklık Cadısı Nira, Balıkçı Olda',
-                    bosses: 'Batak Lordu',
-                    loot: 'Nadir',
-                    tips: 'Zehir direnci ekipmanı şart. Sis içinde ses takibi yapın.',
-                    dangers: 'Zehir, yutucu çamur, gölge pusuları',
-                    weather: 'Yoğun sis',
-                    pvp: 'Serbest bölge',
-                    party: '4 kişiye kadar',
-                    cooldown: 'Yok',
-                    dropRate: 'Yüksek (bitki)',
-                    special: 'Gece görünmezlik artışı',
-                    notes: 'Craft malzemeleri için popüler.',
+                    fields: [
+                        { title: 'Durum', value: 'aktif' },
+                        { title: 'Zorluk', value: 'Orta-Zor' },
+                        { title: 'Seviye', value: '15-30' },
+                        { title: 'Açıklama', value: 'Sisli bataklık. Görüş mesafesi düşük, zehir yaygın.' },
+                        { title: 'Neler bulunur', value: 'Zehir Glandı, Bataklık Mantarı, Sis Özü' },
+                        { title: 'Bölge kuralı', value: 'Serbest bölge' },
+                        { title: 'Maks. kişi', value: '4 kişiye kadar' }
+                    ],
                     updatedAt: null,
                     updatedBy: null
                 },
@@ -15233,23 +15266,15 @@ Lütfen daha sonra tekrar gelin.</textarea>
                     id: 'map_sunken_temple',
                     name: 'Batık Tapınak',
                     emoji: '🏛️',
-                    status: 'yakında',
-                    difficulty: 'Çok Zor',
-                    level: '40-55',
-                    description: 'Deniz altında kalmış antik tapınak. Su altı mekanikleri devrede.',
-                    finds: 'Mercan Çekirdeği, Antik Mühür, Deniz İncisi, Tidal Rün',
-                    characters: 'Rahibe Selene (yakında), Dalgıç Loncası',
-                    bosses: 'Derinlik Muhafızı (yakında)',
-                    loot: 'Efsanevi / Mitik',
-                    tips: 'Oksijen yönetimi kritik. Takım koordine olmalı.',
-                    dangers: 'Boğulma, akıntı tuzakları, derin yaratıklar',
-                    weather: 'Su altı akıntısı',
-                    pvp: 'Güvenli (etkinlik)',
-                    party: '8 kişiye kadar',
-                    cooldown: '2 saat',
-                    dropRate: 'Düşük',
-                    special: 'Sezon etkinliğiyle açılacak',
-                    notes: 'Şu an erişim kapalı — moderatör güncelleyecek.',
+                    fields: [
+                        { title: 'Durum', value: 'yakında' },
+                        { title: 'Zorluk', value: 'Çok Zor' },
+                        { title: 'Seviye', value: '40-55' },
+                        { title: 'Açıklama', value: 'Deniz altında kalmış antik tapınak. Su altı mekanikleri devrede.' },
+                        { title: 'Bölge kuralı', value: 'Güvenli (etkinlik)' },
+                        { title: 'Maks. kişi', value: '8 kişiye kadar' },
+                        { title: 'Notlar', value: 'Şu an erişim kapalı — moderatör güncelleyecek.' }
+                    ],
                     updatedAt: null,
                     updatedBy: null
                 },
@@ -15257,23 +15282,15 @@ Lütfen daha sonra tekrar gelin.</textarea>
                     id: 'map_ember_desert',
                     name: 'Kor Çölü',
                     emoji: '🏜️',
-                    status: 'aktif',
-                    difficulty: 'Orta',
-                    level: '12-28',
-                    description: 'Sıcak kumlar ve eski ticaret yolları. Gündüz aşırı sıcak.',
-                    finds: 'Kum Kristali, Baharat, Skarab Kabuğu, Ateş Tozu',
-                    characters: 'Çöl Tüccarı Hamid, Gezgin Büyücü',
-                    bosses: 'Kum Solucanı',
-                    loot: 'Sıradan / Nadir',
-                    tips: 'Gölge alanlarda dinlenin. Su stoku taşıyın.',
-                    dangers: 'Sıcaklık hasarı, kum fırtınası, tuzaklar',
-                    weather: 'Aşırı sıcak / Fırtına',
-                    pvp: 'Serbest bölge',
-                    party: '5 kişiye kadar',
-                    cooldown: 'Yok',
-                    dropRate: 'Orta',
-                    special: 'Gece serinliği — drop artışı',
-                    notes: 'Pazar rotaları buradan geçer.',
+                    fields: [
+                        { title: 'Durum', value: 'aktif' },
+                        { title: 'Zorluk', value: 'Orta' },
+                        { title: 'Seviye', value: '12-28' },
+                        { title: 'Açıklama', value: 'Sıcak kumlar ve eski ticaret yolları.' },
+                        { title: 'Neler bulunur', value: 'Kum Kristali, Baharat, Skarab Kabuğu' },
+                        { title: 'Bölge kuralı', value: 'Serbest bölge' },
+                        { title: 'Maks. kişi', value: '5 kişiye kadar' }
+                    ],
                     updatedAt: null,
                     updatedBy: null
                 },
@@ -15281,23 +15298,15 @@ Lütfen daha sonra tekrar gelin.</textarea>
                     id: 'map_void_rift',
                     name: 'Boşluk Yarığı',
                     emoji: '🌌',
-                    status: 'aktif',
-                    difficulty: 'Çok Zor',
-                    level: '45-60',
-                    description: 'Gerçeklik yırtılmış endgame bölgesi. Yüksek risk, yüksek ödül.',
-                    finds: 'Void Parçacığı, Kırık Zaman Kristali, Echo Çekirdeği',
-                    characters: 'Void Gözlemcisi, Kaos Elçisi',
-                    bosses: 'Yarığın Kalbi',
-                    loot: 'Mitik / Eşsiz',
-                    tips: 'Sadece hazır ekipler. Rezerv ekipman şart.',
-                    dangers: 'Anlık ölüm bölgeleri, debuff zincirleri',
-                    weather: 'Kaos fırtınası',
-                    pvp: 'Serbest / riskli',
-                    party: '10 kişiye kadar',
-                    cooldown: '3 saat',
-                    dropRate: 'Çok düşük',
-                    special: 'Haftalık liderlik ödülleri',
-                    notes: 'Moderatör etkinlikleriyle boss rotasyonu yapılır.',
+                    fields: [
+                        { title: 'Durum', value: 'aktif' },
+                        { title: 'Zorluk', value: 'Çok Zor' },
+                        { title: 'Seviye', value: '45-60' },
+                        { title: 'Açıklama', value: 'Gerçeklik yırtılmış endgame bölgesi. Yüksek risk, yüksek ödül.' },
+                        { title: 'Bölge kuralı', value: 'Serbest / riskli' },
+                        { title: 'Maks. kişi', value: '10 kişiye kadar' },
+                        { title: 'Özel mekanik', value: 'Haftalık liderlik ödülleri' }
+                    ],
                     updatedAt: null,
                     updatedBy: null
                 }
@@ -15340,11 +15349,21 @@ Lütfen daha sonra tekrar gelin.</textarea>
             }
         }
 
+        function mapFieldValue(m, title) {
+            const fields = legacyMapToFields(m);
+            const t = String(title || '').toLowerCase();
+            for (var i = 0; i < fields.length; i++) {
+                if (String(fields[i].title || '').toLowerCase() === t) return fields[i].value || '';
+            }
+            return '';
+        }
+
         function mapStatusBadge(st) {
             const s = String(st || 'aktif').toLowerCase();
             if (s === 'yakında' || s === 'coming') return '<span style="color:var(--warning);font-size:11px;font-weight:700;">⏳ YAKINDA</span>';
             if (s === 'bakım' || s === 'maintenance') return '<span style="color:var(--danger);font-size:11px;font-weight:700;">🔧 BAKIM</span>';
-            return '<span style="color:var(--success);font-size:11px;font-weight:700;">● AKTİF</span>';
+            if (s === 'aktif' || s === 'active') return '<span style="color:var(--success);font-size:11px;font-weight:700;">● AKTİF</span>';
+            return '<span style="color:var(--text-muted);font-size:11px;font-weight:700;">' + escapeHtml(st || '—') + '</span>';
         }
 
         function mapDifficultyColor(d) {
@@ -15367,9 +15386,11 @@ Lütfen daha sonra tekrar gelin.</textarea>
                     if (!m || !m.id) return;
                     const emoji = escapeHtml(m.emoji || '🗺️');
                     const name = escapeHtml(m.name || 'İsimsiz');
-                    const diff = escapeHtml(m.difficulty || '—');
-                    const lvl = escapeHtml(m.level || '—');
-                    const desc = escapeHtml((m.description || '').slice(0, 90));
+                    const status = mapFieldValue(m, 'Durum') || m.status || 'aktif';
+                    const diff = mapFieldValue(m, 'Zorluk') || m.difficulty || '—';
+                    const lvl = mapFieldValue(m, 'Seviye') || m.level || '—';
+                    const descRaw = mapFieldValue(m, 'Açıklama') || m.description || '';
+                    const desc = escapeHtml(descRaw.slice(0, 90));
                     cards += `
                         <div class="info-card" style="cursor:pointer;transition:border-color .15s;" onclick="openMapDetail('${String(m.id).replace(/'/g, '')}')">
                             <div style="display:flex;align-items:flex-start;gap:12px;">
@@ -15377,13 +15398,13 @@ Lütfen daha sonra tekrar gelin.</textarea>
                                 <div style="flex:1;min-width:0;">
                                     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
                                         <b style="font-size:16px;">${name}</b>
-                                        ${mapStatusBadge(m.status)}
+                                        ${mapStatusBadge(status)}
                                     </div>
                                     <div style="font-size:12px;color:var(--text-muted);margin-top:4px;">
-                                        <span style="color:${mapDifficultyColor(m.difficulty)};font-weight:600;">${diff}</span>
-                                        · Seviye ${lvl}
+                                        <span style="color:${mapDifficultyColor(diff)};font-weight:600;">${escapeHtml(diff)}</span>
+                                        · Seviye ${escapeHtml(lvl)}
                                     </div>
-                                    <div style="font-size:12px;color:var(--text-muted);margin-top:6px;line-height:1.4;">${desc}${(m.description||'').length > 90 ? '…' : ''}</div>
+                                    <div style="font-size:12px;color:var(--text-muted);margin-top:6px;line-height:1.4;">${desc}${descRaw.length > 90 ? '…' : ''}</div>
                                 </div>
                             </div>
                         </div>`;
@@ -15410,33 +15431,22 @@ Lütfen daha sonra tekrar gelin.</textarea>
             if (!m) { toast('Harita bulunamadı.', 'error'); return openMaps(); }
             const me = getCurrentUser();
             const isMod = me && isModerator(me);
-            const rows = [
-                ['Durum', mapStatusBadge(m.status)],
-                ['Zorluk', '<span style="color:' + mapDifficultyColor(m.difficulty) + ';font-weight:700;">' + escapeHtml(m.difficulty || '—') + '</span>'],
-                ['Seviye', escapeHtml(m.level || '—')],
-                ['Açıklama', escapeHtml(m.description || '—')],
-                ['Neler bulunur', escapeHtml(m.finds || '—')],
-                ['Çıkacak karakterler', escapeHtml(m.characters || '—')],
-                ['Boss / Elit', escapeHtml(m.bosses || '—')],
-                ['Loot kalitesi', escapeHtml(m.loot || '—')],
-                ['Drop oranı', escapeHtml(m.dropRate || '—')],
-                ['Tehlikeler', escapeHtml(m.dangers || '—')],
-                ['İpuçları', escapeHtml(m.tips || '—')],
-                ['Hava / Ortam', escapeHtml(m.weather || '—')],
-                ['Bölge kuralı', escapeHtml(m.pvp || '—')],
-                ['Maks. kişi', escapeHtml(m.party || '—')],
-                ['Boss cooldown', escapeHtml(m.cooldown || '—')],
-                ['Özel mekanik', escapeHtml(m.special || '—')],
-                ['Notlar', escapeHtml(m.notes || '—')]
-            ];
-            let body = rows.map(function(r) {
-                return `<div class="info-row" style="align-items:flex-start;"><span class="label" style="min-width:120px;">${r[0]}</span><span class="value" style="text-align:left;line-height:1.4;">${r[1]}</span></div>`;
-            }).join('');
-            // Özel başlıklar (moderatör ekler)
-            if (Array.isArray(m.custom)) {
-                m.custom.forEach(function(c) {
-                    if (!c || !c.title) return;
-                    body += `<div class="info-row" style="align-items:flex-start;"><span class="label" style="min-width:120px;">${escapeHtml(c.title)}</span><span class="value" style="text-align:left;line-height:1.4;">${escapeHtml(c.value || '—')}</span></div>`;
+            const fields = legacyMapToFields(m);
+            let body = '';
+            if (!fields.length) {
+                body = '<p style="color:var(--text-muted);text-align:center;">Başlık yok</p>';
+            } else {
+                fields.forEach(function(f) {
+                    var label = escapeHtml(f.title);
+                    var val = f.value || '—';
+                    if (String(f.title).toLowerCase() === 'durum') {
+                        val = mapStatusBadge(f.value);
+                    } else if (String(f.title).toLowerCase() === 'zorluk') {
+                        val = '<span style="color:' + mapDifficultyColor(f.value) + ';font-weight:700;">' + escapeHtml(f.value || '—') + '</span>';
+                    } else {
+                        val = escapeHtml(val);
+                    }
+                    body += `<div class="info-row" style="align-items:flex-start;"><span class="label" style="min-width:120px;">${label}</span><span class="value" style="text-align:left;line-height:1.4;">${val}</span></div>`;
                 });
             }
             if (m.updatedAt) {
@@ -15462,124 +15472,80 @@ Lütfen daha sonra tekrar gelin.</textarea>
             const list = _mapsCache || [];
             const m = id ? (list.find(function(x) { return x && x.id === id; }) || {}) : {};
             const isNew = !id;
-            const fields = [
-                ['name', 'Harita adı *', m.name || ''],
-                ['emoji', 'Emoji', m.emoji || '🗺️'],
-                ['status', 'Durum (aktif / yakında / bakım)', m.status || 'aktif'],
-                ['difficulty', 'Zorluk', m.difficulty || ''],
-                ['level', 'Seviye aralığı', m.level || ''],
-                ['description', 'Açıklama', m.description || '', true],
-                ['finds', 'Neler bulunabilir', m.finds || '', true],
-                ['characters', 'Çıkacak karakterler', m.characters || '', true],
-                ['bosses', 'Boss / Elit', m.bosses || ''],
-                ['loot', 'Loot kalitesi', m.loot || ''],
-                ['dropRate', 'Drop oranı', m.dropRate || ''],
-                ['dangers', 'Tehlikeler', m.dangers || '', true],
-                ['tips', 'İpuçları', m.tips || '', true],
-                ['weather', 'Hava / Ortam', m.weather || ''],
-                ['pvp', 'Bölge kuralı (güvenli / serbest / kontrollü)', m.pvp || ''],
-                ['party', 'Maks. kişi / kapasite', m.party || ''],
-                ['cooldown', 'Boss cooldown', m.cooldown || ''],
-                ['special', 'Özel mekanik', m.special || ''],
-                ['notes', 'Ek notlar', m.notes || '', true]
-            ];
-            let form = fields.map(function(f) {
-                const key = f[0], label = f[1], val = f[2], multi = f[3];
-                if (multi) {
-                    return `<div class="form-group"><label>${label}</label><textarea id="map-f-${key}" rows="2" style="width:100%;padding:10px;background:rgba(0,0,0,0.35);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:inherit;resize:vertical;">${escapeHtml(val)}</textarea></div>`;
-                }
-                return `<div class="form-group"><label>${label}</label><input type="text" id="map-f-${key}" value="${escapeHtml(val)}" style="width:100%;padding:10px;background:rgba(0,0,0,0.35);border:1px solid var(--border);border-radius:10px;color:var(--text);"></div>`;
-            }).join('');
-            // Özel başlıklar
-            const customs = Array.isArray(m.custom) ? m.custom : [];
-            let customHtml = '<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);">';
-            customHtml += '<div style="font-weight:700;margin-bottom:8px;">📋 Özel başlıklar</div>';
-            customHtml += '<p style="font-size:11px;color:var(--text-muted);margin-bottom:8px;">Örn: Pasaport → gerekli değil · Randevu → zorunlu</p>';
-            customHtml += '<div id="map-custom-list">';
-            if (customs.length) {
-                customs.forEach(function(c, i) {
-                    customHtml += `<div class="map-custom-row" data-i="${i}" style="display:flex;gap:6px;margin-bottom:6px;align-items:center;">
-                        <input type="text" class="map-c-title" placeholder="Başlık" value="${escapeHtml(c.title || '')}" style="flex:1;padding:8px;background:rgba(0,0,0,0.35);border:1px solid var(--border);border-radius:8px;color:var(--text);">
-                        <input type="text" class="map-c-value" placeholder="Değer" value="${escapeHtml(c.value || '')}" style="flex:1;padding:8px;background:rgba(0,0,0,0.35);border:1px solid var(--border);border-radius:8px;color:var(--text);">
-                        <button type="button" class="danger-btn" style="width:auto;padding:8px 12px;margin:0;white-space:nowrap;" onclick="this.closest('.map-custom-row').remove()" title="Bu başlığı sil">🗑 Sil</button>
-                    </div>`;
-                });
-            }
-            customHtml += '</div>';
-            customHtml += '<div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap;">';
-            customHtml += '<button type="button" class="back-btn" style="flex:1;margin:0;" onclick="addMapCustomRow()">➕ Başlık ekle</button>';
-            customHtml += '<button type="button" class="danger-btn" style="flex:1;margin:0;" onclick="clearAllMapCustomRows()">🗑 Tümünü sil</button>';
-            customHtml += '</div></div>';
+            const fields = isNew ? defaultMapFieldTemplate() : legacyMapToFields(m);
+
+            let fieldsHtml = '<div style="font-weight:700;margin-bottom:6px;">📋 Başlıklar</div>';
+            fieldsHtml += '<p style="font-size:11px;color:var(--text-muted);margin-bottom:8px;">İstediğin başlığı sil, adını değiştir veya yeni ekle. Örn: Pasaport → gerekli değil</p>';
+            fieldsHtml += '<div id="map-fields-list">';
+            fields.forEach(function(f, i) {
+                fieldsHtml += `<div class="map-field-row" style="display:flex;gap:6px;margin-bottom:6px;align-items:flex-start;">
+                    <input type="text" class="map-f-title" placeholder="Başlık" value="${escapeHtml(f.title || '')}" style="width:38%;padding:8px;background:rgba(0,0,0,0.35);border:1px solid var(--border);border-radius:8px;color:var(--text);">
+                    <input type="text" class="map-f-value" placeholder="Değer" value="${escapeHtml(f.value || '')}" style="flex:1;padding:8px;background:rgba(0,0,0,0.35);border:1px solid var(--border);border-radius:8px;color:var(--text);">
+                    <button type="button" class="danger-btn" style="width:auto;padding:8px 12px;margin:0;white-space:nowrap;" onclick="this.closest('.map-field-row').remove()" title="Başlığı sil">🗑 Sil</button>
+                </div>`;
+            });
+            fieldsHtml += '</div>';
+            fieldsHtml += '<div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap;">';
+            fieldsHtml += '<button type="button" class="back-btn" style="flex:1;margin:0;" onclick="addMapFieldRow()">➕ Başlık ekle</button>';
+            fieldsHtml += '<button type="button" class="danger-btn" style="flex:1;margin:0;" onclick="clearAllMapFieldRows()">🗑 Tüm başlıkları sil</button>';
+            fieldsHtml += '</div>';
 
             openModal(isNew ? '➕ Yeni Harita' : '✏️ Harita Düzenle', `
-                <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Tüm alanlar opsiyonel (ad zorunlu). Kaydedince herkese yansır.</p>
-                <div style="max-height:55vh;overflow-y:auto;padding-right:4px;">${form}${customHtml}</div>
+                <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Harita adı zorunlu. Tüm başlıklar silinebilir / değiştirilebilir.</p>
+                <div class="form-group"><label>Harita adı *</label>
+                    <input type="text" id="map-name" value="${escapeHtml(m.name || '')}" style="width:100%;padding:10px;background:rgba(0,0,0,0.35);border:1px solid var(--border);border-radius:10px;color:var(--text);">
+                </div>
+                <div class="form-group"><label>Emoji</label>
+                    <input type="text" id="map-emoji" value="${escapeHtml(m.emoji || '🗺️')}" style="width:100%;padding:10px;background:rgba(0,0,0,0.35);border:1px solid var(--border);border-radius:10px;color:var(--text);">
+                </div>
+                <div style="max-height:48vh;overflow-y:auto;padding-right:4px;margin-top:8px;">${fieldsHtml}</div>
                 <button class="primary-btn" style="width:100%;margin-top:10px;" onclick="saveMapFromEditor('${isNew ? '' : String(id).replace(/'/g, '')}')">Kaydet</button>
                 <button class="back-btn" onclick="${isNew ? 'openMaps()' : "openMapDetail('" + String(id).replace(/'/g, '') + "')"}">← Geri</button>
             `);
         }
 
-        function addMapCustomRow() {
-            const list = document.getElementById('map-custom-list');
+        function addMapFieldRow() {
+            const list = document.getElementById('map-fields-list');
             if (!list) return;
             const div = document.createElement('div');
-            div.className = 'map-custom-row';
-            div.style.cssText = 'display:flex;gap:6px;margin-bottom:6px;align-items:center;';
-            div.innerHTML = `<input type="text" class="map-c-title" placeholder="Başlık (örn: Pasaport)" value="" style="flex:1;padding:8px;background:rgba(0,0,0,0.35);border:1px solid var(--border);border-radius:8px;color:var(--text);">
-                <input type="text" class="map-c-value" placeholder="Değer (örn: gerekli değil)" value="" style="flex:1;padding:8px;background:rgba(0,0,0,0.35);border:1px solid var(--border);border-radius:8px;color:var(--text);">
-                <button type="button" class="danger-btn" style="width:auto;padding:8px 12px;margin:0;white-space:nowrap;" onclick="this.closest('.map-custom-row').remove()" title="Bu başlığı sil">🗑 Sil</button>`;
+            div.className = 'map-field-row';
+            div.style.cssText = 'display:flex;gap:6px;margin-bottom:6px;align-items:flex-start;';
+            div.innerHTML = `<input type="text" class="map-f-title" placeholder="Başlık (örn: Pasaport)" value="" style="width:38%;padding:8px;background:rgba(0,0,0,0.35);border:1px solid var(--border);border-radius:8px;color:var(--text);">
+                <input type="text" class="map-f-value" placeholder="Değer (örn: gerekli değil)" value="" style="flex:1;padding:8px;background:rgba(0,0,0,0.35);border:1px solid var(--border);border-radius:8px;color:var(--text);">
+                <button type="button" class="danger-btn" style="width:auto;padding:8px 12px;margin:0;white-space:nowrap;" onclick="this.closest('.map-field-row').remove()" title="Başlığı sil">🗑 Sil</button>`;
             list.appendChild(div);
         }
 
-        function clearAllMapCustomRows() {
-            const list = document.getElementById('map-custom-list');
+        function clearAllMapFieldRows() {
+            const list = document.getElementById('map-fields-list');
             if (!list) return;
-            if (list.children.length && !confirm('Tüm özel başlıklar silinsin mi?')) return;
+            if (list.children.length && !confirm('Tüm başlıklar silinsin mi?')) return;
             list.innerHTML = '';
         }
 
         async function saveMapFromEditor(id) {
             if (!isModerator()) { toast('Sadece moderatör.', 'error'); return; }
-            const get = function(k) {
-                const el = document.getElementById('map-f-' + k);
-                return el ? String(el.value || '').trim() : '';
-            };
-            const name = get('name');
+            const nameEl = document.getElementById('map-name');
+            const emojiEl = document.getElementById('map-emoji');
+            const name = nameEl ? String(nameEl.value || '').trim() : '';
             if (!name) { toast('Harita adı zorunlu.', 'error'); return; }
+            const fields = [];
+            document.querySelectorAll('#map-fields-list .map-field-row').forEach(function(row) {
+                const tEl = row.querySelector('.map-f-title');
+                const vEl = row.querySelector('.map-f-value');
+                const title = tEl ? String(tEl.value || '').trim().slice(0, 40) : '';
+                const value = vEl ? String(vEl.value || '').trim().slice(0, 800) : '';
+                if (title) fields.push({ title: title, value: value });
+            });
+            if (fields.length > 30) fields.length = 30;
+
             const list = await loadMapsList();
             const me = getCurrentUser();
-            const custom = [];
-            document.querySelectorAll('#map-custom-list .map-custom-row').forEach(function(row) {
-                const tEl = row.querySelector('.map-c-title');
-                const vEl = row.querySelector('.map-c-value');
-                const title = tEl ? String(tEl.value || '').trim().slice(0, 40) : '';
-                const value = vEl ? String(vEl.value || '').trim().slice(0, 200) : '';
-                if (title) custom.push({ title: title, value: value });
-            });
-            if (custom.length > 20) custom.length = 20;
-
             const payload = {
                 id: id || ('map_' + Date.now()),
                 name: name.slice(0, 48),
-                emoji: (get('emoji') || '🗺️').slice(0, 8),
-                status: (get('status') || 'aktif').slice(0, 20),
-                difficulty: get('difficulty').slice(0, 32),
-                level: get('level').slice(0, 24),
-                description: get('description').slice(0, 800),
-                finds: get('finds').slice(0, 400),
-                characters: get('characters').slice(0, 400),
-                bosses: get('bosses').slice(0, 200),
-                loot: get('loot').slice(0, 80),
-                dropRate: get('dropRate').slice(0, 40),
-                dangers: get('dangers').slice(0, 300),
-                tips: get('tips').slice(0, 400),
-                weather: get('weather').slice(0, 80),
-                pvp: get('pvp').slice(0, 40),
-                party: get('party').slice(0, 40),
-                cooldown: get('cooldown').slice(0, 40),
-                special: get('special').slice(0, 200),
-                notes: get('notes').slice(0, 300),
-                custom: custom,
+                emoji: ((emojiEl && emojiEl.value) || '🗺️').trim().slice(0, 8) || '🗺️',
+                fields: fields,
                 updatedAt: new Date().toISOString(),
                 updatedBy: me
             };
@@ -15604,7 +15570,6 @@ Lütfen daha sonra tekrar gelin.</textarea>
             toast('Harita silindi.');
             openMaps();
         }
-
 
         // ========== PET SİSTEMİ ==========
         const DEFAULT_PETS = [
