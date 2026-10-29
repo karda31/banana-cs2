@@ -1934,7 +1934,7 @@
         <div class="content">
             <div class="section-label">Klasörler</div>
             <div class="folder-grid">
-                <div class="folder-section-label">Oyun & ekonomi</div>
+                <div class="folder-section-label" data-sec="ekonomi">Oyun & ekonomi</div>
                 <div class="folder" onclick="openPlayMenu()">
                     <div class="folder-icon">🎮</div>
                     <div class="folder-name">Oyna</div>
@@ -1960,7 +1960,7 @@
                     <div class="folder-name">Profilim</div>
                     <div class="folder-desc">Hesap Bilgisi</div>
                 </div>
-                <div class="folder-section-label">Sosyal & RP</div>
+                <div class="folder-section-label" data-sec="sosyal">Sosyal & RP</div>
                 <div class="folder" onclick="openSocial()">
                     <div class="folder-icon">👥</div>
                     <div class="folder-name">Sosyal</div>
@@ -2011,7 +2011,7 @@
                     <div class="folder-name">Şans Oyunları</div>
                     <div class="folder-desc">Ücretsiz + Jackpot</div>
                 </div>
-                <div class="folder-section-label">Sistem</div>
+                <div class="folder-section-label" data-sec="sistem">Sistem</div>
                 <div class="folder" onclick="openSettings()">
                     <div class="folder-icon">⚙️</div>
                     <div class="folder-name">Ayarlar</div>
@@ -4812,6 +4812,7 @@
             try { defaultWheelsIfEmpty(); } catch (e) {}
             startRealtimeListeners();
             console.log("📦 Tüm veriler yüklendi");
+            try { loadMenuSectionsAsync().then(function(l){ applyMenuSections(l); }); } catch (e) {}
         }
 
         // Eski fonksiyon isimleriyle uyumluluk
@@ -6343,6 +6344,7 @@
             try { normalizeAllFriendLists(); normalizeAllChatsAliases(); } catch (e) {}
             document.getElementById('auth-screen').classList.add('hidden');
             document.getElementById('main-app').classList.remove('hidden');
+            try { applyMenuSections(); } catch (e) {}
             const badge = document.getElementById('user-badge');
             badge.innerHTML = '👤 ' + formatDisplayName(username);
             badge.classList.add('show');
@@ -11732,6 +11734,9 @@
                 <button class="mod-btn" onclick="modPurgeGhosts()" style="margin-bottom:8px;">
                     <span style="font-size:20px;">👻</span> Hayalet Hesapları Temizle
                 </button>
+                <button class="mod-btn" onclick="openMenuSectionsMod()" style="margin-bottom:8px;">
+                    <span style="font-size:20px;">📂</span> Menü Bölümleri
+                </button>
                 <button class="mod-btn" onclick="openSicilSearch()" style="margin-bottom:8px;">
                     <span style="font-size:20px;">🔍</span> Sicil Ara
                 </button>
@@ -15459,6 +15464,135 @@ Lütfen daha sonra tekrar gelin.</textarea>
 
 
 
+
+
+
+        // ========== MENU BOLUMLERI (mod) ==========
+        function defaultMenuSections() {
+            return [
+                { id: 'ekonomi', title: 'Oyun & ekonomi' },
+                { id: 'sosyal', title: 'Sosyal & RP' },
+                { id: 'sistem', title: 'Sistem' }
+            ];
+        }
+        function loadMenuSectionsSync() {
+            try {
+                const raw = localStorage.getItem('swordcity_menu_sections_v1');
+                if (raw) {
+                    const arr = JSON.parse(raw);
+                    if (Array.isArray(arr) && arr.length) return arr;
+                }
+            } catch (e) {}
+            return defaultMenuSections();
+        }
+        async function loadMenuSectionsAsync() {
+            try {
+                if (typeof firebaseReady !== 'undefined' && firebaseReady) {
+                    const d = await fbGet('menu_sections');
+                    if (Array.isArray(d) && d.length) {
+                        try { localStorage.setItem('swordcity_menu_sections_v1', JSON.stringify(d)); } catch (e) {}
+                        return d;
+                    }
+                }
+            } catch (e) {}
+            return loadMenuSectionsSync();
+        }
+        function saveMenuSections(list) {
+            try { localStorage.setItem('swordcity_menu_sections_v1', JSON.stringify(list)); } catch (e) {}
+            if (typeof firebaseReady !== 'undefined' && firebaseReady) {
+                try { fbSet('menu_sections', list); } catch (e) {}
+            }
+            applyMenuSections(list);
+        }
+        function applyMenuSections(list) {
+            list = list || loadMenuSectionsSync();
+            const grid = document.querySelector('.folder-grid');
+            if (!grid) return;
+            const byId = {};
+            list.forEach(function(s) {
+                if (s && s.id) byId[s.id] = s;
+            });
+            // Guncelle / gizle mevcut etiketler
+            const existing = grid.querySelectorAll('.folder-section-label[data-sec]');
+            const seen = {};
+            existing.forEach(function(el) {
+                const id = el.getAttribute('data-sec');
+                seen[id] = true;
+                if (byId[id]) {
+                    el.textContent = byId[id].title || id;
+                    el.style.display = '';
+                } else {
+                    el.style.display = 'none';
+                }
+            });
+            // Yeni eklenen bolumler (DOM'da yoksa sona ekle, cikis/mod oncesi)
+            const anchor = grid.querySelector('#mod-folder') || grid.querySelector('[onclick="doLogout()"]');
+            list.forEach(function(s) {
+                if (!s || !s.id) return;
+                if (seen[s.id]) return;
+                const el = document.createElement('div');
+                el.className = 'folder-section-label';
+                el.setAttribute('data-sec', s.id);
+                el.textContent = s.title || s.id;
+                if (anchor) grid.insertBefore(el, anchor);
+                else grid.appendChild(el);
+            });
+        }
+        async function openMenuSectionsMod() {
+            if (!isModerator()) { toast('Sadece moderator.', 'error'); return; }
+            const list = await loadMenuSectionsAsync();
+            let rows = '';
+            list.forEach(function(s, i) {
+                rows += '<div class="info-card" style="margin-bottom:8px;">';
+                rows += '<div class="form-group" style="margin:0 0 8px;"><label>Bolum adi</label>';
+                rows += '<input type="text" class="menu-sec-title" data-i="' + i + '" value="' + escapeHtml(s.title || '') + '" style="width:100%;padding:10px;background:rgba(0,0,0,0.35);border:1px solid var(--border);border-radius:10px;color:var(--text);"></div>';
+                rows += '<button type="button" class="danger-btn" style="width:auto;padding:6px 10px;margin:0;" onclick="deleteMenuSection(' + i + ')">Bolumu sil</button>';
+                rows += '</div>';
+            });
+            let body = '';
+            body += '<p style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Sosyal, RP, Ekonomi gibi basliklari ekle / sil / yeniden adlandir. Klasorler yerinde kalir.</p>';
+            body += '<div id="menu-sec-list">' + rows + '</div>';
+            body += '<div class="form-group" style="margin-top:12px;"><label>Yeni bolum adi</label>';
+            body += '<input type="text" id="menu-sec-new" placeholder="Orn: Etkinlikler, RP, Ekonomi" style="width:100%;padding:10px;background:rgba(0,0,0,0.35);border:1px solid var(--border);border-radius:10px;color:var(--text);"></div>';
+            body += '<button class="primary-btn" style="width:100%;margin-bottom:8px;" onclick="addMenuSection()">Bolum ekle</button>';
+            body += '<button class="primary-btn" style="width:100%;margin-bottom:8px;" onclick="saveMenuSectionsFromEditor()">Kaydet</button>';
+            body += '<button class="back-btn" onclick="showModUserList()">Geri</button>';
+            openModal('Menu bolumleri', body);
+        }
+        function addMenuSection() {
+            if (!isModerator()) return;
+            const el = document.getElementById('menu-sec-new');
+            const title = el ? String(el.value || '').trim().slice(0, 40) : '';
+            if (!title) { toast('Isim yaz.', 'error'); return; }
+            const list = loadMenuSectionsSync();
+            const id = 'sec_' + Date.now();
+            list.push({ id: id, title: title });
+            saveMenuSections(list);
+            toast('Bolum eklendi');
+            openMenuSectionsMod();
+        }
+        function deleteMenuSection(index) {
+            if (!isModerator()) return;
+            const list = loadMenuSectionsSync();
+            if (index < 0 || index >= list.length) return;
+            if (!confirm('"' + (list[index].title || '') + '" silinsin mi?')) return;
+            list.splice(index, 1);
+            saveMenuSections(list);
+            toast('Bolum silindi');
+            openMenuSectionsMod();
+        }
+        function saveMenuSectionsFromEditor() {
+            if (!isModerator()) return;
+            const list = loadMenuSectionsSync();
+            document.querySelectorAll('.menu-sec-title').forEach(function(inp) {
+                const i = Number(inp.getAttribute('data-i'));
+                if (list[i]) list[i].title = String(inp.value || '').trim().slice(0, 40) || list[i].title;
+            });
+            saveMenuSections(list);
+            try { pushModLog('menu_sections', 'Menu bolumleri guncellendi (' + list.length + ')'); } catch (e) {}
+            toast('Kaydedildi');
+            openMenuSectionsMod();
+        }
 
 
         // ========== ILAN PANOSU ==========
