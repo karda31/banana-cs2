@@ -755,6 +755,17 @@
             margin: 0 auto;
         }
 
+        .folder-section-label {
+            grid-column: 1 / -1;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            color: var(--accent-soft);
+            margin: 8px 0 2px;
+            padding: 6px 4px 0;
+            opacity: 0.9;
+        }
         .section-label {
             font-size: 13px;
             letter-spacing: 2px;
@@ -1923,6 +1934,7 @@
         <div class="content">
             <div class="section-label">Klasörler</div>
             <div class="folder-grid">
+                <div class="folder-section-label">Oyun & ekonomi</div>
                 <div class="folder" onclick="openPlayMenu()">
                     <div class="folder-icon">🎮</div>
                     <div class="folder-name">Oyna</div>
@@ -1948,6 +1960,7 @@
                     <div class="folder-name">Profilim</div>
                     <div class="folder-desc">Hesap Bilgisi</div>
                 </div>
+                <div class="folder-section-label">Sosyal & RP</div>
                 <div class="folder" onclick="openSocial()">
                     <div class="folder-icon">👥</div>
                     <div class="folder-name">Sosyal</div>
@@ -1998,6 +2011,7 @@
                     <div class="folder-name">Şans Oyunları</div>
                     <div class="folder-desc">Ücretsiz + Jackpot</div>
                 </div>
+                <div class="folder-section-label">Sistem</div>
                 <div class="folder" onclick="openSettings()">
                     <div class="folder-icon">⚙️</div>
                     <div class="folder-name">Ayarlar</div>
@@ -2052,6 +2066,16 @@
                     <div class="folder-icon">📍</div>
                     <div class="folder-name">Check-in</div>
                     <div class="folder-desc">Bölgede bulun</div>
+                </div>
+                <div class="folder" onclick="openBulletin()">
+                    <div class="folder-icon">📋</div>
+                    <div class="folder-name">İlan Panosu</div>
+                    <div class="folder-desc">RP ilanları</div>
+                </div>
+                <div class="folder" onclick="openInvoices()">
+                    <div class="folder-icon">🧾</div>
+                    <div class="folder-name">Faturalar</div>
+                    <div class="folder-desc">Borç & ödeme</div>
                 </div>
                 <div class="folder" onclick="openConsole()">
                     <div class="folder-icon">💻</div>
@@ -5093,6 +5117,7 @@
             if (typeof user.idUpdatedAt === 'undefined') user.idUpdatedAt = null;
             if (!Array.isArray(user.idExtra)) user.idExtra = [];
             if (!Array.isArray(user.idFields)) user.idFields = null; // null = varsayilan sablon
+            if (!Array.isArray(user.jewelerHistory)) user.jewelerHistory = [];
             return user;
         }
 
@@ -7316,6 +7341,7 @@
                         <button class="back-btn" style="margin:0;" onclick="jewelerUpgrade('em_to_gold')">1 💚 → 5 🥇</button>
                     </div>
                 </div>
+                <button class="back-btn" style="width:100%;margin-bottom:8px;" onclick="openJewelerHistory()">Kuyumcu gecmisi</button>
                 ${isModerator(me) ? '<button class="mod-btn" style="width:100%;margin-bottom:8px;" onclick="openGoldMarketMod()">⚙️ Piyasa ayarı (Mod)</button>' : ''}
                 <button class="back-btn" onclick="window._jewelerOpen=false;closeModal()">Kapat</button>
             `);
@@ -7411,6 +7437,9 @@
             const gain = amt * price;
             users[me].gold = gold - amt;
             users[me].balance = (Number(users[me].balance) || 0) + gain;
+            if (!Array.isArray(users[me].jewelerHistory)) users[me].jewelerHistory = [];
+            users[me].jewelerHistory.unshift({ t: 'sell_gold', amt: amt, money: gain, unit: price, at: new Date().toISOString() });
+            if (users[me].jewelerHistory.length > 40) users[me].jewelerHistory.length = 40;
             saveUser(me, users[me]);
             try { pushNotif(me, '🥇 Kuyumcu: ' + amt + ' gold bozduruldu → +$' + gain.toLocaleString('tr-TR') + ' (fiyat $' + price + ')', 'success'); } catch (e) {}
             toast('+$' + gain.toLocaleString('tr-TR') + ' bakiyene eklendi');
@@ -7432,6 +7461,9 @@
             if (bal < cost) { toast('Yetersiz bakiye. $' + cost.toLocaleString('tr-TR') + ' gerekli', 'error'); return; }
             users[me].balance = bal - cost;
             users[me].gold = (Math.floor(Number(users[me].gold) || 0)) + amt;
+            if (!Array.isArray(users[me].jewelerHistory)) users[me].jewelerHistory = [];
+            users[me].jewelerHistory.unshift({ t: 'buy_gold', amt: amt, money: cost, unit: buyPrice, at: new Date().toISOString() });
+            if (users[me].jewelerHistory.length > 40) users[me].jewelerHistory.length = 40;
             saveUser(me, users[me]);
             try { pushNotif(me, '🥇 Kuyumcu: ' + amt + ' gold alındı → −$' + cost.toLocaleString('tr-TR') + ' (alış $' + buyPrice + ')', 'success'); } catch (e) {}
             toast(amt + ' gold envanterine eklendi (−$' + cost.toLocaleString('tr-TR') + ')');
@@ -11700,6 +11732,12 @@
                 <button class="mod-btn" onclick="modPurgeGhosts()" style="margin-bottom:8px;">
                     <span style="font-size:20px;">👻</span> Hayalet Hesapları Temizle
                 </button>
+                <button class="mod-btn" onclick="openSicilSearch()" style="margin-bottom:8px;">
+                    <span style="font-size:20px;">🔍</span> Sicil Ara
+                </button>
+                <button class="mod-btn" onclick="openAnnounceTemplates()" style="margin-bottom:8px;">
+                    <span style="font-size:20px;">📝</span> Duyuru Sablonlari
+                </button>
                 <button class="mod-btn" onclick="openModLogPanel()" style="margin-bottom:8px;">
                     <span style="font-size:20px;">📋</span> Mod Log
                 </button>
@@ -15422,6 +15460,308 @@ Lütfen daha sonra tekrar gelin.</textarea>
 
 
 
+
+        // ========== ILAN PANOSU ==========
+        async function loadBulletin() {
+            try {
+                if (typeof firebaseReady !== 'undefined' && firebaseReady) {
+                    const data = await fbGet('bulletin');
+                    if (data) {
+                        const arr = Array.isArray(data) ? data : Object.values(data);
+                        try { localStorage.setItem('swordcity_bulletin_v1', JSON.stringify(arr)); } catch (e) {}
+                        return arr;
+                    }
+                }
+            } catch (e) {}
+            try { return JSON.parse(localStorage.getItem('swordcity_bulletin_v1') || '[]'); }
+            catch (e2) { return []; }
+        }
+        function saveBulletin(list) {
+            try { localStorage.setItem('swordcity_bulletin_v1', JSON.stringify(list)); } catch (e) {}
+            if (typeof firebaseReady !== 'undefined' && firebaseReady) {
+                try { fbSet('bulletin', list); } catch (e) {}
+            }
+        }
+        async function openBulletin() {
+            const me = getCurrentUser();
+            if (!me) { toast('Giris yapmalisin.', 'error'); return; }
+            const list = await loadBulletin();
+            const isMod = isModerator(me);
+            const cats = { all: 'Tumu', is: 'Is', arac: 'Arac', bulusma: 'Bulusma', satilik: 'Satilik', diger: 'Diger' };
+            let html = '';
+            html += '<button class="primary-btn" style="width:100%;margin-bottom:12px;" onclick="openBulletinForm()">Yeni ilan ver</button>';
+            if (!list.length) {
+                html += '<p style="color:var(--text-muted);text-align:center;padding:16px 0;">Ilan yok.</p>';
+            } else {
+                list.slice().sort(function(a,b){ return String(b.at||'').localeCompare(String(a.at||'')); }).forEach(function(ad) {
+                    if (!ad || !ad.id) return;
+                    const when = ad.at ? new Date(ad.at).toLocaleString('tr-TR') : '';
+                    const cat = cats[ad.cat] || ad.cat || 'Diger';
+                    html += '<div class="info-card" style="margin-bottom:10px;">';
+                    html += '<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;">';
+                    html += '<b style="font-size:15px;">' + escapeHtml(ad.title || 'Ilan') + '</b>';
+                    html += '<span style="font-size:11px;color:var(--accent-soft);border:1px solid var(--border);border-radius:20px;padding:2px 8px;">' + escapeHtml(cat) + '</span>';
+                    html += '</div>';
+                    html += '<div style="font-size:13px;line-height:1.45;margin-top:8px;color:var(--text);">' + escapeHtml(ad.body || '') + '</div>';
+                    html += '<div style="font-size:11px;color:var(--text-muted);margin-top:8px;">' + formatDisplayName(ad.by || '?') + ' · ' + when + '</div>';
+                    if (isMod || ad.by === me) {
+                        html += '<button class="danger-btn" style="width:auto;padding:6px 10px;margin-top:8px;" onclick="deleteBulletinAd(\'' + String(ad.id).replace(/'/g, '') + '\')">Sil</button>';
+                    }
+                    html += '</div>';
+                });
+            }
+            openModal('Ilan Panosu', html + '<button class="back-btn" onclick="closeModal()">Kapat</button>');
+        }
+        function openBulletinForm() {
+            const me = getCurrentUser();
+            if (!me) return;
+            let body = '';
+            body += '<div class="form-group"><label>Kategori</label><select id="bl-cat" style="width:100%;padding:10px;background:rgba(0,0,0,0.35);border:1px solid var(--border);border-radius:10px;color:var(--text);">';
+            body += '<option value="is">Is / is ilani</option><option value="arac">Arac</option><option value="bulusma">Bulusma</option><option value="satilik">Satilik</option><option value="diger">Diger</option>';
+            body += '</select></div>';
+            body += '<div class="form-group"><label>Baslik</label><input type="text" id="bl-title" maxlength="60" style="width:100%;padding:10px;background:rgba(0,0,0,0.35);border:1px solid var(--border);border-radius:10px;color:var(--text);"></div>';
+            body += '<div class="form-group"><label>Icerik</label><textarea id="bl-body" rows="4" maxlength="500" style="width:100%;padding:10px;background:rgba(0,0,0,0.35);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:inherit;"></textarea></div>';
+            body += '<button class="primary-btn" style="width:100%;" onclick="submitBulletinAd()">Yayinla</button>';
+            body += '<button class="back-btn" onclick="openBulletin()">Geri</button>';
+            openModal('Yeni Ilan', body);
+        }
+        async function submitBulletinAd() {
+            const me = getCurrentUser();
+            if (!me) return;
+            const title = ((document.getElementById('bl-title') || {}).value || '').trim().slice(0, 60);
+            const body = ((document.getElementById('bl-body') || {}).value || '').trim().slice(0, 500);
+            const cat = ((document.getElementById('bl-cat') || {}).value || 'diger');
+            if (!title || !body) { toast('Baslik ve icerik gerekli.', 'error'); return; }
+            const list = await loadBulletin();
+            list.unshift({ id: 'ad_' + Date.now(), title: title, body: body, cat: cat, by: me, at: new Date().toISOString() });
+            if (list.length > 80) list.length = 80;
+            saveBulletin(list);
+            toast('Ilan yayinlandi');
+            openBulletin();
+        }
+        async function deleteBulletinAd(id) {
+            const me = getCurrentUser();
+            if (!me || !id) return;
+            let list = await loadBulletin();
+            const ad = list.find(function(a) { return a && a.id === id; });
+            if (!ad) return;
+            if (ad.by !== me && !isModerator(me)) { toast('Sadece kendi ilanini silebilirsin.', 'error'); return; }
+            if (!confirm('Ilan silinsin mi?')) return;
+            list = list.filter(function(a) { return a && a.id !== id; });
+            saveBulletin(list);
+            toast('Ilan silindi');
+            openBulletin();
+        }
+
+        // ========== FATURA SISTEMI ==========
+        async function loadInvoices() {
+            try {
+                if (typeof firebaseReady !== 'undefined' && firebaseReady) {
+                    const data = await fbGet('invoices');
+                    if (data) {
+                        const arr = Array.isArray(data) ? data : Object.values(data);
+                        try { localStorage.setItem('swordcity_invoices_v1', JSON.stringify(arr)); } catch (e) {}
+                        return arr;
+                    }
+                }
+            } catch (e) {}
+            try { return JSON.parse(localStorage.getItem('swordcity_invoices_v1') || '[]'); }
+            catch (e2) { return []; }
+        }
+        function saveInvoices(list) {
+            try { localStorage.setItem('swordcity_invoices_v1', JSON.stringify(list)); } catch (e) {}
+            if (typeof firebaseReady !== 'undefined' && firebaseReady) {
+                try { fbSet('invoices', list); } catch (e) {}
+            }
+        }
+        async function openInvoices() {
+            const me = getCurrentUser();
+            if (!me) { toast('Giris yapmalisin.', 'error'); return; }
+            const list = await loadInvoices();
+            const mine = list.filter(function(inv) {
+                return inv && (inv.from === me || inv.to === me);
+            });
+            let html = '';
+            html += '<button class="primary-btn" style="width:100%;margin-bottom:12px;" onclick="openInvoiceForm()">Fatura kes</button>';
+            if (!mine.length) {
+                html += '<p style="color:var(--text-muted);text-align:center;">Fatura yok.</p>';
+            } else {
+                mine.slice().sort(function(a,b){ return String(b.at||'').localeCompare(String(a.at||'')); }).forEach(function(inv) {
+                    const st = inv.status || 'pending';
+                    const stLabel = st === 'paid' ? '<span style="color:var(--success);">Odendi</span>' : (st === 'cancelled' ? '<span style="color:var(--text-muted);">Iptal</span>' : '<span style="color:var(--warning);">Bekliyor</span>');
+                    const dir = inv.from === me ? ('→ ' + escapeHtml(inv.to || '')) : ('← ' + escapeHtml(inv.from || ''));
+                    html += '<div class="info-card" style="margin-bottom:10px;">';
+                    html += '<div style="display:flex;justify-content:space-between;gap:8px;"><b>$' + Number(inv.amount || 0).toLocaleString('tr-TR') + '</b>' + stLabel + '</div>';
+                    html += '<div style="font-size:13px;margin-top:6px;">' + dir + '</div>';
+                    html += '<div style="font-size:12px;color:var(--text-muted);margin-top:4px;">' + escapeHtml(inv.note || '') + '</div>';
+                    html += '<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">' + (inv.at ? new Date(inv.at).toLocaleString('tr-TR') : '') + '</div>';
+                    if (st === 'pending' && inv.to === me) {
+                        html += '<div style="display:flex;gap:8px;margin-top:8px;">';
+                        html += '<button class="primary-btn" style="flex:1;margin:0;" onclick="payInvoice(\'' + String(inv.id).replace(/'/g, '') + '\')">Ode</button>';
+                        html += '<button class="danger-btn" style="flex:1;margin:0;" onclick="cancelInvoice(\'' + String(inv.id).replace(/'/g, '') + '\')">Reddet</button>';
+                        html += '</div>';
+                    }
+                    if (st === 'pending' && inv.from === me) {
+                        html += '<button class="danger-btn" style="width:auto;margin-top:8px;" onclick="cancelInvoice(\'' + String(inv.id).replace(/'/g, '') + '\')">Iptal</button>';
+                    }
+                    html += '</div>';
+                });
+            }
+            openModal('Faturalar', html + '<button class="back-btn" onclick="closeModal()">Kapat</button>');
+        }
+        function openInvoiceForm() {
+            const me = getCurrentUser();
+            if (!me) return;
+            const users = loadUsers();
+            const names = Object.keys(users).filter(function(n) { return n !== me; }).sort();
+            let opts = names.map(function(n) { return '<option value="' + escapeHtml(n) + '">' + escapeHtml(n) + '</option>'; }).join('');
+            if (!opts) opts = '<option value="">Oyuncu yok</option>';
+            let body = '';
+            body += '<div class="form-group"><label>Kime</label><select id="inv-to" style="width:100%;padding:10px;background:rgba(0,0,0,0.35);border:1px solid var(--border);border-radius:10px;color:var(--text);">' + opts + '</select></div>';
+            body += '<div class="form-group"><label>Tutar ($)</label><input type="number" id="inv-amt" min="1" step="1" value="100" style="width:100%;padding:10px;background:rgba(0,0,0,0.35);border:1px solid var(--border);border-radius:10px;color:var(--text);"></div>';
+            body += '<div class="form-group"><label>Aciklama</label><input type="text" id="inv-note" maxlength="120" placeholder="Orn: kira, ceza, hizmet" style="width:100%;padding:10px;background:rgba(0,0,0,0.35);border:1px solid var(--border);border-radius:10px;color:var(--text);"></div>';
+            body += '<button class="primary-btn" style="width:100%;" onclick="submitInvoice()">Gonder</button>';
+            body += '<button class="back-btn" onclick="openInvoices()">Geri</button>';
+            openModal('Fatura kes', body);
+        }
+        async function submitInvoice() {
+            const me = getCurrentUser();
+            if (!me) return;
+            const to = ((document.getElementById('inv-to') || {}).value || '').trim();
+            const amt = Math.floor(Number((document.getElementById('inv-amt') || {}).value) || 0);
+            const note = ((document.getElementById('inv-note') || {}).value || '').trim().slice(0, 120);
+            if (!to || to === me) { toast('Gecerli alici sec.', 'error'); return; }
+            if (amt < 1) { toast('Tutar en az 1.', 'error'); return; }
+            const users = loadUsers();
+            if (!users[to]) { toast('Oyuncu yok.', 'error'); return; }
+            const list = await loadInvoices();
+            list.unshift({ id: 'inv_' + Date.now(), from: me, to: to, amount: amt, note: note, status: 'pending', at: new Date().toISOString() });
+            if (list.length > 150) list.length = 150;
+            saveInvoices(list);
+            try { pushNotif(to, 'Fatura: $' + amt.toLocaleString('tr-TR') + ' — ' + me + (note ? (' (' + note + ')') : ''), 'warning'); } catch (e) {}
+            toast('Fatura gonderildi');
+            openInvoices();
+        }
+        async function payInvoice(id) {
+            const me = getCurrentUser();
+            if (!me || !id) return;
+            const list = await loadInvoices();
+            const inv = list.find(function(x) { return x && x.id === id; });
+            if (!inv || inv.status !== 'pending' || inv.to !== me) { toast('Fatura uygun degil.', 'error'); return; }
+            const users = loadUsers();
+            const payer = ensureUserFields(users[me] || {});
+            const payee = ensureUserFields(users[inv.from] || {});
+            const amt = Math.floor(Number(inv.amount) || 0);
+            if ((Number(payer.balance) || 0) < amt) { toast('Yetersiz bakiye.', 'error'); return; }
+            if (!confirm('$' + amt.toLocaleString('tr-TR') + ' odenecek. Onayla?')) return;
+            payer.balance = (Number(payer.balance) || 0) - amt;
+            payee.balance = (Number(payee.balance) || 0) + amt;
+            saveUser(me, payer);
+            saveUser(inv.from, payee);
+            inv.status = 'paid';
+            inv.paidAt = new Date().toISOString();
+            saveInvoices(list);
+            try { pushNotif(inv.from, me + ' faturani odeedi: $' + amt.toLocaleString('tr-TR'), 'success'); } catch (e) {}
+            toast('Odendi');
+            openInvoices();
+        }
+        async function cancelInvoice(id) {
+            const me = getCurrentUser();
+            if (!me || !id) return;
+            const list = await loadInvoices();
+            const inv = list.find(function(x) { return x && x.id === id; });
+            if (!inv || inv.status !== 'pending') return;
+            if (inv.from !== me && inv.to !== me && !isModerator(me)) return;
+            inv.status = 'cancelled';
+            saveInvoices(list);
+            toast('Iptal edildi');
+            openInvoices();
+        }
+
+        // ========== KUYUMCU GECMISI ==========
+        function openJewelerHistory() {
+            const me = getCurrentUser();
+            if (!me) return;
+            const u = ensureUserFields(getUser(me) || {});
+            const hist = Array.isArray(u.jewelerHistory) ? u.jewelerHistory : [];
+            let html = '';
+            if (!hist.length) html = '<p style="color:var(--text-muted);text-align:center;">Islem yok.</p>';
+            else {
+                hist.forEach(function(h) {
+                    const label = h.t === 'sell_gold' ? ('Sattin ' + h.amt + ' gold → +$' + Number(h.money||0).toLocaleString('tr-TR'))
+                        : (h.t === 'buy_gold' ? ('Aldin ' + h.amt + ' gold → -$' + Number(h.money||0).toLocaleString('tr-TR'))
+                        : (h.t || 'Islem'));
+                    html += '<div class="info-card" style="margin-bottom:8px;"><div style="font-size:13px;">' + escapeHtml(label) + '</div>';
+                    html += '<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">' + (h.at ? new Date(h.at).toLocaleString('tr-TR') : '') + '</div></div>';
+                });
+            }
+            openModal('Kuyumcu gecmisi', html + '<button class="back-btn" onclick="openJeweler()">Geri</button>');
+        }
+
+        // ========== SICIL ARAMA ==========
+        function openSicilSearch() {
+            if (!isModerator()) { toast('Sadece moderator.', 'error'); return; }
+            let body = '';
+            body += '<div class="form-group"><label>Isim ara</label><input type="text" id="sicil-q" placeholder="kullanici adi" style="width:100%;padding:10px;background:rgba(0,0,0,0.35);border:1px solid var(--border);border-radius:10px;color:var(--text);"></div>';
+            body += '<button class="primary-btn" style="width:100%;" onclick="runSicilSearch()">Ara</button>';
+            body += '<div id="sicil-search-results" style="margin-top:12px;"></div>';
+            body += '<button class="back-btn" onclick="showModUserList()">Geri</button>';
+            openModal('Sicil ara', body);
+        }
+        function runSicilSearch() {
+            if (!isModerator()) return;
+            const q = ((document.getElementById('sicil-q') || {}).value || '').trim().toLowerCase();
+            const users = loadUsers();
+            const box = document.getElementById('sicil-search-results');
+            if (!box) return;
+            let html = '';
+            Object.keys(users).forEach(function(n) {
+                if (q && n.toLowerCase().indexOf(q) === -1) return;
+                const u = ensureUserFields(users[n] || {});
+                const notes = Array.isArray(u.sicil) ? u.sicil.length : 0;
+                const warn = u.warnings || 0;
+                const pass = u.passportLevel || '—';
+                const idst = u.idStatus || 'none';
+                html += '<div class="info-card" style="margin-bottom:8px;cursor:pointer;" onclick="openSicilPanel(\'' + String(n).replace(/'/g, '') + '\')">';
+                html += '<b>' + formatDisplayName(n) + '</b>';
+                html += '<div style="font-size:12px;color:var(--text-muted);margin-top:4px;">Sicil ' + notes + ' · Uyari ' + warn + ' · Pasaport ' + escapeHtml(pass) + ' · Kimlik ' + escapeHtml(idst) + '</div>';
+                html += '</div>';
+            });
+            if (!html) html = '<p style="color:var(--text-muted);">Sonuc yok.</p>';
+            box.innerHTML = html;
+        }
+
+        // ========== DUYURU SABLONLARI ==========
+        function openAnnounceTemplates() {
+            if (!isModerator()) return;
+            const templates = [
+                { t: 'Bakim', m: 'Site kisa sureligine bakima alinacaktir. Anlayisiniz icin tesekkurler.' },
+                { t: 'Etkinlik', m: 'Bugun RP etkinligi var! Saat ve bolge duyurusu yakinda.' },
+                { t: 'Kural uyarisi', m: 'Kurallara uyulmasi zorunludur. Ihlaller cezalandirilir.' },
+                { t: 'Pasaport', m: 'Pasaport basvurulari aciktir. Kimliksiz giris sinirlidir.' }
+            ];
+            let html = '<p style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Sablon sec; duyuru paneline metin kopyalanir.</p>';
+            templates.forEach(function(tpl, i) {
+                html += '<div class="info-card" style="margin-bottom:8px;cursor:pointer;" onclick="applyAnnounceTemplate(' + i + ')">';
+                html += '<b>' + escapeHtml(tpl.t) + '</b><div style="font-size:12px;color:var(--text-muted);margin-top:4px;">' + escapeHtml(tpl.m) + '</div></div>';
+            });
+            window._announceTemplates = templates;
+            html += '<button class="back-btn" onclick="openModAnnouncePanel()">Geri</button>';
+            openModal('Duyuru sablonlari', html);
+        }
+        function applyAnnounceTemplate(i) {
+            const templates = window._announceTemplates || [];
+            const tpl = templates[i];
+            if (!tpl) return;
+            openModAnnouncePanel();
+            setTimeout(function() {
+                const el = document.getElementById('announce-text') || document.querySelector('#modal-body textarea');
+                if (el) el.value = tpl.m;
+                toast('Sablon yapistirildi');
+            }, 100);
+        }
+
+
         // ========== KİMLİK KARTI ==========
         function idStatusBadge(st) {
             const s = String(st || 'none');
@@ -15523,6 +15863,7 @@ Lütfen daha sonra tekrar gelin.</textarea>
                     const un = String(target).replace(/'/g, '');
                     body += '<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px;">';
                     body += '<button class="mod-btn" style="width:100%;margin:0;" onclick="openIdExtraEditor(\'' + un + '\')">Tum basliklari duzenle</button>';
+                    body += '<button class="mod-btn" style="width:100%;margin:0;" onclick="modChangeIdPhoto(\'' + un + '\')">Fotografi degistir</button>';
                     body += '<button class="danger-btn" style="width:100%;margin:0;" onclick="modRevokeIdentity(\'' + un + '\')">Kimligi kaldir</button>';
                     body += '</div>';
                 }
@@ -15842,6 +16183,51 @@ Lütfen daha sonra tekrar gelin.</textarea>
             toast('Basliklar kaydedildi');
             openIdentityCard(username);
         }
+
+        function modChangeIdPhoto(username) {
+            if (!isModerator()) { toast('Sadece moderator.', 'error'); return; }
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = 'image/png,image/jpeg,image/webp,image/gif';
+            input.onchange = function() {
+                const file = input.files && input.files[0];
+                if (!file) return;
+                if (!file.type || !file.type.startsWith('image/')) {
+                    toast('Gorsel sec.', 'error');
+                    return;
+                }
+                if (file.size > 1.5 * 1024 * 1024) {
+                    toast('Max 1.5 MB.', 'error');
+                    return;
+                }
+                const reader = new FileReader();
+                reader.onload = function() {
+                    const users = loadUsers();
+                    const u = ensureUserFields(users[username] || {});
+                    u.idPhoto = String(reader.result || '');
+                    u.idUpdatedAt = new Date().toISOString();
+                    saveUser(username, u);
+                    try { pushModLog('id_photo', username + ' foto guncellendi'); } catch (e) {}
+                    toast('Fotograf guncellendi');
+                    openIdentityCard(username);
+                };
+                reader.onerror = function() { toast('Fotograf okunamadi.', 'error'); };
+                reader.readAsDataURL(file);
+            };
+            input.click();
+        }
+        function modClearIdPhoto(username) {
+            if (!isModerator()) return;
+            if (!confirm('Kimlik fotografi kaldirilsin mi?')) return;
+            const users = loadUsers();
+            const u = ensureUserFields(users[username] || {});
+            u.idPhoto = '';
+            u.idUpdatedAt = new Date().toISOString();
+            saveUser(username, u);
+            toast('Fotograf kaldirildi');
+            openIdentityCard(username);
+        }
+
         function modRevokeIdentity(username) {
             if (!isModerator()) return;
             if (!confirm(username + ' kimligi kaldirilsin mi? Kullanici tekrar kimliksiz olur.')) return;
