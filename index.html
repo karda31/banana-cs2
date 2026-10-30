@@ -2092,6 +2092,11 @@
                     <div class="folder-name">Eve Tahayır</div>
                     <div class="folder-desc">Çark çevir & kazan</div>
                 </div>
+                <div class="folder" data-folder="yesno" onclick="openYesNoWheel()">
+                    <div class="folder-icon">🎲</div>
+                    <div class="folder-name">Evet mi Hayır mı?</div>
+                    <div class="folder-desc">Çarkı çevir, kararını şansa bırak</div>
+                </div>
                 <div class="folder" data-folder="moderator" id="mod-folder" onclick="openModerator()" style="display:none;">
                     <div class="folder-icon">🛡️</div>
                     <div class="folder-name">Moderatör</div>
@@ -18209,6 +18214,171 @@ Lütfen daha sonra tekrar gelin.</textarea>
         })();
 
     // Otomatik seed kaldırıldı — her yüklemede veri ezilmesin
+
+        // ========== EVET / HAYIR ÇARKI ==========
+        let yesNoLabels = [];
+        let yesNoRotation = 0;
+        let yesNoSpinning = false;
+        let yesNoSpins = 0;
+
+        function shuffleYesNoLabels() {
+            yesNoLabels = Array(30).fill('EVET').concat(Array(30).fill('HAYIR'));
+            for (let i = yesNoLabels.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [yesNoLabels[i], yesNoLabels[j]] = [yesNoLabels[j], yesNoLabels[i]];
+            }
+        }
+
+        function drawYesNoWheel() {
+            const canvas = document.getElementById('yesno-wheel');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            const total = 60;
+            const slice = Math.PI * 2 / total;
+            const cx = 450, cy = 450, r = 430;
+            const colors = { EVET: '#25B78A', HAYIR: '#FF6680' };
+            ctx.clearRect(0, 0, 900, 900);
+            for (let i = 0; i < total; i++) {
+                const start = -Math.PI / 2 + i * slice;
+                const end = start + slice;
+                ctx.beginPath();
+                ctx.moveTo(cx, cy);
+                ctx.arc(cx, cy, r, start, end);
+                ctx.closePath();
+                ctx.fillStyle = colors[yesNoLabels[i]];
+                ctx.fill();
+                ctx.strokeStyle = 'rgba(255,255,255,.78)';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                ctx.save();
+                ctx.translate(cx, cy);
+                ctx.rotate(start + slice / 2);
+                ctx.textAlign = 'right';
+                ctx.textBaseline = 'middle';
+                ctx.fillStyle = '#fff';
+                ctx.font = '800 17px system-ui, sans-serif';
+                ctx.shadowColor = 'rgba(0,0,0,.13)';
+                ctx.shadowBlur = 2;
+                ctx.fillText(yesNoLabels[i], r - 19, 0);
+                ctx.restore();
+            }
+            ctx.beginPath();
+            ctx.arc(cx, cy, 72, 0, Math.PI * 2);
+            ctx.fillStyle = '#1f0030';
+            ctx.fill();
+            ctx.lineWidth = 8;
+            ctx.strokeStyle = 'rgba(255,0,204,0.45)';
+            ctx.stroke();
+            ctx.fillStyle = '#ff66e0';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.font = '900 34px system-ui, sans-serif';
+            ctx.fillText('?', cx, cy + 1);
+        }
+
+        function openYesNoWheel() {
+            shuffleYesNoLabels();
+            yesNoRotation = 0;
+            yesNoSpinning = false;
+            const html = `
+                <div style="text-align:center;">
+                    <p style="font-size:13px;color:var(--text-muted);margin:0 0 12px;line-height:1.5;">Çarkta 30 “Evet” ve 30 “Hayır” bulunur. Her çevirme bağımsız ve rastgele sonuçlanır.</p>
+                    <div style="position:relative;width:min(100%,320px);aspect-ratio:1;margin:0 auto 16px;display:grid;place-items:center;">
+                        <div style="position:absolute;top:-6px;left:50%;transform:translateX(-50%);width:0;height:0;border-left:14px solid transparent;border-right:14px solid transparent;border-top:28px solid var(--accent);z-index:2;filter:drop-shadow(0 2px 4px rgba(0,0,0,.4));"></div>
+                        <canvas id="yesno-wheel" width="900" height="900" style="width:100%;height:100%;display:block;filter:drop-shadow(0 8px 20px rgba(255,0,204,0.25));transition:transform 4.3s cubic-bezier(.12,.72,.12,1);"></canvas>
+                    </div>
+                    <button class="primary-btn" id="yesno-spin-btn" style="width:100%;margin-bottom:10px;" onclick="spinYesNoWheel()">✦ ÇARKI ÇEVİR</button>
+                    <div style="min-height:70px;padding:12px 0 4px;">
+                        <div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--text-muted);font-weight:700;">SONUÇ</div>
+                        <div id="yesno-result" style="font-size:clamp(26px,5vw,36px);font-weight:900;letter-spacing:-.03em;margin-top:4px;">Hazır mısın?</div>
+                    </div>
+                    <button class="back-btn" style="width:100%;margin-top:6px;" onclick="mixYesNoWheel()">🔀 DİLİMLERİ KARIŞTIR</button>
+                    <div style="display:flex;gap:10px;margin-top:14px;">
+                        <div style="flex:1;background:rgba(0,0,0,.3);border-radius:12px;padding:12px;text-align:center;border:1px solid var(--border);">
+                            <strong id="yesno-yes-count" style="display:block;font-size:22px;color:#25B78A;">30</strong>
+                            <span style="font-size:11px;color:var(--text-muted);font-weight:700;">EVET</span>
+                        </div>
+                        <div style="flex:1;background:rgba(0,0,0,.3);border-radius:12px;padding:12px;text-align:center;border:1px solid var(--border);">
+                            <strong id="yesno-no-count" style="display:block;font-size:22px;color:#FF6680;">30</strong>
+                            <span style="font-size:11px;color:var(--text-muted);font-weight:700;">HAYIR</span>
+                        </div>
+                        <div style="flex:1;background:rgba(0,0,0,.3);border-radius:12px;padding:12px;text-align:center;border:1px solid var(--border);">
+                            <strong id="yesno-spin-count" style="display:block;font-size:22px;">0</strong>
+                            <span style="font-size:11px;color:var(--text-muted);font-weight:700;">ÇEVİRME</span>
+                        </div>
+                    </div>
+                </div>`;
+            openModal('🎲 Evet mi, Hayır mı?', html);
+            requestAnimationFrame(() => {
+                drawYesNoWheel();
+                const canvas = document.getElementById('yesno-wheel');
+                if (canvas) {
+                    canvas.style.transition = 'none';
+                    canvas.style.transform = 'rotate(0rad)';
+                    requestAnimationFrame(() => {
+                        canvas.style.transition = 'transform 4.3s cubic-bezier(.12,.72,.12,1)';
+                    });
+                }
+                yesNoSpins = 0;
+                const sc = document.getElementById('yesno-spin-count');
+                if (sc) sc.textContent = '0';
+            });
+        }
+
+        function mixYesNoWheel() {
+            if (yesNoSpinning) return;
+            shuffleYesNoLabels();
+            yesNoRotation = 0;
+            const canvas = document.getElementById('yesno-wheel');
+            if (canvas) {
+                canvas.style.transition = 'none';
+                canvas.style.transform = 'rotate(0rad)';
+                drawYesNoWheel();
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(() => {
+                        canvas.style.transition = 'transform 4.3s cubic-bezier(.12,.72,.12,1)';
+                    });
+                });
+            }
+            const out = document.getElementById('yesno-result');
+            if (out) {
+                out.textContent = 'Dilimler karıştırıldı!';
+                out.style.color = 'var(--text)';
+            }
+        }
+
+        function spinYesNoWheel() {
+            if (yesNoSpinning) return;
+            yesNoSpinning = true;
+            const btn = document.getElementById('yesno-spin-btn');
+            const canvas = document.getElementById('yesno-wheel');
+            const out = document.getElementById('yesno-result');
+            if (btn) { btn.disabled = true; btn.textContent = '✦ ÇARK DÖNÜYOR…'; }
+            if (out) { out.textContent = ''; out.style.color = 'var(--text)'; }
+
+            const pick = Math.random() < 0.5 ? 'EVET' : 'HAYIR';
+            const targetIndex = yesNoLabels.indexOf(pick);
+            const total = 60;
+            const slice = Math.PI * 2 / total;
+            const current = ((yesNoRotation % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+            const targetAngle = -(targetIndex + 0.5) * slice;
+            let delta = (targetAngle - current) % (Math.PI * 2);
+            if (delta < 0) delta += Math.PI * 2;
+            yesNoRotation += Math.PI * 2 * (5 + Math.floor(Math.random() * 3)) + delta;
+            if (canvas) canvas.style.transform = `rotate(${yesNoRotation}rad)`;
+
+            setTimeout(() => {
+                if (out) {
+                    out.textContent = pick;
+                    out.style.color = pick === 'EVET' ? '#25B78A' : '#FF6680';
+                }
+                yesNoSpins++;
+                const sc = document.getElementById('yesno-spin-count');
+                if (sc) sc.textContent = yesNoSpins;
+                if (btn) { btn.disabled = false; btn.textContent = '✦ TEKRAR ÇEVİR'; }
+                yesNoSpinning = false;
+            }, 4400);
+        }
 
     </script>
 </body>
