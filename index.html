@@ -8789,7 +8789,11 @@
             openModal('🎒 Envanterim', list);
         }
 
-        // ========== OUTFITS / KIYAFET SİSTEMİ ==========
+        // ========== OUTFITS / KOSTÜM SİSTEMİ (Brawl Stars tarzı) ==========
+        // Karakterin görseli kostüm seçilince o kostümün fotoğrafına döner.
+        // Kostüm = envanterdeki "kiyafet / outfit" kategorili item.
+        // Seçince karakterin image alanı kostümün image'ine geçer (kostümlü hali).
+
         function openOutfits() {
             const me = getCurrentUser();
             const user = getUser(me);
@@ -8804,79 +8808,115 @@
                 if (isOutfitCategory(it.category)) outfits.push({ idx: idx, it: it, raw: raw });
             });
 
-            let html = '<div style="max-width:560px;margin:0 auto;">';
-            html += '<p style="color:var(--text-muted);font-size:13px;margin-bottom:14px;text-align:center;">Envanterindeki karakterlere sahip olduğun kıyafetleri giydir. Değişiklik anında kaydedilir ve görsel otomatik güncellenir.</p>';
+            let html = '<div style="max-width:580px;margin:0 auto;">';
+            html += '<p style="color:var(--text-muted);font-size:13px;margin-bottom:16px;text-align:center;line-height:1.45;">Brawl Stars gibi kostüm sistemi.<br>Kostüm seçince karakterin <b>fotoğrafı kostümlü haline</b> geçer. Değişiklik anında kaydedilir.</p>';
 
             if (chars.length === 0) {
-                html += '<p style="color:var(--warning);text-align:center;padding:20px;">Henüz karakterin yok. Envanterden karakter ekle veya pazardan al.</p>';
+                html += '<p style="color:var(--warning);text-align:center;padding:24px;">Henüz karakterin yok.<br>Envanterden karakter ekle veya pazardan al.</p>';
             } else {
-                html += '<div style="margin-bottom:16px;"><label style="font-weight:600;display:block;margin-bottom:6px;">⚔️ Karakter seç</label>';
-                html += '<select id="outfit-char-select" style="width:100%;padding:12px;border-radius:12px;background:rgba(0,0,0,0.4);border:1px solid var(--border);color:var(--text);font-size:15px;">';
+                // Karakter seçici
+                html += '<div style="margin-bottom:14px;"><label style="font-weight:700;display:block;margin-bottom:6px;font-size:14px;">⚔️ Karakter</label>';
+                html += '<select id="outfit-char-select" style="width:100%;padding:12px;border-radius:12px;background:rgba(0,0,0,0.45);border:1px solid var(--border);color:var(--text);font-size:15px;font-family:inherit;">';
                 chars.forEach(function(c) {
-                    const eq = c.it.equippedName ? ' (👗 ' + escapeHtml(c.it.equippedName) + ')' : '';
+                    const eq = c.it.equippedName ? '  •  ' + escapeHtml(c.it.equippedName) : '';
                     html += '<option value="' + c.idx + '">' + escapeHtml(c.it.name) + eq + '</option>';
                 });
                 html += '</select></div>';
 
-                // Önizleme
-                html += '<div id="outfit-preview" style="text-align:center;margin:16px 0;padding:16px;background:rgba(0,0,0,0.3);border-radius:16px;border:1px solid var(--border);">';
-                html += '<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">Önizleme</div>';
-                html += '<div id="outfit-preview-img" style="width:140px;height:140px;margin:0 auto;border-radius:16px;overflow:hidden;border:2px solid var(--border);background:#0a0014;display:flex;align-items:center;justify-content:center;font-size:48px;">⚔️</div>';
-                html += '<div id="outfit-preview-name" style="margin-top:10px;font-weight:700;"></div>';
-                html += '<div id="outfit-preview-eq" style="font-size:12px;color:var(--accent-soft);margin-top:4px;"></div>';
+                // BÜYÜK ÖNİZLEME - Kostümlü hali burada görünür
+                html += '<div id="outfit-preview" style="text-align:center;margin:18px 0;padding:18px;background:linear-gradient(180deg,rgba(255,0,204,0.08),rgba(0,0,0,0.35));border-radius:20px;border:1px solid var(--border);box-shadow:0 0 30px rgba(255,0,204,0.12);">';
+                html += '<div style="font-size:11px;letter-spacing:1.5px;color:var(--accent-soft);margin-bottom:10px;font-weight:600;">KOSTÜMLÜ HALİ</div>';
+                html += '<div id="outfit-preview-img" style="width:180px;height:180px;margin:0 auto;border-radius:20px;overflow:hidden;border:3px solid var(--border);background:#0a0014;display:flex;align-items:center;justify-content:center;font-size:56px;box-shadow:0 8px 28px rgba(0,0,0,0.45);"></div>';
+                html += '<div id="outfit-preview-name" style="margin-top:12px;font-weight:700;font-size:17px;color:var(--text);"></div>';
+                html += '<div id="outfit-preview-eq" style="font-size:13px;color:var(--accent-soft);margin-top:4px;"></div>';
                 html += '</div>';
 
-                html += '<div style="margin-bottom:16px;"><label style="font-weight:600;display:block;margin-bottom:6px;">👗 Kıyafet seç</label>';
+                // Kostüm seçici
+                html += '<div style="margin-bottom:14px;"><label style="font-weight:700;display:block;margin-bottom:6px;font-size:14px;">👗 Kostüm seç</label>';
                 if (outfits.length === 0) {
-                    html += '<p style="color:var(--text-muted);font-size:13px;">Envanterinde kıyafet (kategori: kıyafet / outfit) yok. Moderators kıyafet ekleyebilir veya craft/pazar ile elde et.</p>';
+                    html += '<p style="color:var(--text-muted);font-size:13px;padding:8px 0;">Envanterinde kostüm yok.<br>Kategori <b>kiyafet</b> veya <b>outfit</b> olan itemlar buraya gelir. Moderatör verebilir.</p>';
                 } else {
-                    html += '<select id="outfit-item-select" style="width:100%;padding:12px;border-radius:12px;background:rgba(0,0,0,0.4);border:1px solid var(--border);color:var(--text);font-size:15px;">';
-                    html += '<option value="">— Kıyafet seç —</option>';
+                    html += '<select id="outfit-item-select" style="width:100%;padding:12px;border-radius:12px;background:rgba(0,0,0,0.45);border:1px solid var(--border);color:var(--text);font-size:15px;font-family:inherit;">';
+                    html += '<option value="">— Kostüm seç (önizleme için) —</option>';
                     outfits.forEach(function(o) {
                         html += '<option value="' + o.idx + '">' + escapeHtml(o.it.name) + '</option>';
                     });
                     html += '</select>';
+                    html += '<p style="font-size:11px;color:var(--text-muted);margin-top:6px;">Kostüm seçince yukarıdaki fotoğraf anında kostümlü haline döner. "Giydir" deyince kalıcı olur.</p>';
                 }
                 html += '</div>';
 
-                html += '<div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;">';
-                html += '<button type="button" class="primary-btn" onclick="equipOutfitToChar()" style="flex:1;min-width:140px;">👗 Giydir</button>';
-                html += '<button type="button" onclick="unequipOutfitFromChar()" style="flex:1;min-width:140px;padding:12px;background:rgba(255,61,113,0.2);border:1px solid rgba(255,61,113,0.45);color:#ff3d71;border-radius:12px;cursor:pointer;font-weight:600;">🗑 Kıyafeti Çıkar</button>';
+                // Butonlar
+                html += '<div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:8px;">';
+                html += '<button type="button" class="primary-btn" onclick="equipOutfitToChar()" style="flex:1;min-width:150px;padding:14px;font-size:15px;">👗 Kostümü Giydir</button>';
+                html += '<button type="button" onclick="unequipOutfitFromChar()" style="flex:1;min-width:130px;padding:14px;background:rgba(255,61,113,0.18);border:1px solid rgba(255,61,113,0.45);color:#ff3d71;border-radius:12px;cursor:pointer;font-weight:700;font-size:14px;">Varsayılana Dön</button>';
                 html += '</div>';
 
+                // Moderatör
                 if (isModerator()) {
-                    html += '<div style="margin-top:22px;padding-top:16px;border-top:1px solid var(--border);">';
-                    html += '<div style="font-weight:700;color:var(--accent-soft);margin-bottom:8px;">🛡️ Moderatör: Başka oyuncunun karakterine kıyafet ayarla</div>';
-                    html += '<input type="text" id="mod-outfit-user" placeholder="Kullanıcı adı" style="width:100%;padding:10px;margin-bottom:8px;border-radius:10px;background:rgba(0,0,0,0.35);border:1px solid var(--border);color:var(--text);">';
+                    html += '<div style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border);">';
+                    html += '<div style="font-weight:700;color:var(--accent-soft);margin-bottom:8px;font-size:14px;">🛡️ Moderatör — Oyuncuya kostüm ayarla</div>';
+                    html += '<input type="text" id="mod-outfit-user" placeholder="Kullanıcı adı" style="width:100%;padding:11px;margin-bottom:8px;border-radius:10px;background:rgba(0,0,0,0.35);border:1px solid var(--border);color:var(--text);font-family:inherit;">';
                     html += '<button type="button" class="mod-btn" onclick="modOpenUserOutfits()" style="width:100%;">Oyuncunun karakterlerini aç</button>';
                     html += '</div>';
                 }
             }
             html += '</div>';
 
-            openModal('👗 Outfits — Kıyafet Giydir', html);
-            // İlk önizlemeyi yükle
-            setTimeout(function() { updateOutfitPreview(); }, 50);
-            const sel = document.getElementById('outfit-char-select');
-            if (sel) sel.addEventListener('change', updateOutfitPreview);
+            openModal('👗 Kostümler (Outfits)', html);
+
+            // Eventler
+            setTimeout(function() {
+                updateOutfitPreview();
+                const charSel = document.getElementById('outfit-char-select');
+                const outfitSel = document.getElementById('outfit-item-select');
+                if (charSel) charSel.addEventListener('change', function() { updateOutfitPreview(true); });
+                if (outfitSel) outfitSel.addEventListener('change', function() { updateOutfitPreview(false); });
+            }, 40);
         }
 
-        function updateOutfitPreview() {
-            const sel = document.getElementById('outfit-char-select');
+        // previewMode: true = sadece karakterin mevcut hali, false = seçili kostümün fotoğrafını göster
+        function updateOutfitPreview(forceCharOnly) {
+            const charSel = document.getElementById('outfit-char-select');
+            const outfitSel = document.getElementById('outfit-item-select');
             const imgEl = document.getElementById('outfit-preview-img');
             const nameEl = document.getElementById('outfit-preview-name');
             const eqEl = document.getElementById('outfit-preview-eq');
-            if (!sel || !imgEl) return;
+            if (!charSel || !imgEl) return;
+
             const me = getCurrentUser();
             const user = getUser(me);
-            const idx = parseInt(sel.value, 10);
-            if (!user || !user.inventory || !user.inventory[idx]) return;
-            const it = normalizeItem(user.inventory[idx]);
-            const disp = getDisplayImage(it);
-            nameEl.textContent = it.name;
-            eqEl.textContent = it.equippedName ? ('Giydiği: ' + it.equippedName) : 'Kıyafet yok (varsayılan görsel)';
-            if (disp) {
-                imgEl.innerHTML = '<img src="' + escapeHtml(disp) + '" style="width:100%;height:100%;object-fit:cover;" onerror="this.parentElement.innerHTML=\'⚔️\'">';
+            const cIdx = parseInt(charSel.value, 10);
+            if (!user || !user.inventory || !user.inventory[cIdx]) return;
+
+            const charIt = normalizeItem(user.inventory[cIdx]);
+            nameEl.textContent = charIt.name;
+
+            let showImg = '';
+            let statusTxt = '';
+
+            // Eğer kostüm seçiliyse ve forceCharOnly değilse → o kostümün fotoğrafını göster (önizleme)
+            if (!forceCharOnly && outfitSel && outfitSel.value !== '') {
+                const oIdx = parseInt(outfitSel.value, 10);
+                if (!isNaN(oIdx) && user.inventory[oIdx]) {
+                    const oIt = normalizeItem(user.inventory[oIdx]);
+                    showImg = oIt.image || '';
+                    statusTxt = 'Önizleme: ' + (oIt.name || 'Kostüm');
+                }
+            }
+
+            // Kostüm seçili değilse veya force → karakterin şu anki (giyili) halini göster
+            if (!showImg) {
+                showImg = getDisplayImage(charIt) || charIt.image || '';
+                statusTxt = charIt.equippedName
+                    ? ('Aktif kostüm: ' + charIt.equippedName)
+                    : 'Varsayılan görünüm (kostüm yok)';
+            }
+
+            eqEl.textContent = statusTxt;
+
+            if (showImg) {
+                imgEl.innerHTML = '<img src="' + escapeHtml(showImg) + '" alt="kostüm" style="width:100%;height:100%;object-fit:cover;" onerror="this.parentElement.innerHTML=\'⚔️\'">';
             } else {
                 imgEl.innerHTML = '⚔️';
             }
@@ -8886,38 +8926,53 @@
             const me = getCurrentUser();
             const users = loadUsers();
             if (!users[me] || !Array.isArray(users[me].inventory)) { toast('Hata.', 'error'); return; }
+
             const charSel = document.getElementById('outfit-char-select');
             const outfitSel = document.getElementById('outfit-item-select');
             if (!charSel || !outfitSel) return;
+
             const cIdx = parseInt(charSel.value, 10);
             const oIdx = parseInt(outfitSel.value, 10);
-            if (isNaN(cIdx) || isNaN(oIdx) || !users[me].inventory[cIdx] || !users[me].inventory[oIdx]) {
-                toast('Karakter ve kıyafet seç.', 'error');
-                return;
+
+            if (isNaN(cIdx) || !users[me].inventory[cIdx]) {
+                toast('Karakter seç.', 'error'); return;
             }
+            if (isNaN(oIdx) || !users[me].inventory[oIdx]) {
+                toast('Kostüm seç.', 'error'); return;
+            }
+
             const charRaw = users[me].inventory[cIdx];
             const outfitIt = normalizeItem(users[me].inventory[oIdx]);
-            if (!isCharacterCategory(normalizeItem(charRaw).category)) { toast('Seçilen karakter değil.', 'error'); return; }
-            if (!isOutfitCategory(outfitIt.category)) { toast('Seçilen kıyafet değil.', 'error'); return; }
 
-            // baseImage koru
+            if (!isCharacterCategory(normalizeItem(charRaw).category)) {
+                toast('Seçilen şey karakter değil.', 'error'); return;
+            }
+            if (!isOutfitCategory(outfitIt.category)) {
+                toast('Seçilen şey kostüm değil (kategori: kiyafet / outfit olmalı).', 'error'); return;
+            }
+            if (!outfitIt.image) {
+                toast('Bu kostümün görseli yok. Önce görsel ekle.', 'error'); return;
+            }
+
+            // Karakteri kopyala, baseImage sakla, kostümün fotoğrafını uygula
             const char = (typeof charRaw === 'object') ? Object.assign({}, charRaw) : { name: String(charRaw) };
-            if (!char.baseImage && char.image) char.baseImage = char.image;
-            char.equippedImage = outfitIt.image || '';
-            char.equippedName = outfitIt.name || '';
-            // Görsel olarak da güncelle (display için)
-            if (outfitIt.image) char.image = outfitIt.image;
+            if (!char.baseImage) {
+                // İlk defa kostüm giyiliyorsa mevcut image'i base olarak kaydet
+                char.baseImage = char.image || '';
+            }
+            char.equippedImage = outfitIt.image;
+            char.equippedName = outfitIt.name || 'Kostüm';
+            char.image = outfitIt.image;   // ← asıl fotoğraf değişir (kostümlü hali)
 
             users[me].inventory = users[me].inventory.slice();
             users[me].inventory[cIdx] = char;
-            // invVersion artır
             users[me].invVersion = (users[me].invVersion || 0) + 1;
             users[me].updatedAt = Date.now();
             saveUsers(users);
             try { pushUserToFirebase(me); } catch (e) {}
-            toast('"' + outfitIt.name + '" giydirildi! Görsel güncellendi.', 'success');
-            updateOutfitPreview();
-            // Envanter açıksa yenile
+
+            toast('Kostüm giyildi! Karakterin fotoğrafı güncellendi.', 'success');
+            updateOutfitPreview(true); // artık aktif hali göster
             try { if (window._inventoryOpen) showInventory(window._invFilter || 'all'); } catch (e) {}
         }
 
@@ -8925,24 +8980,34 @@
             const me = getCurrentUser();
             const users = loadUsers();
             if (!users[me] || !Array.isArray(users[me].inventory)) return;
+
             const charSel = document.getElementById('outfit-char-select');
             if (!charSel) return;
             const cIdx = parseInt(charSel.value, 10);
             if (isNaN(cIdx) || !users[me].inventory[cIdx]) return;
+
             const charRaw = users[me].inventory[cIdx];
             const char = (typeof charRaw === 'object') ? Object.assign({}, charRaw) : { name: String(charRaw) };
-            const base = char.baseImage || char.image || '';
+
+            const base = char.baseImage || '';
             char.equippedImage = '';
             char.equippedName = '';
-            if (base) char.image = base;
+            if (base) {
+                char.image = base; // eski fotoğrafa dön
+            }
+
             users[me].inventory = users[me].inventory.slice();
             users[me].inventory[cIdx] = char;
             users[me].invVersion = (users[me].invVersion || 0) + 1;
             users[me].updatedAt = Date.now();
             saveUsers(users);
             try { pushUserToFirebase(me); } catch (e) {}
-            toast('Kıyafet çıkarıldı. Varsayılan görsel geri yüklendi.', 'success');
-            updateOutfitPreview();
+
+            toast('Kostüm çıkarıldı. Varsayılan fotoğraf geri yüklendi.', 'success');
+            // Kostüm seçimini de sıfırla
+            const outfitSel = document.getElementById('outfit-item-select');
+            if (outfitSel) outfitSel.value = '';
+            updateOutfitPreview(true);
             try { if (window._inventoryOpen) showInventory(window._invFilter || 'all'); } catch (e) {}
         }
 
@@ -8953,7 +9018,7 @@
             if (!u) { toast('Kullanıcı adı yaz.', 'error'); return; }
             const users = loadUsers();
             if (!users[u]) { toast('Kullanıcı bulunamadı.', 'error'); return; }
-            // Basit: o kullanıcının karakterlerini listele ve kıyafet seçtir
+
             const inv = users[u].inventory || [];
             const chars = [];
             inv.forEach(function(raw, idx) {
@@ -8961,42 +9026,46 @@
                 if (isCharacterCategory(it.category)) chars.push({ idx: idx, it: it });
             });
             if (chars.length === 0) { toast('Bu kullanıcının karakteri yok.', 'error'); return; }
-            let html = '<p style="color:var(--text-muted);margin-bottom:12px;">Mod: <b>' + escapeHtml(u) + '</b> karakterlerine kıyafet ayarla. Kıyafet senin envanterinden veya boş bırakarak çıkar.</p>';
-            html += '<select id="mod-char-sel" style="width:100%;padding:10px;margin-bottom:10px;border-radius:10px;background:rgba(0,0,0,0.35);border:1px solid var(--border);color:var(--text);">';
+
+            let html = '<p style="color:var(--text-muted);margin-bottom:12px;font-size:13px;">Mod: <b>' + escapeHtml(u) + '</b> karakterine kostüm uygula.<br>Kostüm senin envanterinden veya direkt görsel URL ile.</p>';
+            html += '<select id="mod-char-sel" style="width:100%;padding:11px;margin-bottom:10px;border-radius:10px;background:rgba(0,0,0,0.35);border:1px solid var(--border);color:var(--text);font-family:inherit;">';
             chars.forEach(function(c) {
-                html += '<option value="' + c.idx + '">' + escapeHtml(c.it.name) + (c.it.equippedName ? ' (👗 ' + escapeHtml(c.it.equippedName) + ')' : '') + '</option>';
+                html += '<option value="' + c.idx + '">' + escapeHtml(c.it.name) + (c.it.equippedName ? '  •  ' + escapeHtml(c.it.equippedName) : '') + '</option>';
             });
             html += '</select>';
-            // Kıyafet: modun kendi envanterinden veya URL
+
             const myInv = (getUser(getCurrentUser()) || {}).inventory || [];
             const myOutfits = [];
             myInv.forEach(function(raw, idx) {
                 const it = normalizeItem(raw);
                 if (isOutfitCategory(it.category)) myOutfits.push({ idx: idx, it: it });
             });
-            html += '<select id="mod-outfit-sel" style="width:100%;padding:10px;margin-bottom:10px;border-radius:10px;background:rgba(0,0,0,0.35);border:1px solid var(--border);color:var(--text);">';
-            html += '<option value="">— Kıyafeti çıkar / varsayılan —</option>';
+            html += '<select id="mod-outfit-sel" style="width:100%;padding:11px;margin-bottom:10px;border-radius:10px;background:rgba(0,0,0,0.35);border:1px solid var(--border);color:var(--text);font-family:inherit;">';
+            html += '<option value="">— Kostümü çıkar (varsayılan) —</option>';
             myOutfits.forEach(function(o) {
                 html += '<option value="inv:' + o.idx + '">' + escapeHtml(o.it.name) + '</option>';
             });
             html += '</select>';
-            html += '<input type="text" id="mod-outfit-url" placeholder="veya direkt görsel URL (opsiyonel)" style="width:100%;padding:10px;margin-bottom:10px;border-radius:10px;background:rgba(0,0,0,0.35);border:1px solid var(--border);color:var(--text);">';
-            html += '<button type="button" class="primary-btn" onclick="modApplyOutfit(\'' + escapeHtml(u).replace(/'/g, "\\'") + '\')">Uygula</button>';
-            openModal('🛡️ Mod Outfits — ' + escapeHtml(u), html);
+            html += '<input type="text" id="mod-outfit-url" placeholder="veya direkt kostüm görsel URL" style="width:100%;padding:11px;margin-bottom:12px;border-radius:10px;background:rgba(0,0,0,0.35);border:1px solid var(--border);color:var(--text);font-family:inherit;">';
+            html += '<button type="button" class="primary-btn" onclick="modApplyOutfit(\'' + escapeHtml(u).replace(/'/g, "\\'") + '\')" style="width:100%;">Uygula</button>';
+            openModal('🛡️ Mod Kostüm — ' + escapeHtml(u), html);
         }
 
         function modApplyOutfit(targetUser) {
             if (!isModerator()) return;
             const users = loadUsers();
             if (!users[targetUser]) { toast('Kullanıcı yok.', 'error'); return; }
+
             const cIdx = parseInt((document.getElementById('mod-char-sel') || {}).value, 10);
             if (isNaN(cIdx) || !users[targetUser].inventory || !users[targetUser].inventory[cIdx]) {
                 toast('Karakter seç.', 'error'); return;
             }
+
             const sel = (document.getElementById('mod-outfit-sel') || {}).value || '';
             const url = ((document.getElementById('mod-outfit-url') || {}).value || '').trim();
             let eqImg = '';
             let eqName = '';
+
             if (sel.startsWith('inv:')) {
                 const oIdx = parseInt(sel.slice(4), 10);
                 const me = getCurrentUser();
@@ -9007,15 +9076,22 @@
                     eqName = oit.name || '';
                 }
             }
-            if (url) { eqImg = url; if (!eqName) eqName = 'Özel URL'; }
+            if (url) {
+                eqImg = url;
+                if (!eqName) eqName = 'Özel Kostüm';
+            }
 
             const charRaw = users[targetUser].inventory[cIdx];
             const char = (typeof charRaw === 'object') ? Object.assign({}, charRaw) : { name: String(charRaw) };
             if (!char.baseImage && char.image) char.baseImage = char.image;
+
             char.equippedImage = eqImg;
             char.equippedName = eqName;
-            if (eqImg) char.image = eqImg;
-            else if (char.baseImage) char.image = char.baseImage;
+            if (eqImg) {
+                char.image = eqImg; // fotoğraf kostümlü haline geçer
+            } else if (char.baseImage) {
+                char.image = char.baseImage;
+            }
 
             users[targetUser].inventory = users[targetUser].inventory.slice();
             users[targetUser].inventory[cIdx] = char;
@@ -9023,8 +9099,8 @@
             users[targetUser].updatedAt = Date.now();
             saveUsers(users);
             try { pushUserToFirebase(targetUser); } catch (e) {}
-            try { pushModLog('outfit', targetUser + ' karakterine kıyafet uygulandı: ' + (eqName || 'çıkarıldı')); } catch (e) {}
-            toast('Uygulandı. Görsel güncellendi.', 'success');
+            try { pushModLog('outfit', targetUser + ' karakterine kostüm uygulandı: ' + (eqName || 'çıkarıldı')); } catch (e) {}
+            toast('Kostüm uygulandı. Fotoğraf güncellendi.', 'success');
             closeModal();
         }
 
