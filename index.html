@@ -18860,15 +18860,18 @@ Lütfen daha sonra tekrar gelin.</textarea>
         }
 
 
-        // ========== INTRO VIDEO SİSTEMİ ==========
+        // ========== INTRO VIDEO SİSTEMİ (MP4 autoplay) ==========
         const INTRO_STORAGE_KEY = 'swordcity_intro_v1';
         const INTRO_SEEN_KEY = 'swordcity_intro_seen_v1';
 
+        // Varsayılan: kendi MP4 linkini moderatör panelinden değiştir
+        // Örnek: https://senin-cdn.com/intro.mp4  veya  /intro.mp4 (aynı repoda dosya)
         let _introCache = {
             enabled: true,
-            url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+            url: 'intro.mp4',
             skippable: true,
-            forceEveryVisit: false
+            forceEveryVisit: false,
+            muted: true
         };
 
         function loadIntroSettings() {
@@ -18896,12 +18899,6 @@ Lütfen daha sonra tekrar gelin.</textarea>
             }
         }
 
-        function extractYouTubeId(url) {
-            if (!url) return null;
-            const m = String(url).match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/))([A-Za-z0-9_-]{6,})/);
-            return m ? m[1] : null;
-        }
-
         function shouldShowIntro() {
             if (!_introCache.enabled) return false;
             if (_introCache.forceEveryVisit) return true;
@@ -18919,11 +18916,17 @@ Lütfen daha sonra tekrar gelin.</textarea>
         function closeIntroVideo() {
             const ov = document.getElementById('intro-video-overlay');
             const mount = document.getElementById('intro-video-mount');
+            if (mount) {
+                const v = mount.querySelector('video');
+                if (v) {
+                    try { v.pause(); v.removeAttribute('src'); v.load(); } catch (e) {}
+                }
+                mount.innerHTML = '';
+            }
             if (ov) {
                 ov.classList.remove('show');
                 ov.setAttribute('aria-hidden', 'true');
             }
-            if (mount) mount.innerHTML = '';
             markIntroSeen();
         }
 
@@ -18938,39 +18941,65 @@ Lütfen daha sonra tekrar gelin.</textarea>
             const url = (_introCache.url || '').trim();
             if (!url) return;
 
+            // YouTube linki gelirse reddet / uyar
+            if (/youtube\.com|youtu\.be/i.test(url)) {
+                console.warn('Intro: YouTube desteklenmiyor, MP4 kullan.');
+                return;
+            }
+
             mount.innerHTML = '';
             if (skipBtn) skipBtn.style.display = _introCache.skippable === false ? 'none' : '';
 
-            const ytId = extractYouTubeId(url);
-            if (ytId) {
-                const iframe = document.createElement('iframe');
-                iframe.src = 'https://www.youtube.com/embed/' + ytId + '?autoplay=1&mute=1&controls=1&rel=0&modestbranding=1&playsinline=1';
-                iframe.allow = 'autoplay; encrypted-media; picture-in-picture';
-                iframe.allowFullscreen = true;
-                iframe.title = 'Intro Video';
-                iframe.style.width = '100%';
-                iframe.style.height = '100%';
-                iframe.style.border = '0';
-                mount.appendChild(iframe);
-            } else {
-                const video = document.createElement('video');
-                video.src = url;
-                video.autoplay = true;
-                video.muted = true;
-                video.controls = true;
-                video.playsInline = true;
-                video.style.width = '100%';
-                video.style.height = '100%';
-                video.style.objectFit = 'contain';
-                video.onended = function () { closeIntroVideo(); };
-                video.onerror = function () { closeIntroVideo(); };
-                mount.appendChild(video);
-                const p = video.play();
-                if (p && typeof p.catch === 'function') p.catch(function () {});
-            }
+            const video = document.createElement('video');
+            video.id = 'intro-video-el';
+            video.src = url;
+            video.autoplay = true;
+            video.playsInline = true;
+            video.preload = 'auto';
+            video.controls = false;
+            // Tarayıcılar sessiz olmadan autoplay'e izin vermez
+            video.muted = _introCache.muted !== false;
+            video.setAttribute('muted', '');
+            video.setAttribute('playsinline', '');
+            video.setAttribute('webkit-playsinline', '');
+            video.style.width = '100%';
+            video.style.height = '100%';
+            video.style.objectFit = 'contain';
+            video.style.background = '#000';
 
+            video.onended = function () { closeIntroVideo(); };
+            video.onerror = function () {
+                console.warn('Intro video yüklenemedi:', url);
+                closeIntroVideo();
+            };
+
+            // tıkla = ses aç (opsiyonel)
+            video.addEventListener('click', function () {
+                if (video.muted) {
+                    video.muted = false;
+                    video.volume = 1;
+                }
+            });
+
+            mount.appendChild(video);
             ov.classList.add('show');
             ov.setAttribute('aria-hidden', 'false');
+
+            const tryPlay = function () {
+                const p = video.play();
+                if (p && typeof p.catch === 'function') {
+                    p.catch(function () {
+                        // Autoplay engellendiyse muted garantile ve tekrar dene
+                        video.muted = true;
+                        video.play().catch(function () {});
+                    });
+                }
+            };
+            if (video.readyState >= 2) tryPlay();
+            else video.addEventListener('loadeddata', tryPlay, { once: true });
+            // ekstra güvence
+            setTimeout(tryPlay, 100);
+            setTimeout(tryPlay, 400);
         }
 
         function openIntroModPanel() {
@@ -18982,6 +19011,10 @@ Lütfen daha sonra tekrar gelin.</textarea>
             const safeUrl = String(s.url || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
             openModal('🎬 Intro Video Ayarları', `
                 <div class="info-card">
+                    <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px;line-height:1.5;">
+                        Sadece <b>MP4 / WEBM</b> linki kullan. YouTube çalışmaz.<br>
+                        Dosyayı repoya koyduysan: <code>intro.mp4</code>
+                    </p>
                     <div class="form-group">
                         <label>Durum</label>
                         <select id="intro-enabled" style="width:100%;padding:10px;background:rgba(0,0,0,.35);border:1px solid var(--border);border-radius:10px;color:var(--text);">
@@ -18990,14 +19023,14 @@ Lütfen daha sonra tekrar gelin.</textarea>
                         </select>
                     </div>
                     <div class="form-group">
-                        <label>Video URL (YouTube veya MP4)</label>
-                        <input id="intro-url" type="text" value="${safeUrl}" placeholder="https://www.youtube.com/watch?v=... veya .mp4" style="width:100%;padding:10px;background:rgba(0,0,0,.35);border:1px solid var(--border);border-radius:10px;color:var(--text);">
+                        <label>Video URL (MP4)</label>
+                        <input id="intro-url" type="text" value="${safeUrl}" placeholder="intro.mp4 veya https://.../intro.mp4" style="width:100%;padding:10px;background:rgba(0,0,0,.35);border:1px solid var(--border);border-radius:10px;color:var(--text);">
                     </div>
                     <div class="form-group">
                         <label>Atlanabilir mi?</label>
                         <select id="intro-skippable" style="width:100%;padding:10px;background:rgba(0,0,0,.35);border:1px solid var(--border);border-radius:10px;color:var(--text);">
                             <option value="1" ${s.skippable !== false ? 'selected' : ''}>Evet (Atla butonu var)</option>
-                            <option value="0" ${s.skippable === false ? 'selected' : ''}>Hayır (zorunlu izle)</option>
+                            <option value="0" ${s.skippable === false ? 'selected' : ''}>Hayır</option>
                         </select>
                     </div>
                     <div class="form-group">
@@ -19025,7 +19058,11 @@ Lütfen daha sonra tekrar gelin.</textarea>
                 toast('URL boş olamaz.', 'error');
                 return;
             }
-            saveIntroSettings({ enabled: enabled, url: url, skippable: skippable, forceEveryVisit: forceEveryVisit });
+            if (/youtube\.com|youtu\.be/i.test(url)) {
+                toast('YouTube olmaz. MP4 linki gir.', 'error');
+                return;
+            }
+            saveIntroSettings({ enabled: enabled, url: url, skippable: skippable, forceEveryVisit: forceEveryVisit, muted: true });
             toast('Intro ayarları kaydedildi.');
             if (typeof pushModLog === 'function') pushModLog('intro', 'intro güncellendi · ' + (enabled ? 'açık' : 'kapalı'));
         }
@@ -19038,14 +19075,15 @@ Lütfen daha sonra tekrar gelin.</textarea>
 
         function resetIntroSeen() {
             try { localStorage.removeItem(INTRO_SEEN_KEY); } catch (e) {}
-            toast('Bu tarayıcıda seen sıfırlandı. Herkese göstermek için "Her girişte" seç.');
+            toast('Bu tarayıcıda seen sıfırlandı.');
         }
 
         (function initIntroSystem() {
             loadIntroSettings();
-            window.addEventListener('load', function () {
-                setTimeout(playIntroVideo, 700);
-            });
+            function boot() { setTimeout(playIntroVideo, 500); }
+            if (document.readyState === 'complete') boot();
+            else window.addEventListener('load', boot);
+            // Firebase canlı
             if (typeof firebaseReady !== 'undefined' && firebaseReady && typeof db !== 'undefined' && db) {
                 try {
                     db.ref('global_intro').on('value', function (snap) {
