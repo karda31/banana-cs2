@@ -6319,11 +6319,234 @@
         }
 
 
+
+        // ========== EĞİTİM REHBERİ (moderatör düzenleyebilir) ==========
+        const EDU_STORAGE_KEY = 'swordcity_education_v1';
+
+        let _educationCache = {
+            title: 'Sword City — Nasıl Oynanır?',
+            intro: 'Aşağıdaki başlıklardan siteyi adım adım öğrenebilirsin. Moderatör bu metinleri güncelleyebilir.',
+            sections: [
+                {
+                    id: 'baslangic',
+                    title: '1. Başlangıç',
+                    body: 'Hesap oluştur veya giriş yap. Ana ekranda klasörler halinde tüm özellikler durur.\n\nÜst barda bildirimler, saat ve (giriş yaptıysan) kullanıcı adın görünür.\n\nİlk işin: Profilini kontrol et, günlük ödülü al, kuralları oku.'
+                },
+                {
+                    id: 'hesap',
+                    title: '2. Hesap ve profil',
+                    body: 'Profilim klasöründen bakiyeni, seviyeni, envanterini ve başarılarını görürsün.\n\nŞifreni unutursan giriş ekranından sıfırlama adımlarını kullan.\n\nGüvenliğin için şifreni kimseyle paylaşma.'
+                },
+                {
+                    id: 'oyna',
+                    title: '3. Oyna — oyun modları',
+                    body: 'Oyna klasörü oyun modlarını açar:\n\n• Sandbox: Serbest deneme, risk az, öğrenmek için ideal.\n• Klasik: Asıl Hard RP deneyimi; ekonomi ve kurallar geçerlidir.\n• Multiplayer: Yakında.\n\nMod seçince o moda özel “nasıl oynanır” özeti de çıkar.'
+                },
+                {
+                    id: 'ekonomi',
+                    title: '4. Ekonomi (Banka, Pazar, Takas)',
+                    body: 'Banka: Bakiye ve işlemler.\nPazar: Oyuncular arası al-sat.\nTakas: Seviye şartına uygun eşya değişimi.\nKuyumcu / kasalar / craft: Eşya üret, aç, yükselt.\n\nKlasik modda işlemler gerçek bakiyeni etkiler; dikkatli ol.'
+                },
+                {
+                    id: 'sosyal',
+                    title: '5. Sosyal ve RP',
+                    body: 'Sosyal: Arkadaş ekle, sohbet et.\nKlanlar: Birlikte oyna.\nİlan panosu: RP ilanları.\nNotlar ve görevler: Günlük hedeflerini takip et.\n\nRol yaparken saygılı ol; şikayetler moderatöre düşer.'
+                },
+                {
+                    id: 'kurallar',
+                    title: '6. Kurallar ve destek',
+                    body: 'Kurallar klasöründen sunucu kurallarını oku.\nSWOR Destek ile yardım ve iletişim kur.\n\nYasaklar, hile ve toksik davranış ban sebebidir.\nModeratör uyarı / ceza uygulayabilir.'
+                },
+                {
+                    id: 'ipuclari',
+                    title: '7. Hızlı ipuçları',
+                    body: '• Günlük ödülü unutma.\n• Envanterini düzenli tut.\n• Pazar fiyatlarını abartma; şikayet edilebilir.\n• Müzik ve dil ayarları Ayarlar klasöründe.\n• Takıldığın yerde Destek veya moderatöre yaz.'
+                }
+            ]
+        };
+
+        function loadEducation() {
+            try {
+                const local = JSON.parse(localStorage.getItem(EDU_STORAGE_KEY) || 'null');
+                if (local && typeof local === 'object' && Array.isArray(local.sections)) {
+                    _educationCache = Object.assign(_educationCache, local);
+                }
+            } catch (e) {}
+            if (typeof firebaseReady !== 'undefined' && firebaseReady) {
+                try {
+                    fbGet('global_education').then(function (data) {
+                        if (data && typeof data === 'object' && Array.isArray(data.sections)) {
+                            _educationCache = Object.assign({}, _educationCache, data);
+                            try { localStorage.setItem(EDU_STORAGE_KEY, JSON.stringify(_educationCache)); } catch (e) {}
+                        }
+                    }).catch(function () {});
+                } catch (e) {}
+            }
+            return _educationCache;
+        }
+
+        function saveEducation(data) {
+            _educationCache = data || _educationCache;
+            try { localStorage.setItem(EDU_STORAGE_KEY, JSON.stringify(_educationCache)); } catch (e) {}
+            if (typeof firebaseReady !== 'undefined' && firebaseReady) {
+                try { fbSet('global_education', _educationCache); } catch (e) {}
+            }
+        }
+
+        function escapeEduHtml(s) {
+            return String(s || '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        }
+
+        function formatEduBody(body) {
+            // satır sonlarını <br>, basit madde görünümü
+            const safe = escapeEduHtml(body);
+            return safe.replace(/\n/g, '<br>');
+        }
+
+        function openEducationGuide() {
+            const edu = loadEducation();
+            let sectionsHtml = '';
+            (edu.sections || []).forEach(function (sec, i) {
+                sectionsHtml += `
+                    <div class="info-card" style="margin-bottom:12px;">
+                        <div style="font-weight:700;font-family:'Orbitron',sans-serif;color:var(--accent-soft);margin-bottom:8px;letter-spacing:0.5px;">
+                            ${escapeEduHtml(sec.title || ('Başlık ' + (i + 1)))}
+                        </div>
+                        <div style="font-size:14px;line-height:1.65;color:var(--text);">
+                            ${formatEduBody(sec.body || '')}
+                        </div>
+                    </div>
+                `;
+            });
+            if (!sectionsHtml) {
+                sectionsHtml = '<p style="color:var(--text-muted);text-align:center;">Henüz eğitim metni yok.</p>';
+            }
+            openModal(escapeEduHtml(edu.title || 'Eğitim'), `
+                <p style="color:var(--text-muted);font-size:13px;line-height:1.5;margin-bottom:14px;text-align:center;">
+                    ${escapeEduHtml(edu.intro || '')}
+                </p>
+                ${sectionsHtml}
+                <button class="primary-btn" style="width:100%;margin-bottom:8px;" onclick="openPlayMenu()">🎮 Oyun modlarına geç</button>
+                <button class="back-btn" style="width:100%;" onclick="closeModal()">Kapat</button>
+            `);
+        }
+
+        function openEducationModPanel() {
+            if (!isModerator()) {
+                toast('Sadece moderatör.', 'error');
+                return;
+            }
+            const edu = loadEducation();
+            let rows = '';
+            (edu.sections || []).forEach(function (sec, i) {
+                rows += `
+                    <div class="info-card" style="margin-bottom:12px;" data-edu-idx="${i}">
+                        <div class="form-group">
+                            <label>Başlık #${i + 1}</label>
+                            <input type="text" class="edu-title-input" value="${escapeEduHtml(sec.title || '')}" style="width:100%;padding:10px;background:rgba(0,0,0,.35);border:1px solid var(--border);border-radius:10px;color:var(--text);">
+                        </div>
+                        <div class="form-group">
+                            <label>İçerik</label>
+                            <textarea class="edu-body-input" rows="5" style="width:100%;padding:10px;background:rgba(0,0,0,.35);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:inherit;line-height:1.45;">${escapeEduHtml(sec.body || '')}</textarea>
+                        </div>
+                        <button type="button" class="danger-btn" style="width:100%;" onclick="eduRemoveSection(${i})">Bu başlığı sil</button>
+                    </div>
+                `;
+            });
+            openModal('📝 Eğitim Metinlerini Düzenle', `
+                <div class="info-card" style="margin-bottom:12px;">
+                    <div class="form-group">
+                        <label>Rehber başlığı</label>
+                        <input id="edu-main-title" type="text" value="${escapeEduHtml(edu.title || '')}" style="width:100%;padding:10px;background:rgba(0,0,0,.35);border:1px solid var(--border);border-radius:10px;color:var(--text);">
+                    </div>
+                    <div class="form-group">
+                        <label>Üst açıklama</label>
+                        <textarea id="edu-main-intro" rows="2" style="width:100%;padding:10px;background:rgba(0,0,0,.35);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:inherit;">${escapeEduHtml(edu.intro || '')}</textarea>
+                    </div>
+                </div>
+                <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Başlıklar sırayla oyuncuya gösterilir. Satır kırmak için Enter kullan.</p>
+                ${rows || '<p style="color:var(--text-muted);">Hiç başlık yok.</p>'}
+                <button class="mod-btn" style="width:100%;margin-bottom:8px;" onclick="eduAddSection()">＋ Yeni başlık ekle</button>
+                <button class="primary-btn" style="width:100%;margin-bottom:8px;" onclick="saveEducationFromMod()">💾 Kaydet</button>
+                <button class="mod-btn" style="width:100%;margin-bottom:8px;" onclick="openEducationGuide()">▶ Önizle</button>
+                <button class="back-btn" style="width:100%;" onclick="showModUserList()">← Geri</button>
+            `);
+        }
+
+        function eduCollectFromForm() {
+            const title = ((document.getElementById('edu-main-title') || {}).value || '').trim();
+            const intro = ((document.getElementById('edu-main-intro') || {}).value || '').trim();
+            const cards = document.querySelectorAll('[data-edu-idx]');
+            const sections = [];
+            cards.forEach(function (card, i) {
+                const t = (card.querySelector('.edu-title-input') || {}).value || '';
+                const b = (card.querySelector('.edu-body-input') || {}).value || '';
+                sections.push({
+                    id: 'sec_' + i + '_' + Date.now(),
+                    title: String(t).trim() || ('Başlık ' + (i + 1)),
+                    body: String(b)
+                });
+            });
+            return { title: title || 'Eğitim', intro: intro, sections: sections };
+        }
+
+        function saveEducationFromMod() {
+            if (!isModerator()) return;
+            const data = eduCollectFromForm();
+            saveEducation(data);
+            toast('Eğitim metinleri kaydedildi.');
+            if (typeof pushModLog === 'function') pushModLog('education', 'eğitim metinleri güncellendi');
+            openEducationModPanel();
+        }
+
+        function eduAddSection() {
+            if (!isModerator()) return;
+            const data = eduCollectFromForm();
+            data.sections.push({
+                id: 'sec_new_' + Date.now(),
+                title: (data.sections.length + 1) + '. Yeni başlık',
+                body: 'Buraya anlatım yaz...'
+            });
+            saveEducation(data);
+            openEducationModPanel();
+        }
+
+        function eduRemoveSection(idx) {
+            if (!isModerator()) return;
+            const data = eduCollectFromForm();
+            if (idx < 0 || idx >= data.sections.length) return;
+            if (!confirm('Bu başlık silinsin mi?')) return;
+            data.sections.splice(idx, 1);
+            saveEducation(data);
+            openEducationModPanel();
+        }
+
+        // Eğitim ayarlarını arka planda yükle + canlı dinle
+        (function initEducationSystem() {
+            loadEducation();
+            if (typeof firebaseReady !== 'undefined' && firebaseReady && typeof db !== 'undefined' && db) {
+                try {
+                    db.ref('global_education').on('value', function (snap) {
+                        const v = snap.val();
+                        if (v && typeof v === 'object' && Array.isArray(v.sections)) {
+                            _educationCache = Object.assign({}, _educationCache, v);
+                            try { localStorage.setItem(EDU_STORAGE_KEY, JSON.stringify(_educationCache)); } catch (e) {}
+                        }
+                    });
+                } catch (e) {}
+            }
+        })();
+
         // ========== OYNA / OYUN MODLARI ==========
         function openPlayMenu() {
             window._viewingProfile = null;
             openModal('🎮 Oyna', `
-                <p style="color:var(--text-muted);font-size:13px;text-align:center;margin-bottom:14px;">Oyun modunu seç. Nasıl oynanacağını göreceksin.</p>
+                <p style="color:var(--text-muted);font-size:13px;text-align:center;margin-bottom:14px;">Önce eğitimi oku veya doğrudan mod seç.</p>
+                <button class="primary-btn" style="width:100%;margin-bottom:12px;" onclick="openEducationGuide()">📚 Nasıl oynanır? (Eğitim)</button>
                 <div class="action-grid">
                     <button class="action-btn" onclick="selectGameMode('sandbox')"><span class="btn-icon">🧪</span>Sandbox</button>
                     <button class="action-btn" onclick="selectGameMode('classic')"><span class="btn-icon">⚔️</span>Klasik</button>
@@ -12266,6 +12489,9 @@
                 </button>
                 <button class="mod-btn" onclick="openIntroModPanel()" style="margin-bottom:8px;">
                     <span style="font-size:20px;">🎬</span> Intro Video Ayarları
+                </button>
+                <button class="mod-btn" onclick="openEducationModPanel()" style="margin-bottom:8px;">
+                    <span style="font-size:20px;">📚</span> Eğitim Metinleri
                 </button>
                 <button class="mod-btn" onclick="openMaintenancePanel()" style="margin-bottom:12px;">
                     <span style="font-size:20px;">🔧</span> Bakım Modu
@@ -18965,7 +19191,8 @@ Lütfen daha sonra tekrar gelin.</textarea>
         function acceptIntroTraining() {
             closeModal();
             setTimeout(function () {
-                if (typeof openPlayMenu === 'function') openPlayMenu();
+                if (typeof openEducationGuide === 'function') openEducationGuide();
+                else if (typeof openPlayMenu === 'function') openPlayMenu();
                 else toast('Eğitim menüsü bulunamadı.', 'error');
             }, 200);
         }
