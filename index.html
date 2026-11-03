@@ -18860,12 +18860,11 @@ Lütfen daha sonra tekrar gelin.</textarea>
         }
 
 
-        // ========== INTRO VIDEO SİSTEMİ (MP4 autoplay) ==========
+        // ========== INTRO VIDEO SİSTEMİ (MP4 — local path + URL) ==========
         const INTRO_STORAGE_KEY = 'swordcity_intro_v1';
         const INTRO_SEEN_KEY = 'swordcity_intro_seen_v1';
 
-        // Varsayılan: kendi MP4 linkini moderatör panelinden değiştir
-        // Örnek: https://senin-cdn.com/intro.mp4  veya  /intro.mp4 (aynı repoda dosya)
+        // url: göreli yol (intro.mp4) VEYA tam https link
         let _introCache = {
             enabled: true,
             url: 'intro.mp4',
@@ -18873,6 +18872,9 @@ Lütfen daha sonra tekrar gelin.</textarea>
             forceEveryVisit: false,
             muted: true
         };
+
+        // Masaüstünden seçilen dosya (sadece bu tarayıcı oturumu / önizleme)
+        let _introLocalBlobUrl = null;
 
         function loadIntroSettings() {
             try {
@@ -18930,6 +18932,25 @@ Lütfen daha sonra tekrar gelin.</textarea>
             markIntroSeen();
         }
 
+        /** Göreli yol veya URL → oynatılabilir src */
+        function resolveIntroSrc() {
+            // Önce masaüstü seçimi (blob) — sadece bu oturum
+            if (_introLocalBlobUrl) return _introLocalBlobUrl;
+            let url = (_introCache.url || '').trim();
+            if (!url) return '';
+            if (/youtube\.com|youtu\.be/i.test(url)) return '';
+            // http(s) ise olduğu gibi
+            if (/^https?:\/\//i.test(url)) return url;
+            // data: / blob:
+            if (/^(data:|blob:)/i.test(url)) return url;
+            // göreli yol: site köküne göre
+            try {
+                return new URL(url, window.location.href).href;
+            } catch (e) {
+                return url;
+            }
+        }
+
         function playIntroVideo() {
             if (!shouldShowIntro()) return;
 
@@ -18938,12 +18959,9 @@ Lütfen daha sonra tekrar gelin.</textarea>
             const skipBtn = document.getElementById('intro-skip-btn');
             if (!ov || !mount) return;
 
-            const url = (_introCache.url || '').trim();
-            if (!url) return;
-
-            // YouTube linki gelirse reddet / uyar
-            if (/youtube\.com|youtu\.be/i.test(url)) {
-                console.warn('Intro: YouTube desteklenmiyor, MP4 kullan.');
+            const src = resolveIntroSrc();
+            if (!src) {
+                console.warn('Intro: geçerli MP4 yolu/URL yok');
                 return;
             }
 
@@ -18952,12 +18970,11 @@ Lütfen daha sonra tekrar gelin.</textarea>
 
             const video = document.createElement('video');
             video.id = 'intro-video-el';
-            video.src = url;
+            video.src = src;
             video.autoplay = true;
             video.playsInline = true;
             video.preload = 'auto';
             video.controls = false;
-            // Tarayıcılar sessiz olmadan autoplay'e izin vermez
             video.muted = _introCache.muted !== false;
             video.setAttribute('muted', '');
             video.setAttribute('playsinline', '');
@@ -18969,11 +18986,11 @@ Lütfen daha sonra tekrar gelin.</textarea>
 
             video.onended = function () { closeIntroVideo(); };
             video.onerror = function () {
-                console.warn('Intro video yüklenemedi:', url);
+                console.warn('Intro video yüklenemedi:', src);
+                // blob değilse ve dosya yoksa sessizce kapat
                 closeIntroVideo();
             };
 
-            // tıkla = ses aç (opsiyonel)
             video.addEventListener('click', function () {
                 if (video.muted) {
                     video.muted = false;
@@ -18989,7 +19006,6 @@ Lütfen daha sonra tekrar gelin.</textarea>
                 const p = video.play();
                 if (p && typeof p.catch === 'function') {
                     p.catch(function () {
-                        // Autoplay engellendiyse muted garantile ve tekrar dene
                         video.muted = true;
                         video.play().catch(function () {});
                     });
@@ -18997,9 +19013,36 @@ Lütfen daha sonra tekrar gelin.</textarea>
             };
             if (video.readyState >= 2) tryPlay();
             else video.addEventListener('loadeddata', tryPlay, { once: true });
-            // ekstra güvence
             setTimeout(tryPlay, 100);
             setTimeout(tryPlay, 400);
+        }
+
+        function onIntroFilePicked(input) {
+            const file = input && input.files && input.files[0];
+            if (!file) return;
+            if (!/^video\//i.test(file.type) && !/\.(mp4|webm|ogg)$/i.test(file.name)) {
+                toast('Sadece video dosyası seç (mp4/webm).', 'error');
+                return;
+            }
+            if (_introLocalBlobUrl) {
+                try { URL.revokeObjectURL(_introLocalBlobUrl); } catch (e) {}
+            }
+            _introLocalBlobUrl = URL.createObjectURL(file);
+            // Bu tarayıcıda path olarak da işaretle (kalıcı herkese değil)
+            const nameHint = file.name || 'local-video.mp4';
+            toast('Masaüstü video seçildi: ' + nameHint + ' — Önizle ile dene. Herkese göstermek için dosyayı siteye yükle (intro.mp4) veya URL gir.');
+            const urlInput = document.getElementById('intro-url');
+            if (urlInput && !urlInput.value) urlInput.placeholder = nameHint + ' (masaüstü — sadece bu cihaz)';
+        }
+
+        function clearIntroLocalFile() {
+            if (_introLocalBlobUrl) {
+                try { URL.revokeObjectURL(_introLocalBlobUrl); } catch (e) {}
+                _introLocalBlobUrl = null;
+            }
+            const inp = document.getElementById('intro-file');
+            if (inp) inp.value = '';
+            toast('Masaüstü seçimi temizlendi.');
         }
 
         function openIntroModPanel() {
@@ -19011,9 +19054,11 @@ Lütfen daha sonra tekrar gelin.</textarea>
             const safeUrl = String(s.url || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
             openModal('🎬 Intro Video Ayarları', `
                 <div class="info-card">
-                    <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px;line-height:1.5;">
-                        Sadece <b>MP4 / WEBM</b> linki kullan. YouTube çalışmaz.<br>
-                        Dosyayı repoya koyduysan: <code>intro.mp4</code>
+                    <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px;line-height:1.55;">
+                        <b>İki yol:</b><br>
+                        1) <b>URL / site dosyası</b> — herkese görünür<br>
+                        &nbsp;&nbsp;&nbsp;örn: <code>intro.mp4</code> veya <code>https://cdn.../intro.mp4</code><br>
+                        2) <b>Masaüstünden seç</b> — sadece bu tarayıcıda önizleme
                     </p>
                     <div class="form-group">
                         <label>Durum</label>
@@ -19023,8 +19068,13 @@ Lütfen daha sonra tekrar gelin.</textarea>
                         </select>
                     </div>
                     <div class="form-group">
-                        <label>Video URL (MP4)</label>
-                        <input id="intro-url" type="text" value="${safeUrl}" placeholder="intro.mp4 veya https://.../intro.mp4" style="width:100%;padding:10px;background:rgba(0,0,0,.35);border:1px solid var(--border);border-radius:10px;color:var(--text);">
+                        <label>Video yolu veya URL (herkese)</label>
+                        <input id="intro-url" type="text" value="${safeUrl}" placeholder="intro.mp4  veya  https://.../intro.mp4" style="width:100%;padding:10px;background:rgba(0,0,0,.35);border:1px solid var(--border);border-radius:10px;color:var(--text);">
+                    </div>
+                    <div class="form-group">
+                        <label>Masaüstünden seç (önizleme)</label>
+                        <input id="intro-file" type="file" accept="video/mp4,video/webm,video/*" onchange="onIntroFilePicked(this)" style="width:100%;padding:10px;background:rgba(0,0,0,.35);border:1px solid var(--border);border-radius:10px;color:var(--text);">
+                        <button type="button" class="back-btn" style="width:100%;margin-top:8px;" onclick="clearIntroLocalFile()">Masaüstü seçimini temizle</button>
                     </div>
                     <div class="form-group">
                         <label>Atlanabilir mi?</label>
@@ -19054,15 +19104,21 @@ Lütfen daha sonra tekrar gelin.</textarea>
             const url = ((document.getElementById('intro-url') || {}).value || '').trim();
             const skippable = (document.getElementById('intro-skippable') || {}).value === '1';
             const forceEveryVisit = (document.getElementById('intro-force') || {}).value === '1';
-            if (!url) {
-                toast('URL boş olamaz.', 'error');
+
+            // Masaüstü blob seçiliyse URL boş bırakılabilir (sadece bu cihaz)
+            if (!url && !_introLocalBlobUrl) {
+                toast('URL/yol gir veya masaüstünden video seç.', 'error');
                 return;
             }
-            if (/youtube\.com|youtu\.be/i.test(url)) {
-                toast('YouTube olmaz. MP4 linki gir.', 'error');
+            if (url && /youtube\.com|youtu\.be/i.test(url)) {
+                toast('YouTube olmaz. MP4 yolu veya URL gir.', 'error');
                 return;
             }
-            saveIntroSettings({ enabled: enabled, url: url, skippable: skippable, forceEveryVisit: forceEveryVisit, muted: true });
+            if (url) {
+                saveIntroSettings({ enabled: enabled, url: url, skippable: skippable, forceEveryVisit: forceEveryVisit, muted: true });
+            } else {
+                saveIntroSettings({ enabled: enabled, skippable: skippable, forceEveryVisit: forceEveryVisit, muted: true });
+            }
             toast('Intro ayarları kaydedildi.');
             if (typeof pushModLog === 'function') pushModLog('intro', 'intro güncellendi · ' + (enabled ? 'açık' : 'kapalı'));
         }
@@ -19083,7 +19139,6 @@ Lütfen daha sonra tekrar gelin.</textarea>
             function boot() { setTimeout(playIntroVideo, 500); }
             if (document.readyState === 'complete') boot();
             else window.addEventListener('load', boot);
-            // Firebase canlı
             if (typeof firebaseReady !== 'undefined' && firebaseReady && typeof db !== 'undefined' && db) {
                 try {
                     db.ref('global_intro').on('value', function (snap) {
