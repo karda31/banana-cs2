@@ -18936,6 +18936,38 @@ Lütfen daha sonra tekrar gelin.</textarea>
             }
             // Her açılışta oynatılacaksa "görüldü" işaretleme
             if (_introCache.forceEveryVisit === false) markIntroSeen();
+            // Video bitti / atlandı → eğitim sor
+            setTimeout(askIntroTraining, 280);
+        }
+
+        function askIntroTraining() {
+            // Zaten bir modal açıksa üstüne binmesin diye kısa kontrol
+            try {
+                const modal = document.getElementById('modal');
+                if (modal && modal.classList.contains('active')) return;
+            } catch (e) {}
+
+            openModal('📚 Eğitim', `
+                <div class="info-card" style="text-align:center;">
+                    <div style="font-size:42px;margin-bottom:10px;">🎓</div>
+                    <p style="font-size:16px;line-height:1.55;margin-bottom:8px;font-weight:600;">
+                        Eğitim ister misiniz?
+                    </p>
+                    <p style="font-size:13px;color:var(--text-muted);line-height:1.5;margin-bottom:16px;">
+                        Oyun modlarını ve nasıl oynanacağını adım adım görebilirsin.
+                    </p>
+                    <button class="primary-btn" style="width:100%;margin-bottom:8px;" onclick="acceptIntroTraining()">Evet, eğitimi aç</button>
+                    <button class="back-btn" style="width:100%;" onclick="closeModal()">Hayır, geç</button>
+                </div>
+            `);
+        }
+
+        function acceptIntroTraining() {
+            closeModal();
+            setTimeout(function () {
+                if (typeof openPlayMenu === 'function') openPlayMenu();
+                else toast('Eğitim menüsü bulunamadı.', 'error');
+            }, 200);
         }
 
         function resolveIntroSrc() {
