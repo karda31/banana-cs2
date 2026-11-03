@@ -10,6 +10,7 @@
     <!-- Firebase SDK (Realtime Database) - Canlı + Kalıcı veri için -->
     <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-storage-compat.js"></script>
     <style>
         :root {
             --bg-deep: #0a0014;
@@ -2262,6 +2263,7 @@
             if (firebaseConfig.apiKey && firebaseConfig.apiKey !== "BURAYA_API_KEY") {
                 firebase.initializeApp(firebaseConfig);
                 db = firebase.database();
+                try { window._firebaseStorage = firebase.storage(); } catch (e) { window._firebaseStorage = null; }
                 firebaseReady = true;
                 console.log("✅ Firebase bağlandı - Canlı mod aktif");
             } else {
@@ -18860,11 +18862,10 @@ Lütfen daha sonra tekrar gelin.</textarea>
         }
 
 
-        // ========== INTRO VIDEO SİSTEMİ (MP4 — local path + URL) ==========
+        // ========== INTRO VIDEO SİSTEMİ (MP4 — URL + masaüstü → herkese Storage) ==========
         const INTRO_STORAGE_KEY = 'swordcity_intro_v1';
         const INTRO_SEEN_KEY = 'swordcity_intro_seen_v1';
 
-        // url: göreli yol (intro.mp4) VEYA tam https link
         let _introCache = {
             enabled: true,
             url: 'intro.mp4',
@@ -18873,7 +18874,8 @@ Lütfen daha sonra tekrar gelin.</textarea>
             muted: true
         };
 
-        // Masaüstünden seçilen dosya (sadece bu tarayıcı oturumu / önizleme)
+        // Seçilen dosya (yüklemeden önce)
+        let _introPendingFile = null;
         let _introLocalBlobUrl = null;
 
         function loadIntroSettings() {
@@ -18932,18 +18934,12 @@ Lütfen daha sonra tekrar gelin.</textarea>
             markIntroSeen();
         }
 
-        /** Göreli yol veya URL → oynatılabilir src */
         function resolveIntroSrc() {
-            // Önce masaüstü seçimi (blob) — sadece bu oturum
             if (_introLocalBlobUrl) return _introLocalBlobUrl;
             let url = (_introCache.url || '').trim();
             if (!url) return '';
             if (/youtube\.com|youtu\.be/i.test(url)) return '';
-            // http(s) ise olduğu gibi
-            if (/^https?:\/\//i.test(url)) return url;
-            // data: / blob:
-            if (/^(data:|blob:)/i.test(url)) return url;
-            // göreli yol: site köküne göre
+            if (/^https?:\/\//i.test(url) || /^(data:|blob:)/i.test(url)) return url;
             try {
                 return new URL(url, window.location.href).href;
             } catch (e) {
@@ -18960,10 +18956,7 @@ Lütfen daha sonra tekrar gelin.</textarea>
             if (!ov || !mount) return;
 
             const src = resolveIntroSrc();
-            if (!src) {
-                console.warn('Intro: geçerli MP4 yolu/URL yok');
-                return;
-            }
+            if (!src) return;
 
             mount.innerHTML = '';
             if (skipBtn) skipBtn.style.display = _introCache.skippable === false ? 'none' : '';
@@ -18987,7 +18980,6 @@ Lütfen daha sonra tekrar gelin.</textarea>
             video.onended = function () { closeIntroVideo(); };
             video.onerror = function () {
                 console.warn('Intro video yüklenemedi:', src);
-                // blob değilse ve dosya yoksa sessizce kapat
                 closeIntroVideo();
             };
 
@@ -19024,25 +19016,56 @@ Lütfen daha sonra tekrar gelin.</textarea>
                 toast('Sadece video dosyası seç (mp4/webm).', 'error');
                 return;
             }
+            // max ~80MB uyarı
+            if (file.size > 80 * 1024 * 1024) {
+                toast('Dosya çok büyük (max ~80MB önerilir).', 'error');
+                return;
+            }
+            _introPendingFile = file;
             if (_introLocalBlobUrl) {
                 try { URL.revokeObjectURL(_introLocalBlobUrl); } catch (e) {}
             }
             _introLocalBlobUrl = URL.createObjectURL(file);
-            // Bu tarayıcıda path olarak da işaretle (kalıcı herkese değil)
-            const nameHint = file.name || 'local-video.mp4';
-            toast('Masaüstü video seçildi: ' + nameHint + ' — Önizle ile dene. Herkese göstermek için dosyayı siteye yükle (intro.mp4) veya URL gir.');
-            const urlInput = document.getElementById('intro-url');
-            if (urlInput && !urlInput.value) urlInput.placeholder = nameHint + ' (masaüstü — sadece bu cihaz)';
+            const st = document.getElementById('intro-file-status');
+            if (st) st.textContent = 'Seçildi: ' + file.name + ' (' + Math.round(file.size / 1024 / 1024 * 10) / 10 + ' MB) — Kaydet deyince herkese yüklenir';
+            toast('Video seçildi. Kaydet = herkese yükle.');
         }
 
         function clearIntroLocalFile() {
+            _introPendingFile = null;
             if (_introLocalBlobUrl) {
                 try { URL.revokeObjectURL(_introLocalBlobUrl); } catch (e) {}
                 _introLocalBlobUrl = null;
             }
             const inp = document.getElementById('intro-file');
             if (inp) inp.value = '';
+            const st = document.getElementById('intro-file-status');
+            if (st) st.textContent = '';
             toast('Masaüstü seçimi temizlendi.');
+        }
+
+        function uploadIntroToFirebase(file, onProgress) {
+            return new Promise(function (resolve, reject) {
+                if (!window._firebaseStorage) {
+                    reject(new Error('Firebase Storage yok. Storage SDK / kurallarını kontrol et.'));
+                    return;
+                }
+                const ext = (file.name.split('.').pop() || 'mp4').toLowerCase();
+                const path = 'intros/intro_' + Date.now() + '.' + ext;
+                const ref = window._firebaseStorage.ref().child(path);
+                const task = ref.put(file, { contentType: file.type || 'video/mp4' });
+                task.on('state_changed',
+                    function (snap) {
+                        if (onProgress && snap.totalBytes) {
+                            onProgress(Math.round(snap.bytesTransferred / snap.totalBytes * 100));
+                        }
+                    },
+                    function (err) { reject(err); },
+                    function () {
+                        task.snapshot.ref.getDownloadURL().then(resolve).catch(reject);
+                    }
+                );
+            });
         }
 
         function openIntroModPanel() {
@@ -19055,10 +19078,8 @@ Lütfen daha sonra tekrar gelin.</textarea>
             openModal('🎬 Intro Video Ayarları', `
                 <div class="info-card">
                     <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px;line-height:1.55;">
-                        <b>İki yol:</b><br>
-                        1) <b>URL / site dosyası</b> — herkese görünür<br>
-                        &nbsp;&nbsp;&nbsp;örn: <code>intro.mp4</code> veya <code>https://cdn.../intro.mp4</code><br>
-                        2) <b>Masaüstünden seç</b> — sadece bu tarayıcıda önizleme
+                        <b>Masaüstünden seç → Kaydet</b> = video sunucuya yüklenir, <b>herkes görür</b>.<br>
+                        İstersen direkt URL / <code>intro.mp4</code> de yazabilirsin.
                     </p>
                     <div class="form-group">
                         <label>Durum</label>
@@ -19068,18 +19089,25 @@ Lütfen daha sonra tekrar gelin.</textarea>
                         </select>
                     </div>
                     <div class="form-group">
-                        <label>Video yolu veya URL (herkese)</label>
-                        <input id="intro-url" type="text" value="${safeUrl}" placeholder="intro.mp4  veya  https://.../intro.mp4" style="width:100%;padding:10px;background:rgba(0,0,0,.35);border:1px solid var(--border);border-radius:10px;color:var(--text);">
+                        <label>Video URL / site yolu</label>
+                        <input id="intro-url" type="text" value="${safeUrl}" placeholder="intro.mp4 veya https://..." style="width:100%;padding:10px;background:rgba(0,0,0,.35);border:1px solid var(--border);border-radius:10px;color:var(--text);">
                     </div>
                     <div class="form-group">
-                        <label>Masaüstünden seç (önizleme)</label>
+                        <label>Masaüstünden yükle (herkes görür)</label>
                         <input id="intro-file" type="file" accept="video/mp4,video/webm,video/*" onchange="onIntroFilePicked(this)" style="width:100%;padding:10px;background:rgba(0,0,0,.35);border:1px solid var(--border);border-radius:10px;color:var(--text);">
-                        <button type="button" class="back-btn" style="width:100%;margin-top:8px;" onclick="clearIntroLocalFile()">Masaüstü seçimini temizle</button>
+                        <div id="intro-file-status" style="font-size:12px;color:var(--accent-soft);margin-top:6px;line-height:1.4;"></div>
+                        <div id="intro-upload-progress" style="display:none;margin-top:8px;">
+                            <div style="height:8px;background:rgba(255,255,255,0.1);border-radius:99px;overflow:hidden;">
+                                <div id="intro-upload-bar" style="height:100%;width:0%;background:var(--accent);transition:width .2s;"></div>
+                            </div>
+                            <div id="intro-upload-pct" style="font-size:12px;margin-top:4px;color:var(--text-muted);">%0</div>
+                        </div>
+                        <button type="button" class="back-btn" style="width:100%;margin-top:8px;" onclick="clearIntroLocalFile()">Seçimi temizle</button>
                     </div>
                     <div class="form-group">
                         <label>Atlanabilir mi?</label>
                         <select id="intro-skippable" style="width:100%;padding:10px;background:rgba(0,0,0,.35);border:1px solid var(--border);border-radius:10px;color:var(--text);">
-                            <option value="1" ${s.skippable !== false ? 'selected' : ''}>Evet (Atla butonu var)</option>
+                            <option value="1" ${s.skippable !== false ? 'selected' : ''}>Evet</option>
                             <option value="0" ${s.skippable === false ? 'selected' : ''}>Hayır</option>
                         </select>
                     </div>
@@ -19090,7 +19118,7 @@ Lütfen daha sonra tekrar gelin.</textarea>
                             <option value="1" ${s.forceEveryVisit ? 'selected' : ''}>Her girişte</option>
                         </select>
                     </div>
-                    <button class="primary-btn" style="width:100%;margin-top:8px;" onclick="saveIntroFromMod()">💾 Kaydet</button>
+                    <button class="primary-btn" style="width:100%;margin-top:8px;" onclick="saveIntroFromMod()">💾 Kaydet (yükle + yayınla)</button>
                     <button class="mod-btn" style="width:100%;margin-top:8px;" onclick="previewIntroNow()">▶ Şimdi önizle</button>
                     <button class="danger-btn" style="width:100%;margin-top:8px;" onclick="resetIntroSeen()">🔄 Bu tarayıcıda tekrar göster</button>
                     <button class="back-btn" style="width:100%;margin-top:8px;" onclick="showModUserList()">← Geri</button>
@@ -19098,27 +19126,60 @@ Lütfen daha sonra tekrar gelin.</textarea>
             `);
         }
 
-        function saveIntroFromMod() {
+        async function saveIntroFromMod() {
             if (!isModerator()) return;
             const enabled = (document.getElementById('intro-enabled') || {}).value === '1';
-            const url = ((document.getElementById('intro-url') || {}).value || '').trim();
+            let url = ((document.getElementById('intro-url') || {}).value || '').trim();
             const skippable = (document.getElementById('intro-skippable') || {}).value === '1';
             const forceEveryVisit = (document.getElementById('intro-force') || {}).value === '1';
 
-            // Masaüstü blob seçiliyse URL boş bırakılabilir (sadece bu cihaz)
-            if (!url && !_introLocalBlobUrl) {
-                toast('URL/yol gir veya masaüstünden video seç.', 'error');
-                return;
-            }
             if (url && /youtube\.com|youtu\.be/i.test(url)) {
-                toast('YouTube olmaz. MP4 yolu veya URL gir.', 'error');
+                toast('YouTube olmaz. MP4 seç veya URL gir.', 'error');
                 return;
             }
-            if (url) {
-                saveIntroSettings({ enabled: enabled, url: url, skippable: skippable, forceEveryVisit: forceEveryVisit, muted: true });
-            } else {
-                saveIntroSettings({ enabled: enabled, skippable: skippable, forceEveryVisit: forceEveryVisit, muted: true });
+
+            // Masaüstü dosyası varsa Firebase Storage'a yükle → herkes görür
+            if (_introPendingFile) {
+                const progWrap = document.getElementById('intro-upload-progress');
+                const bar = document.getElementById('intro-upload-bar');
+                const pct = document.getElementById('intro-upload-pct');
+                if (progWrap) progWrap.style.display = 'block';
+                toast('Video yükleniyor, bekle...');
+                try {
+                    const downloadUrl = await uploadIntroToFirebase(_introPendingFile, function (p) {
+                        if (bar) bar.style.width = p + '%';
+                        if (pct) pct.textContent = '%' + p;
+                    });
+                    url = downloadUrl;
+                    _introPendingFile = null;
+                    if (_introLocalBlobUrl) {
+                        try { URL.revokeObjectURL(_introLocalBlobUrl); } catch (e) {}
+                        _introLocalBlobUrl = null;
+                    }
+                    const urlInput = document.getElementById('intro-url');
+                    if (urlInput) urlInput.value = downloadUrl;
+                    const st = document.getElementById('intro-file-status');
+                    if (st) st.textContent = 'Yüklendi ✓ herkes bu videoyu görür';
+                    toast('Video yüklendi, herkes görecek.');
+                } catch (err) {
+                    console.error(err);
+                    toast('Yükleme hatası: ' + (err && err.message ? err.message : 'Storage kurallarını kontrol et'), 'error');
+                    return;
+                }
             }
+
+            if (!url) {
+                toast('URL gir veya masaüstünden video seç.', 'error');
+                return;
+            }
+
+            saveIntroSettings({
+                enabled: enabled,
+                url: url,
+                skippable: skippable,
+                forceEveryVisit: forceEveryVisit,
+                muted: true
+            });
             toast('Intro ayarları kaydedildi.');
             if (typeof pushModLog === 'function') pushModLog('intro', 'intro güncellendi · ' + (enabled ? 'açık' : 'kapalı'));
         }
