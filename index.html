@@ -18870,7 +18870,7 @@ Lütfen daha sonra tekrar gelin.</textarea>
             enabled: true,
             url: 'intro.mp4',
             skippable: true,
-            forceEveryVisit: false,
+            forceEveryVisit: true,
             muted: true
         };
 
@@ -18883,6 +18883,8 @@ Lütfen daha sonra tekrar gelin.</textarea>
                 const local = JSON.parse(localStorage.getItem(INTRO_STORAGE_KEY) || 'null');
                 if (local && typeof local === 'object') _introCache = Object.assign(_introCache, local);
             } catch (e) {}
+            // Eski kayıtlarda force kapalıysa her açılışa çevir (kullanıcı paneldan kapatabilir)
+            if (typeof _introCache.forceEveryVisit === 'undefined') _introCache.forceEveryVisit = true;
             if (typeof firebaseReady !== 'undefined' && firebaseReady) {
                 try {
                     fbGet('global_intro').then(function (data) {
@@ -18905,7 +18907,8 @@ Lütfen daha sonra tekrar gelin.</textarea>
 
         function shouldShowIntro() {
             if (!_introCache.enabled) return false;
-            if (_introCache.forceEveryVisit) return true;
+            // Varsayılan / force: her açılışta oyna
+            if (_introCache.forceEveryVisit !== false) return true;
             try {
                 return localStorage.getItem(INTRO_SEEN_KEY) !== '1';
             } catch (e) {
@@ -18931,7 +18934,8 @@ Lütfen daha sonra tekrar gelin.</textarea>
                 ov.classList.remove('show');
                 ov.setAttribute('aria-hidden', 'true');
             }
-            markIntroSeen();
+            // Her açılışta oynatılacaksa "görüldü" işaretleme
+            if (_introCache.forceEveryVisit === false) markIntroSeen();
         }
 
         function resolveIntroSrc() {
@@ -19197,7 +19201,18 @@ Lütfen daha sonra tekrar gelin.</textarea>
 
         (function initIntroSystem() {
             loadIntroSettings();
-            function boot() { setTimeout(playIntroVideo, 500); }
+            // Her açılışta oynatılacaksa eski "görüldü" bayrağını temizle
+            try {
+                if (_introCache.forceEveryVisit !== false) localStorage.removeItem(INTRO_SEEN_KEY);
+            } catch (e) {}
+            function boot() {
+                setTimeout(playIntroVideo, 400);
+                setTimeout(function () {
+                    // Hâlâ görünmüyorsa tekrar dene (geç yüklenen ayar)
+                    const ov = document.getElementById('intro-video-overlay');
+                    if (ov && !ov.classList.contains('show') && shouldShowIntro()) playIntroVideo();
+                }, 1500);
+            }
             if (document.readyState === 'complete') boot();
             else window.addEventListener('load', boot);
             if (typeof firebaseReady !== 'undefined' && firebaseReady && typeof db !== 'undefined' && db) {
