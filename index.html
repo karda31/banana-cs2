@@ -278,7 +278,7 @@
     <div id="controls-info">
         <strong>YEREL / ONLINE:</strong> Kontroller Ayarlar menüsünden özelleştirilebilir (Offline / Online sekmeleri).<br>
         <strong>ONLINE:</strong> Enter=Chat | Sağ Shift=Başlat (host) | ESC=Menü | TAB=Oyuncular<br>
-        <em>Sex RPG — Büyük açık harita · lav · online</em>
+        <em>Sex RPG — Pixel dünya · dildo blok · envanter · online</em>
     </div>
     <script>
         const canvas = document.getElementById("gameCanvas");
@@ -286,10 +286,461 @@
         ctx.imageSmoothingEnabled = false;
 
         // ===== BÜYÜK RPG DÜNYASI + KAMERA =====
-        const WORLD_W = 3600;
-        const WORLD_H = 2400;
+        const TILE = 32;
+        const MAP_TW = 220; // tile genişlik
+        const MAP_TH = 140; // tile yükseklik
+        const WORLD_W = MAP_TW * TILE; // 7040
+        const WORLD_H = MAP_TH * TILE; // 4480
         let camX = 0;
         let camY = 0;
+
+        // ===== PIXEL WORLDS TARZI TILE + ENVANTER =====
+        // 0 air, 1 dirt, 2 stone, 3 grass, 4 dildo_block, 5 bedrock, 6 wood, 7 pink_stone
+        const TILE_AIR = 0, TILE_DIRT = 1, TILE_STONE = 2, TILE_GRASS = 3;
+        const TILE_DILDO = 4, TILE_BEDROCK = 5, TILE_WOOD = 6, TILE_PINK = 7;
+        let tileMap = null; // Uint8Array MAP_TW * MAP_TH
+        let worldItems = []; // {x,y,vx,vy,itemId,count}
+        let invOpen = false;
+        let invSelected = 0;
+        const INV_SIZE = 40;
+        const HOTBAR_SIZE = 10;
+        // item defs
+        const ITEM_DEFS = {
+            dirt: { id: "dirt", name: "Toprak", color: "#6b4423", place: TILE_DIRT, max: 999 },
+            stone: { id: "stone", name: "Taş", color: "#888899", place: TILE_STONE, max: 999 },
+            grass: { id: "grass", name: "Çimen", color: "#3a8f3a", place: TILE_GRASS, max: 999 },
+            wood: { id: "wood", name: "Odun", color: "#a67c52", place: TILE_WOOD, max: 999 },
+            pink_stone: { id: "pink_stone", name: "Pembe Taş", color: "#cc6688", place: TILE_PINK, max: 999 },
+            dildo: { id: "dildo", name: "Dildo", color: "#ff66aa", place: 0, max: 99, special: true },
+            dildo_block: { id: "dildo_block", name: "Dildo Bloğu", color: "#ff3399", place: TILE_DILDO, max: 99 }
+        };
+        // per-player inventory for offline; online uses local only for self
+        let inventory = [];
+        let hotbar = [];
+        let mineProgress = 0;
+        let mineTarget = null; // {tx, ty}
+        let lastMineKey = false;
+
+        function invReset() {
+            inventory = [];
+            hotbar = [];
+            for (let i = 0; i < INV_SIZE; i++) inventory.push(null);
+            for (let i = 0; i < HOTBAR_SIZE; i++) hotbar.push(null);
+            // başlangıç eşyaları
+            invAdd("dirt", 20);
+            invAdd("stone", 10);
+            invAdd("wood", 5);
+            invSelected = 0;
+            worldItems = [];
+            mineProgress = 0;
+            mineTarget = null;
+            invOpen = false;
+        }
+        function invAdd(itemId, count) {
+            count = count || 1;
+            const def = ITEM_DEFS[itemId];
+            if (!def) return false;
+            // hotbar + inventory stack
+            const bags = [hotbar, inventory];
+            for (const bag of bags) {
+                for (let i = 0; i < bag.length; i++) {
+                    if (bag[i] && bag[i].id === itemId && bag[i].count < def.max) {
+                        const space = def.max - bag[i].count;
+                        const add = Math.min(space, count);
+                        bag[i].count += add;
+                        count -= add;
+                        if (count <= 0) return true;
+                    }
+                }
+            }
+            for (const bag of bags) {
+                for (let i = 0; i < bag.length; i++) {
+                    if (!bag[i] && count > 0) {
+                        const add = Math.min(def.max, count);
+                        bag[i] = { id: itemId, count: add };
+                        count -= add;
+                        if (count <= 0) return true;
+                    }
+                }
+            }
+            return count <= 0;
+        }
+        function invGetSelected() {
+            return hotbar[invSelected] || null;
+        }
+        function tileAt(tx, ty) {
+            if (!tileMap || tx < 0 || ty < 0 || tx >= MAP_TW || ty >= MAP_TH) return TILE_BEDROCK;
+            return tileMap[ty * MAP_TW + tx];
+        }
+        function setTile(tx, ty, v) {
+            if (!tileMap || tx < 0 || ty < 0 || tx >= MAP_TW || ty >= MAP_TH) return;
+            if (tileAt(tx, ty) === TILE_BEDROCK && v === TILE_AIR) return;
+            tileMap[ty * MAP_TW + tx] = v;
+        }
+        function isSolidTile(t) {
+            return t === TILE_DIRT || t === TILE_STONE || t === TILE_GRASS || t === TILE_DILDO || t === TILE_BEDROCK || t === TILE_WOOD || t === TILE_PINK;
+        }
+        function tileBreakDrop(t, wx, wy) {
+            let itemId = null;
+            if (t === TILE_DIRT || t === TILE_GRASS) itemId = "dirt";
+            else if (t === TILE_STONE) itemId = "stone";
+            else if (t === TILE_WOOD) itemId = "wood";
+            else if (t === TILE_PINK) itemId = "pink_stone";
+            else if (t === TILE_DILDO) {
+                // Dildo bloğu kırılınca dildo çıkar!
+                worldItems.push({ x: wx, y: wy, vx: (Math.random() - 0.5) * 2, vy: -3, itemId: "dildo", count: 1, life: 1200 });
+                worldItems.push({ x: wx + 6, y: wy - 4, vx: (Math.random() - 0.5) * 3, vy: -4, itemId: "dildo_block", count: 1, life: 1200 });
+                return;
+            }
+            if (itemId) {
+                worldItems.push({ x: wx, y: wy, vx: (Math.random() - 0.5) * 1.5, vy: -2.5, itemId: itemId, count: 1, life: 1200 });
+            }
+        }
+        function generateTileWorld() {
+            tileMap = new Uint8Array(MAP_TW * MAP_TH);
+            // gökyüzü boş
+            for (let y = 0; y < MAP_TH; y++) {
+                for (let x = 0; x < MAP_TW; x++) {
+                    tileMap[y * MAP_TW + x] = TILE_AIR;
+                }
+            }
+            // yüzey yüksekliği
+            const surface = [];
+            let h = Math.floor(MAP_TH * 0.42);
+            for (let x = 0; x < MAP_TW; x++) {
+                h += Math.floor(Math.random() * 3) - 1;
+                h = Math.max(Math.floor(MAP_TH * 0.28), Math.min(Math.floor(MAP_TH * 0.55), h));
+                // vadiler / tepeler
+                if (x % 47 === 0) h += Math.floor(Math.random() * 8) - 4;
+                surface[x] = h;
+            }
+            for (let x = 0; x < MAP_TW; x++) {
+                const surf = surface[x];
+                for (let y = surf; y < MAP_TH; y++) {
+                    let t = TILE_DIRT;
+                    if (y === surf) t = TILE_GRASS;
+                    if (y > surf + 4 + (x % 5)) t = TILE_STONE;
+                    if (y > MAP_TH - 4) t = TILE_BEDROCK;
+                    // mağara
+                    if (y > surf + 6 && y < MAP_TH - 8 && Math.random() < 0.08) t = TILE_AIR;
+                    // dildo blok damarları (nadir, pembe)
+                    if (t === TILE_STONE && Math.random() < 0.035) t = TILE_DILDO;
+                    if (t === TILE_DIRT && Math.random() < 0.012) t = TILE_DILDO;
+                    // pembe taş
+                    if (t === TILE_STONE && Math.random() < 0.04) t = TILE_PINK;
+                    tileMap[y * MAP_TW + x] = t;
+                }
+                // ağaçlar
+                if (x > 5 && x < MAP_TW - 5 && x % 13 === 3 && Math.random() < 0.5) {
+                    const th = 3 + Math.floor(Math.random() * 4);
+                    for (let ty = 1; ty <= th; ty++) {
+                        if (surf - ty >= 0) setTile(x, surf - ty, TILE_WOOD);
+                    }
+                }
+            }
+            // başlangıç köyü düz alan
+            const vx0 = 12, vx1 = 28, vs = surface[20] || 50;
+            for (let x = vx0; x < vx1; x++) {
+                for (let y = 0; y < vs; y++) setTile(x, y, TILE_AIR);
+                setTile(x, vs, TILE_GRASS);
+                for (let y = vs + 1; y < vs + 5; y++) setTile(x, y, TILE_DIRT);
+            }
+            // köy platform / ev
+            for (let x = 16; x < 22; x++) {
+                setTile(x, vs - 3, TILE_WOOD);
+            }
+            // dildo hazinesi odası
+            const dx = 80, dy = (surface[80] || 60) + 10;
+            for (let x = dx; x < dx + 8; x++) {
+                for (let y = dy; y < dy + 5; y++) {
+                    if (x === dx || x === dx + 7 || y === dy || y === dy + 4) setTile(x, y, TILE_PINK);
+                    else setTile(x, y, TILE_AIR);
+                }
+            }
+            for (let x = dx + 2; x < dx + 6; x++) setTile(x, dy + 3, TILE_DILDO);
+        }
+        function solidAtPixel(px, py) {
+            const tx = Math.floor(px / TILE);
+            const ty = Math.floor(py / TILE);
+            return isSolidTile(tileAt(tx, ty));
+        }
+        function tryMine(p) {
+            if (!p || p.isDead || !tileMap) return;
+            const facing = p.facing >= 0 ? 1 : -1;
+            // oyuncunun önündeki / altındaki blok
+            const cx = p.x + p.width / 2 + facing * (p.width * 0.6 + 8);
+            const cy = p.y + p.height * 0.55;
+            const tx = Math.floor(cx / TILE);
+            const ty = Math.floor(cy / TILE);
+            const t = tileAt(tx, ty);
+            if (!isSolidTile(t) || t === TILE_BEDROCK) {
+                // ayak altı
+                const tx2 = Math.floor((p.x + p.width / 2) / TILE);
+                const ty2 = Math.floor((p.y + p.height + 2) / TILE);
+                const t2 = tileAt(tx2, ty2);
+                if (!isSolidTile(t2) || t2 === TILE_BEDROCK) {
+                    mineProgress = 0;
+                    mineTarget = null;
+                    return;
+                }
+                if (!mineTarget || mineTarget.tx !== tx2 || mineTarget.ty !== ty2) {
+                    mineTarget = { tx: tx2, ty: ty2 };
+                    mineProgress = 0;
+                }
+            } else {
+                if (!mineTarget || mineTarget.tx !== tx || mineTarget.ty !== ty) {
+                    mineTarget = { tx, ty };
+                    mineProgress = 0;
+                }
+            }
+            if (!mineTarget) return;
+            const tt = tileAt(mineTarget.tx, mineTarget.ty);
+            if (!isSolidTile(tt) || tt === TILE_BEDROCK) {
+                mineProgress = 0;
+                mineTarget = null;
+                return;
+            }
+            // dildo blok biraz daha dayanıklı
+            const need = tt === TILE_DILDO ? 28 : tt === TILE_STONE || tt === TILE_PINK ? 22 : 14;
+            mineProgress++;
+            if (mineProgress >= need) {
+                const wx = mineTarget.tx * TILE + TILE / 2 - 6;
+                const wy = mineTarget.ty * TILE + TILE / 2 - 6;
+                tileBreakDrop(tt, wx, wy);
+                setTile(mineTarget.tx, mineTarget.ty, TILE_AIR);
+                mineProgress = 0;
+                mineTarget = null;
+            }
+        }
+        function tryPlace(p) {
+            if (!p || p.isDead) return;
+            const slot = invGetSelected();
+            if (!slot) return;
+            const def = ITEM_DEFS[slot.id];
+            if (!def || !def.place) return;
+            const facing = p.facing >= 0 ? 1 : -1;
+            const cx = p.x + p.width / 2 + facing * (TILE + 4);
+            const cy = p.y + p.height * 0.5;
+            const tx = Math.floor(cx / TILE);
+            const ty = Math.floor(cy / TILE);
+            if (tileAt(tx, ty) !== TILE_AIR) return;
+            // oyuncunun içine koyma
+            const tileWorldX = tx * TILE;
+            const tileWorldY = ty * TILE;
+            if (p.x < tileWorldX + TILE && p.x + p.width > tileWorldX &&
+                p.y < tileWorldY + TILE && p.y + p.height > tileWorldY) return;
+            setTile(tx, ty, def.place);
+            slot.count--;
+            if (slot.count <= 0) hotbar[invSelected] = null;
+        }
+        function updateWorldItems() {
+            for (let i = worldItems.length - 1; i >= 0; i--) {
+                const it = worldItems[i];
+                it.vy += 0.25;
+                it.x += it.vx || 0;
+                it.y += it.vy;
+                it.vx *= 0.95;
+                // tile çarpışma
+                if (solidAtPixel(it.x + 6, it.y + 12)) {
+                    it.y = Math.floor((it.y + 12) / TILE) * TILE - 12;
+                    it.vy = 0;
+                    it.vx *= 0.5;
+                }
+                it.life = (it.life || 900) - 1;
+                if (it.life <= 0) { worldItems.splice(i, 1); continue; }
+                // oyuncu toplama
+                players.forEach(p => {
+                    if (p.isDead) return;
+                    if (Math.abs(p.x + p.width / 2 - it.x) < 22 && Math.abs(p.y + p.height / 2 - it.y) < 28) {
+                        if (invAdd(it.itemId, it.count || 1)) {
+                            worldItems.splice(i, 1);
+                        }
+                    }
+                });
+            }
+        }
+        function drawTiles() {
+            if (!tileMap) return;
+            const tx0 = Math.max(0, Math.floor(camX / TILE) - 1);
+            const ty0 = Math.max(0, Math.floor(camY / TILE) - 1);
+            const tx1 = Math.min(MAP_TW, Math.ceil((camX + canvas.width) / TILE) + 1);
+            const ty1 = Math.min(MAP_TH, Math.ceil((camY + canvas.height) / TILE) + 1);
+            for (let ty = ty0; ty < ty1; ty++) {
+                for (let tx = tx0; tx < tx1; tx++) {
+                    const t = tileAt(tx, ty);
+                    if (t === TILE_AIR) continue;
+                    const x = tx * TILE, y = ty * TILE;
+                    if (t === TILE_DIRT) { ctx.fillStyle = "#6b4423"; ctx.fillRect(x, y, TILE, TILE); ctx.fillStyle = "#5a381c"; ctx.fillRect(x, y + TILE - 6, TILE, 6); }
+                    else if (t === TILE_GRASS) { ctx.fillStyle = "#6b4423"; ctx.fillRect(x, y, TILE, TILE); ctx.fillStyle = "#3d9e3d"; ctx.fillRect(x, y, TILE, 8); ctx.fillStyle = "#5dcf5d"; ctx.fillRect(x + 2, y + 1, TILE - 4, 4); }
+                    else if (t === TILE_STONE) { ctx.fillStyle = "#7a7a8a"; ctx.fillRect(x, y, TILE, TILE); ctx.fillStyle = "#9a9aaa"; ctx.fillRect(x + 3, y + 3, 8, 6); }
+                    else if (t === TILE_BEDROCK) { ctx.fillStyle = "#2a2a32"; ctx.fillRect(x, y, TILE, TILE); ctx.fillStyle = "#444"; ctx.fillRect(x + 2, y + 2, TILE - 4, TILE - 4); }
+                    else if (t === TILE_WOOD) { ctx.fillStyle = "#8b5a2b"; ctx.fillRect(x, y, TILE, TILE); ctx.fillStyle = "#6e4520"; ctx.fillRect(x + 12, y, 4, TILE); }
+                    else if (t === TILE_PINK) { ctx.fillStyle = "#c45a7a"; ctx.fillRect(x, y, TILE, TILE); ctx.fillStyle = "#e88aad"; ctx.fillRect(x + 4, y + 4, TILE - 8, TILE - 8); }
+                    else if (t === TILE_DILDO) {
+                        // Dildo bloğu — belirgin pembe
+                        ctx.fillStyle = "#ff1493";
+                        ctx.fillRect(x, y, TILE, TILE);
+                        ctx.fillStyle = "#ff69b4";
+                        ctx.fillRect(x + 3, y + 3, TILE - 6, TILE - 6);
+                        ctx.fillStyle = "#fff";
+                        ctx.fillRect(x + 12, y + 6, 6, 16);
+                        ctx.fillStyle = "#ffb6c1";
+                        ctx.beginPath();
+                        ctx.arc(x + 15, y + 8, 5, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                }
+            }
+            // mine hedef göstergesi
+            if (mineTarget && mineProgress > 0) {
+                const x = mineTarget.tx * TILE, y = mineTarget.ty * TILE;
+                const need = 20;
+                const pct = Math.min(1, mineProgress / need);
+                ctx.strokeStyle = "#fff";
+                ctx.lineWidth = 2;
+                ctx.strokeRect(x + 2, y + 2, TILE - 4, TILE - 4);
+                ctx.fillStyle = "rgba(255,255,255,0.35)";
+                ctx.fillRect(x + 2, y + TILE - 6, (TILE - 4) * pct, 4);
+            }
+        }
+        function drawWorldItems() {
+            worldItems.forEach(it => {
+                const def = ITEM_DEFS[it.itemId] || { color: "#fff" };
+                if (it.itemId === "dildo") {
+                    // dildo sprite basit
+                    ctx.fillStyle = "#ff69b4";
+                    ctx.fillRect(it.x + 4, it.y + 2, 6, 14);
+                    ctx.fillStyle = "#ffb6c1";
+                    ctx.beginPath();
+                    ctx.arc(it.x + 7, it.y + 3, 4, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.fillStyle = "#fff";
+                    ctx.font = "9px monospace";
+                    ctx.fillText("D", it.x + 3, it.y);
+                } else {
+                    ctx.fillStyle = def.color || "#ccc";
+                    ctx.fillRect(it.x, it.y, 12, 12);
+                    ctx.strokeStyle = "#000";
+                    ctx.strokeRect(it.x, it.y, 12, 12);
+                }
+            });
+        }
+        function drawInventoryUI() {
+            // HOTBAR
+            const slot = 40, gap = 4;
+            const totalW = HOTBAR_SIZE * (slot + gap) - gap;
+            const hx = (canvas.width - totalW) / 2;
+            const hy = canvas.height - slot - 12;
+            for (let i = 0; i < HOTBAR_SIZE; i++) {
+                const x = hx + i * (slot + gap);
+                ctx.fillStyle = i === invSelected ? "rgba(255, 51, 153, 0.45)" : "rgba(0,0,0,0.55)";
+                ctx.fillRect(x, hy, slot, slot);
+                ctx.strokeStyle = i === invSelected ? "#ff3399" : "#555";
+                ctx.lineWidth = 2;
+                ctx.strokeRect(x, hy, slot, slot);
+                const it = hotbar[i];
+                if (it) {
+                    const def = ITEM_DEFS[it.id] || {};
+                    ctx.fillStyle = def.color || "#fff";
+                    if (it.id === "dildo") {
+                        ctx.fillStyle = "#ff69b4";
+                        ctx.fillRect(x + 16, hy + 8, 8, 22);
+                        ctx.fillStyle = "#ffb6c1";
+                        ctx.beginPath(); ctx.arc(x + 20, hy + 12, 6, 0, Math.PI * 2); ctx.fill();
+                    } else {
+                        ctx.fillRect(x + 8, hy + 8, slot - 16, slot - 16);
+                    }
+                    ctx.fillStyle = "#fff";
+                    ctx.font = "bold 11px monospace";
+                    ctx.textAlign = "right";
+                    ctx.fillText(String(it.count), x + slot - 4, hy + slot - 4);
+                }
+                ctx.fillStyle = "#888";
+                ctx.font = "10px monospace";
+                ctx.textAlign = "left";
+                ctx.fillText(String((i + 1) % 10), x + 3, hy + 11);
+            }
+            // full inventory panel
+            if (!invOpen) return;
+            const cols = 10, rows = 4;
+            const pw = cols * (slot + gap) - gap + 24;
+            const ph = rows * (slot + gap) - gap + 50;
+            const px = (canvas.width - pw) / 2;
+            const py = (canvas.height - ph) / 2 - 20;
+            ctx.fillStyle = "rgba(10, 8, 14, 0.92)";
+            ctx.fillRect(px, py, pw, ph);
+            ctx.strokeStyle = "#ff3399";
+            ctx.lineWidth = 2;
+            ctx.strokeRect(px, py, pw, ph);
+            ctx.fillStyle = "#ff66aa";
+            ctx.font = "bold 16px 'Impact'";
+            ctx.textAlign = "center";
+            ctx.fillText("ENVANTER  (E kapat)", px + pw / 2, py + 22);
+            for (let i = 0; i < INV_SIZE; i++) {
+                const cx = i % cols;
+                const cy = Math.floor(i / cols);
+                const x = px + 12 + cx * (slot + gap);
+                const y = py + 36 + cy * (slot + gap);
+                ctx.fillStyle = "rgba(0,0,0,0.5)";
+                ctx.fillRect(x, y, slot, slot);
+                ctx.strokeStyle = "#444";
+                ctx.strokeRect(x, y, slot, slot);
+                const it = inventory[i];
+                if (it) {
+                    const def = ITEM_DEFS[it.id] || {};
+                    ctx.fillStyle = def.color || "#fff";
+                    if (it.id === "dildo") {
+                        ctx.fillStyle = "#ff69b4";
+                        ctx.fillRect(x + 16, y + 8, 8, 22);
+                        ctx.fillStyle = "#ffb6c1";
+                        ctx.beginPath(); ctx.arc(x + 20, y + 12, 6, 0, Math.PI * 2); ctx.fill();
+                    } else {
+                        ctx.fillRect(x + 8, y + 8, slot - 16, slot - 16);
+                    }
+                    ctx.fillStyle = "#fff";
+                    ctx.font = "bold 11px monospace";
+                    ctx.textAlign = "right";
+                    ctx.fillText(String(it.count), x + slot - 4, y + slot - 4);
+                }
+            }
+        }
+        function tilePlayerCollision(p) {
+            // basit AABB vs solid tiles
+            if (!tileMap) return;
+            const feet = p.y + p.height;
+            // dikey
+            if (p.vy >= 0) {
+                const yCheck = feet;
+                const left = p.x + 3;
+                const right = p.x + p.width - 3;
+                if (solidAtPixel(left, yCheck) || solidAtPixel(right, yCheck)) {
+                    const ty = Math.floor(yCheck / TILE);
+                    p.y = ty * TILE - p.height;
+                    p.vy = 0;
+                    p.onGround = true;
+                }
+            } else if (p.vy < 0) {
+                if (solidAtPixel(p.x + 3, p.y) || solidAtPixel(p.x + p.width - 3, p.y)) {
+                    const ty = Math.floor(p.y / TILE) + 1;
+                    p.y = ty * TILE;
+                    p.vy = 0;
+                }
+            }
+            // yatay
+            if (p.vx > 0) {
+                if (solidAtPixel(p.x + p.width, p.y + 4) || solidAtPixel(p.x + p.width, p.y + p.height - 4)) {
+                    const tx = Math.floor((p.x + p.width) / TILE);
+                    p.x = tx * TILE - p.width - 0.1;
+                    p.vx = 0;
+                }
+            } else if (p.vx < 0) {
+                if (solidAtPixel(p.x, p.y + 4) || solidAtPixel(p.x, p.y + p.height - 4)) {
+                    const tx = Math.floor(p.x / TILE) + 1;
+                    p.x = tx * TILE + 0.1;
+                    p.vx = 0;
+                }
+            }
+        }
         function updateCamera(fx, fy) {
             let tx = fx - canvas.width / 2;
             let ty = fy - canvas.height / 2;
@@ -2996,6 +3447,8 @@
             survivalTimer = 0;
             platformAngle = 0;
             camX = 0; camY = 0;
+            generateTileWorld();
+            platforms = [];
             initModeObjects();
         }
 
@@ -3049,6 +3502,20 @@
                 }
                 e.preventDefault();
                 return;
+            }
+
+            // Envanter E
+            if ((e.code === "KeyE") && (gameState === "PLAYING" || gameState === "GAMEOVER") && !chatOpen) {
+                invOpen = !invOpen;
+                e.preventDefault();
+                return;
+            }
+            // Hotbar 1-9 0
+            if (gameState === "PLAYING" && !chatOpen && !consoleOpen) {
+                if (e.code >= "Digit1" && e.code <= "Digit9") {
+                    invSelected = parseInt(e.code.replace("Digit", ""), 10) - 1;
+                }
+                if (e.code === "Digit0") invSelected = 9;
             }
 
             // Kontrol yeniden bağlama
@@ -4059,6 +4526,9 @@
             survivalTimer = 0;
             platformAngle = 0;
             camX = 0; camY = 0;
+            generateTileWorld();
+            invReset();
+            platforms = []; // tile dünya kullan
 
             players = JSON.parse(JSON.stringify(allPlayersData.slice(0, activePlayerCount)));
             players.forEach((p, idx) => {
@@ -4070,8 +4540,8 @@
                     p.shootKey = oc.shoot;
                 }
                 applySkinPowers(p);
-                p.x = 120 + idx * 70;
-                p.y = 420;
+                p.x = (18 + idx * 2) * TILE;
+                p.y = 30 * TILE;
             });
 
             for (let i = 1; i <= 4; i++) {
@@ -5377,7 +5847,7 @@
                     const rushMult = activeGameMode === "rush" ? 1.75 : 1;
                     const chaosMult = (activeMapId === "chaos") ? 1.35 : 1;
                     // Lav yavaşça yükselir (y ekseni azalır = ekranda yukarı çıkar)
-                    const riseSpeed = 0.22 * rushMult * chaosMult;
+                    const riseSpeed = 0.12 * rushMult * chaosMult;
                     if (lavaLevel > 120) {
                         lavaLevel -= riseSpeed;
                     }
@@ -5402,17 +5872,20 @@
                 }
                 beginWorld();
                 drawWorldBackdrop();
-                if (!platforms.length) platforms = buildArenaPlatforms(activeMapId || "classic");
-                platforms.forEach(pl => {
-                    if (pl.x + pl.w < camX - 20 || pl.x > camX + canvas.width + 20) return;
-                    if (pl.y + pl.h < camY - 20 || pl.y > camY + canvas.height + 20) return;
-                    ctx.fillStyle = "#1a1c28";
-                    ctx.fillRect(pl.x, pl.y, pl.w, pl.h);
-                    ctx.fillStyle = pl.main ? "#ff3399" : "#ff6688";
-                    ctx.fillRect(pl.x, pl.y, pl.w, 4);
-                    ctx.fillStyle = "#333";
-                    ctx.fillRect(pl.x, pl.y + pl.h - 2, pl.w, 2);
-                });
+                if (!tileMap) generateTileWorld();
+                drawTiles();
+                // eski platformlar yok — tile dünya
+                if (platforms && platforms.length) {
+                    platforms.forEach(pl => {
+                        if (pl.x + pl.w < camX - 20 || pl.x > camX + canvas.width + 20) return;
+                        if (pl.y + pl.h < camY - 20 || pl.y > camY + canvas.height + 20) return;
+                        ctx.fillStyle = "#1a1c28";
+                        ctx.fillRect(pl.x, pl.y, pl.w, pl.h);
+                        ctx.fillStyle = "#ff6688";
+                        ctx.fillRect(pl.x, pl.y, pl.w, 4);
+                    });
+                }
+                drawWorldItems();
                 if (lavaLevel < WORLD_H + 40) {
                     const ly = lavaLevel;
                     const grad = ctx.createLinearGradient(0, ly, 0, WORLD_H);
@@ -5606,7 +6079,14 @@
                         p.vy = -9 * (p.jumpMult || 1);
                         p.onGround = false;
                     }
-                    if (doShoot) tryShoot(p);
+                    if (doShoot) {
+                        tryMine(p);
+                    } else if (mineTarget) {
+                        mineProgress = Math.max(0, mineProgress - 2);
+                        if (mineProgress <= 0) mineTarget = null;
+                    }
+                    // sağ tık / G ile yerleştir — klavye G
+                    if (keys["KeyG"]) tryPlace(p);
 
                     p.vy += gravity * (p.gravityMult || 1);
                     p.x += p.vx;
@@ -5616,23 +6096,21 @@
                     if (p.x + p.width > WORLD_W) p.x = WORLD_W - p.width;
                     if (p.y < -200) { p.y = -200; p.vy = 0; }
 
-                    let stoodOnPlatform = false;
-                    const plats = platforms.length ? platforms : [platform];
-                    plats.forEach(pl => {
-                        const px = pl.x != null ? pl.x : pl.x;
-                        const py = pl.y != null ? pl.y : pl.y;
-                        const pw = pl.w != null ? pl.w : pl.width;
-                        const ph = pl.h != null ? pl.h : pl.height;
-                        if (p.x + p.width > px && p.x < px + pw) {
-                            if (p.y + p.height >= py && p.y + p.height - p.vy <= py + 14 && p.vy >= 0) {
-                                p.y = py - p.height;
-                                p.vy = 0;
-                                p.onGround = true;
-                                stoodOnPlatform = true;
+                    p.onGround = false;
+                    tilePlayerCollision(p);
+                    // yedek platform çarpışması
+                    if (platforms && platforms.length) {
+                        platforms.forEach(pl => {
+                            const px = pl.x, py = pl.y, pw = pl.w, ph = pl.h;
+                            if (p.x + p.width > px && p.x < px + pw) {
+                                if (p.y + p.height >= py && p.y + p.height - p.vy <= py + 14 && p.vy >= 0) {
+                                    p.y = py - p.height;
+                                    p.vy = 0;
+                                    p.onGround = true;
+                                }
                             }
-                        }
-                    });
-                    if (!stoodOnPlatform) p.onGround = false;
+                        });
+                    }
                     // CTF flag pickup / score
                     if (activeGameMode === "ctf" && flags.length) {
                         flags.forEach(f => {
@@ -5692,6 +6170,7 @@
                         }
                     }
                 });
+                if ((!isOnline || isHost) && !hostPaused) updateWorldItems();
                 } // end host/local physics
 
                 // Oyuncu-oyuncu çarpışma — sadece host/local
@@ -5778,6 +6257,7 @@
                     }
                 });
                 endWorld();
+                drawInventoryUI();
 
                 // minimap
                 {
@@ -5820,7 +6300,7 @@
                 const modeName = modeLabel ? t(modeLabel) : activeGameMode;
                 ctx.fillStyle = "#ff6633";
                 const liveSec = Math.floor(survivalTimer || 0);
-                ctx.fillText("SEX RPG | " + modeName + " | " + liveSec + "s | Harita büyük — keşfet & kaç!", canvas.width / 2, 36);
+                ctx.fillText("SEX RPG | " + liveSec + "s | F:kaz | G:koy | E:envanter | Dildo bloğu kır!", canvas.width / 2, 36);
 
                 if (gameState === "GAMEOVER") {
                     ctx.fillStyle = "rgba(0, 0, 0, 0.85)";
