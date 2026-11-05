@@ -318,8 +318,12 @@
         let inventory = [];
         let hotbar = [];
         let mineProgress = 0;
-        let mineTarget = null; // {tx, ty}
+        let mineTarget = null;
         let lastMineKey = false;
+        let mouseWorldX = 0, mouseWorldY = 0;
+        let mouseDownLeft = false;
+        let mouseDownRight = false;
+        let hotbarRect = { x: 0, y: 0, slot: 48, gap: 3 };
 
         function invReset() {
             inventory = [];
@@ -464,44 +468,42 @@
             const ty = Math.floor(py / TILE);
             return isSolidTile(tileAt(tx, ty));
         }
-        function tryMine(p) {
+        function tryMine(p, optTx, optTy) {
             if (!p || p.isDead || !tileMap) return;
-            const facing = p.facing >= 0 ? 1 : -1;
-            // oyuncunun önündeki / altındaki blok
-            const cx = p.x + p.width / 2 + facing * (p.width * 0.6 + 8);
-            const cy = p.y + p.height * 0.55;
-            const tx = Math.floor(cx / TILE);
-            const ty = Math.floor(cy / TILE);
-            const t = tileAt(tx, ty);
-            if (!isSolidTile(t) || t === TILE_BEDROCK) {
-                // ayak altı
-                const tx2 = Math.floor((p.x + p.width / 2) / TILE);
-                const ty2 = Math.floor((p.y + p.height + 2) / TILE);
-                const t2 = tileAt(tx2, ty2);
-                if (!isSolidTile(t2) || t2 === TILE_BEDROCK) {
-                    mineProgress = 0;
-                    mineTarget = null;
-                    return;
-                }
-                if (!mineTarget || mineTarget.tx !== tx2 || mineTarget.ty !== ty2) {
-                    mineTarget = { tx: tx2, ty: ty2 };
-                    mineProgress = 0;
-                }
+            let tx, ty;
+            if (optTx != null && optTy != null) {
+                tx = optTx; ty = optTy;
             } else {
-                if (!mineTarget || mineTarget.tx !== tx || mineTarget.ty !== ty) {
-                    mineTarget = { tx, ty };
-                    mineProgress = 0;
+                const facing = p.facing >= 0 ? 1 : -1;
+                const cx = p.x + p.width / 2 + facing * (p.width * 0.6 + 8);
+                const cy = p.y + p.height * 0.55;
+                tx = Math.floor(cx / TILE);
+                ty = Math.floor(cy / TILE);
+                const t0 = tileAt(tx, ty);
+                if (!isSolidTile(t0) || t0 === TILE_BEDROCK) {
+                    tx = Math.floor((p.x + p.width / 2) / TILE);
+                    ty = Math.floor((p.y + p.height + 2) / TILE);
                 }
             }
-            if (!mineTarget) return;
-            const tt = tileAt(mineTarget.tx, mineTarget.ty);
-            if (!isSolidTile(tt) || tt === TILE_BEDROCK) {
+            const ptx = (p.x + p.width / 2) / TILE;
+            const pty = (p.y + p.height / 2) / TILE;
+            if (Math.abs(tx - ptx) > 5 || Math.abs(ty - pty) > 5) {
                 mineProgress = 0;
                 mineTarget = null;
                 return;
             }
-            // dildo blok biraz daha dayanıklı
-            const need = tt === TILE_DILDO ? 28 : tt === TILE_STONE || tt === TILE_PINK ? 22 : 14;
+            const t = tileAt(tx, ty);
+            if (!isSolidTile(t) || t === TILE_BEDROCK) {
+                mineProgress = 0;
+                mineTarget = null;
+                return;
+            }
+            if (!mineTarget || mineTarget.tx !== tx || mineTarget.ty !== ty) {
+                mineTarget = { tx: tx, ty: ty };
+                mineProgress = 0;
+            }
+            const tt = tileAt(mineTarget.tx, mineTarget.ty);
+            const need = tt === TILE_DILDO ? 22 : (tt === TILE_STONE || tt === TILE_PINK) ? 16 : 10;
             mineProgress++;
             if (mineProgress >= need) {
                 const wx = mineTarget.tx * TILE + TILE / 2 - 6;
@@ -511,6 +513,24 @@
                 mineProgress = 0;
                 mineTarget = null;
             }
+        }
+        function tryPlaceAt(p, tx, ty) {
+            if (!p || p.isDead) return;
+            const slot = invGetSelected();
+            if (!slot) return;
+            const def = ITEM_DEFS[slot.id];
+            if (!def || !def.place) return;
+            const ptx = (p.x + p.width / 2) / TILE;
+            const pty = (p.y + p.height / 2) / TILE;
+            if (Math.abs(tx - ptx) > 5 || Math.abs(ty - pty) > 5) return;
+            if (tileAt(tx, ty) !== TILE_AIR) return;
+            const tileWorldX = tx * TILE;
+            const tileWorldY = ty * TILE;
+            if (p.x < tileWorldX + TILE && p.x + p.width > tileWorldX &&
+                p.y < tileWorldY + TILE && p.y + p.height > tileWorldY) return;
+            setTile(tx, ty, def.place);
+            slot.count--;
+            if (slot.count <= 0) hotbar[invSelected] = null;
         }
         function tryPlace(p) {
             if (!p || p.isDead) return;
@@ -625,84 +645,148 @@
                 }
             });
         }
+        function drawItemIcon(itemId, x, y, size) {
+            const def = ITEM_DEFS[itemId] || { color: "#ccc" };
+            const s2 = size || 28;
+            if (itemId === "dildo") {
+                ctx.fillStyle = "#ff69b4";
+                ctx.fillRect(x + s2 * 0.35, y + s2 * 0.2, s2 * 0.28, s2 * 0.65);
+                ctx.fillStyle = "#ffb6c1";
+                ctx.beginPath();
+                ctx.arc(x + s2 * 0.49, y + s2 * 0.25, s2 * 0.2, 0, Math.PI * 2);
+                ctx.fill();
+                return;
+            }
+            if (itemId === "dildo_block") {
+                ctx.fillStyle = "#ff1493";
+                ctx.fillRect(x + 2, y + 2, s2 - 4, s2 - 4);
+                ctx.fillStyle = "#ff69b4";
+                ctx.fillRect(x + s2 * 0.35, y + s2 * 0.25, s2 * 0.25, s2 * 0.5);
+                return;
+            }
+            ctx.fillStyle = def.color || "#888";
+            ctx.fillRect(x + 3, y + 3, s2 - 6, s2 - 6);
+            if (itemId === "grass") {
+                ctx.fillStyle = "#3d9e3d";
+                ctx.fillRect(x + 3, y + 3, s2 - 6, 7);
+            } else if (itemId === "stone") {
+                ctx.fillStyle = "#aaa";
+                ctx.fillRect(x + 6, y + 8, 8, 6);
+            } else if (itemId === "wood") {
+                ctx.fillStyle = "#6e4520";
+                ctx.fillRect(x + s2 * 0.45, y + 4, 4, s2 - 8);
+            } else if (itemId === "dirt") {
+                ctx.fillStyle = "#5a381c";
+                ctx.fillRect(x + 3, y + s2 - 10, s2 - 6, 6);
+            } else if (itemId === "pink_stone") {
+                ctx.fillStyle = "#e88aad";
+                ctx.fillRect(x + 6, y + 6, s2 - 12, s2 - 12);
+            }
+        }
         function drawInventoryUI() {
-            // HOTBAR
-            const slot = 40, gap = 4;
-            const totalW = HOTBAR_SIZE * (slot + gap) - gap;
-            const hx = (canvas.width - totalW) / 2;
-            const hy = canvas.height - slot - 12;
+            const slot = 48, gap = 3, pad = 5;
+            const totalW = HOTBAR_SIZE * (slot + gap) - gap + pad * 2;
+            const hx = Math.round((canvas.width - totalW) / 2);
+            const hy = canvas.height - slot - 14;
+            hotbarRect = { x: hx + pad, y: hy, slot: slot, gap: gap, pad: pad, totalW: totalW };
+
+            ctx.fillStyle = "rgba(20, 16, 12, 0.82)";
+            ctx.fillRect(hx, hy - 4, totalW, slot + 8);
+            ctx.strokeStyle = "rgba(80, 60, 40, 0.9)";
+            ctx.lineWidth = 2;
+            ctx.strokeRect(hx, hy - 4, totalW, slot + 8);
+
             for (let i = 0; i < HOTBAR_SIZE; i++) {
-                const x = hx + i * (slot + gap);
-                ctx.fillStyle = i === invSelected ? "rgba(255, 51, 153, 0.45)" : "rgba(0,0,0,0.55)";
-                ctx.fillRect(x, hy, slot, slot);
-                ctx.strokeStyle = i === invSelected ? "#ff3399" : "#555";
+                const x = hx + pad + i * (slot + gap);
+                const y = hy;
+                ctx.fillStyle = "#2a2218";
+                ctx.fillRect(x, y, slot, slot);
+                ctx.strokeStyle = "#1a140e";
                 ctx.lineWidth = 2;
-                ctx.strokeRect(x, hy, slot, slot);
+                ctx.strokeRect(x + 1, y + 1, slot - 2, slot - 2);
+
                 const it = hotbar[i];
                 if (it) {
-                    const def = ITEM_DEFS[it.id] || {};
-                    ctx.fillStyle = def.color || "#fff";
-                    if (it.id === "dildo") {
-                        ctx.fillStyle = "#ff69b4";
-                        ctx.fillRect(x + 16, hy + 8, 8, 22);
-                        ctx.fillStyle = "#ffb6c1";
-                        ctx.beginPath(); ctx.arc(x + 20, hy + 12, 6, 0, Math.PI * 2); ctx.fill();
-                    } else {
-                        ctx.fillRect(x + 8, hy + 8, slot - 16, slot - 16);
+                    drawItemIcon(it.id, x + 8, y + 6, 32);
+                    if (it.count > 1) {
+                        ctx.fillStyle = "rgba(0,0,0,0.55)";
+                        ctx.fillRect(x + slot - 22, y + slot - 16, 20, 13);
+                        ctx.fillStyle = "#fff";
+                        ctx.font = "bold 11px monospace";
+                        ctx.textAlign = "right";
+                        ctx.fillText(String(it.count), x + slot - 4, y + slot - 5);
                     }
-                    ctx.fillStyle = "#fff";
-                    ctx.font = "bold 11px monospace";
-                    ctx.textAlign = "right";
-                    ctx.fillText(String(it.count), x + slot - 4, hy + slot - 4);
                 }
-                ctx.fillStyle = "#888";
-                ctx.font = "10px monospace";
-                ctx.textAlign = "left";
-                ctx.fillText(String((i + 1) % 10), x + 3, hy + 11);
+                if (i === invSelected) {
+                    ctx.strokeStyle = "#4da6ff";
+                    ctx.lineWidth = 3;
+                    ctx.strokeRect(x + 1, y + 1, slot - 2, slot - 2);
+                    ctx.strokeStyle = "rgba(100, 180, 255, 0.5)";
+                    ctx.lineWidth = 1;
+                    ctx.strokeRect(x - 1, y - 1, slot + 2, slot + 2);
+                } else {
+                    ctx.strokeStyle = "#5a4a38";
+                    ctx.lineWidth = 1;
+                    ctx.strokeRect(x, y, slot, slot);
+                }
             }
-            // full inventory panel
+
             if (!invOpen) return;
             const cols = 10, rows = 4;
-            const pw = cols * (slot + gap) - gap + 24;
-            const ph = rows * (slot + gap) - gap + 50;
-            const px = (canvas.width - pw) / 2;
-            const py = (canvas.height - ph) / 2 - 20;
-            ctx.fillStyle = "rgba(10, 8, 14, 0.92)";
+            const pw = cols * (slot + gap) - gap + 28;
+            const ph = rows * (slot + gap) - gap + 56;
+            const px = Math.round((canvas.width - pw) / 2);
+            const py = Math.round((canvas.height - ph) / 2) - 30;
+            ctx.fillStyle = "rgba(18, 14, 10, 0.94)";
             ctx.fillRect(px, py, pw, ph);
-            ctx.strokeStyle = "#ff3399";
+            ctx.strokeStyle = "#4da6ff";
             ctx.lineWidth = 2;
             ctx.strokeRect(px, py, pw, ph);
-            ctx.fillStyle = "#ff66aa";
-            ctx.font = "bold 16px 'Impact'";
+            ctx.fillStyle = "#c8d8e8";
+            ctx.font = "bold 15px monospace";
             ctx.textAlign = "center";
-            ctx.fillText("ENVANTER  (E kapat)", px + pw / 2, py + 22);
+            ctx.fillText("ENVANTER  (E — kapat)", px + pw / 2, py + 24);
+
             for (let i = 0; i < INV_SIZE; i++) {
                 const cx = i % cols;
                 const cy = Math.floor(i / cols);
-                const x = px + 12 + cx * (slot + gap);
-                const y = py + 36 + cy * (slot + gap);
-                ctx.fillStyle = "rgba(0,0,0,0.5)";
+                const x = px + 14 + cx * (slot + gap);
+                const y = py + 38 + cy * (slot + gap);
+                ctx.fillStyle = "#2a2218";
                 ctx.fillRect(x, y, slot, slot);
-                ctx.strokeStyle = "#444";
+                ctx.strokeStyle = "#5a4a38";
+                ctx.lineWidth = 1;
                 ctx.strokeRect(x, y, slot, slot);
                 const it = inventory[i];
                 if (it) {
-                    const def = ITEM_DEFS[it.id] || {};
-                    ctx.fillStyle = def.color || "#fff";
-                    if (it.id === "dildo") {
-                        ctx.fillStyle = "#ff69b4";
-                        ctx.fillRect(x + 16, y + 8, 8, 22);
-                        ctx.fillStyle = "#ffb6c1";
-                        ctx.beginPath(); ctx.arc(x + 20, y + 12, 6, 0, Math.PI * 2); ctx.fill();
-                    } else {
-                        ctx.fillRect(x + 8, y + 8, slot - 16, slot - 16);
+                    drawItemIcon(it.id, x + 8, y + 6, 32);
+                    if (it.count > 1) {
+                        ctx.fillStyle = "rgba(0,0,0,0.55)";
+                        ctx.fillRect(x + slot - 22, y + slot - 16, 20, 13);
+                        ctx.fillStyle = "#fff";
+                        ctx.font = "bold 11px monospace";
+                        ctx.textAlign = "right";
+                        ctx.fillText(String(it.count), x + slot - 4, y + slot - 5);
                     }
-                    ctx.fillStyle = "#fff";
-                    ctx.font = "bold 11px monospace";
-                    ctx.textAlign = "right";
-                    ctx.fillText(String(it.count), x + slot - 4, y + slot - 4);
                 }
             }
+        }
+        function hitHotbarSlot(mx, my) {
+            const x = hotbarRect.x, y = hotbarRect.y, slot = hotbarRect.slot, gap = hotbarRect.gap;
+            if (my < y || my > y + slot) return -1;
+            for (let i = 0; i < HOTBAR_SIZE; i++) {
+                const sx = x + i * (slot + gap);
+                if (mx >= sx && mx <= sx + slot) return i;
+            }
+            return -1;
+        }
+        function canvasToWorld(clientX, clientY) {
+            const rect = canvas.getBoundingClientRect();
+            const sx = canvas.width / Math.max(1, rect.width);
+            const sy = canvas.height / Math.max(1, rect.height);
+            const cx = (clientX - rect.left) * sx;
+            const cy = (clientY - rect.top) * sy;
+            return { x: cx + camX, y: cy + camY, sx: cx, sy: cy };
         }
         function tilePlayerCollision(p) {
             // basit AABB vs solid tiles
@@ -3787,7 +3871,40 @@
             };
         }
 
+        
+        function handleGameMouseDown(e) {
+            if (gameState !== "PLAYING" && gameState !== "GAMEOVER") return false;
+            const w = canvasToWorld(e.clientX, e.clientY);
+            const hs = hitHotbarSlot(w.sx, w.sy);
+            if (hs >= 0) {
+                invSelected = hs;
+                return true;
+            }
+            if (invOpen) return true;
+            const p = players.find(function(pl) { return pl.id === myPlayerId; }) || players[0];
+            if (!p || p.isDead) return false;
+            const tx = Math.floor(w.x / TILE);
+            const ty = Math.floor(w.y / TILE);
+            if (e.button === 0) {
+                mouseDownLeft = true;
+                tryMine(p, tx, ty);
+                return true;
+            }
+            if (e.button === 2) {
+                mouseDownRight = true;
+                tryPlaceAt(p, tx, ty);
+                return true;
+            }
+            return false;
+        }
+        canvas.addEventListener("contextmenu", function(e) {
+            if (gameState === "PLAYING" || gameState === "GAMEOVER") e.preventDefault();
+        });
         canvas.addEventListener("mousedown", (e) => {
+            if (typeof handleGameMouseDown === "function" && handleGameMouseDown(e)) {
+                e.preventDefault();
+                return;
+            }
             if (gameState !== "SETTINGS" || settingsTab !== "ses") return;
             const { x: mouseX, y: mouseY } = canvasCoords(e.clientX, e.clientY);
             if (mouseX >= 100 && mouseX <= 500 && mouseY >= 160 && mouseY <= 210) {
@@ -3797,12 +3914,21 @@
             }
         });
         window.addEventListener("mousemove", (e) => {
+            if (gameState === "PLAYING" || gameState === "GAMEOVER") {
+                try {
+                    const w = canvasToWorld(e.clientX, e.clientY);
+                    mouseWorldX = w.x;
+                    mouseWorldY = w.y;
+                } catch (err) {}
+            }
             if (!volumeDragging) return;
             const { x: mouseX } = canvasCoords(e.clientX, e.clientY);
             settings.masterVolume = Math.max(0, Math.min(1, (mouseX - 100) / 400));
             applySettings();
         });
-        window.addEventListener("mouseup", () => {
+        window.addEventListener("mouseup", (e) => {
+            mouseDownLeft = false;
+            mouseDownRight = false;
             if (volumeDragging) {
                 volumeDragging = false;
                 saveSettings();
@@ -6079,14 +6205,19 @@
                         p.vy = -9 * (p.jumpMult || 1);
                         p.onGround = false;
                     }
-                    if (doShoot) {
+                    if (doShoot && !mouseDownLeft) {
                         tryMine(p);
-                    } else if (mineTarget) {
+                    }
+                    if (mouseDownLeft && (p.id === myPlayerId || !isOnline || isHost)) {
+                        tryMine(p, Math.floor(mouseWorldX / TILE), Math.floor(mouseWorldY / TILE));
+                    } else if (!doShoot && !mouseDownLeft && mineTarget) {
                         mineProgress = Math.max(0, mineProgress - 2);
                         if (mineProgress <= 0) mineTarget = null;
                     }
-                    // sağ tık / G ile yerleştir — klavye G
                     if (keys["KeyG"]) tryPlace(p);
+                    if (mouseDownRight && (p.id === myPlayerId || !isOnline || isHost)) {
+                        tryPlaceAt(p, Math.floor(mouseWorldX / TILE), Math.floor(mouseWorldY / TILE));
+                    }
 
                     p.vy += gravity * (p.gravityMult || 1);
                     p.x += p.vx;
@@ -6300,7 +6431,7 @@
                 const modeName = modeLabel ? t(modeLabel) : activeGameMode;
                 ctx.fillStyle = "#ff6633";
                 const liveSec = Math.floor(survivalTimer || 0);
-                ctx.fillText("SEX RPG | " + liveSec + "s | F:kaz | G:koy | E:envanter | Dildo bloğu kır!", canvas.width / 2, 36);
+                ctx.fillText("SEX RPG | Sol tık: kır | Sağ tık: koy | E: envanter | 1-9 hotbar", canvas.width / 2, 36);
 
                 if (gameState === "GAMEOVER") {
                     ctx.fillStyle = "rgba(0, 0, 0, 0.85)";
