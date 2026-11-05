@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lava Rain V2 — Online Multiplayer</title>
+    <title>Sex RPG — Online</title>
     <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
     <style>
         * {
@@ -27,8 +27,8 @@
         }
         #game-container {
             position: relative;
-            border: 6px solid #ff0055;
-            box-shadow: 0 0 30px #ff0055;
+            border: 6px solid #ff3399;
+            box-shadow: 0 0 30px #ff3399;
         }
         canvas {
             background: #0d0e15;
@@ -265,7 +265,7 @@
             <button type="button" id="mobile-text-cancel">İPTAL</button>
         </div>
     </div>
-    <div id="version-badge">V2.2</div>
+    <div id="version-badge">Sex RPG</div>
     <audio id="menuMusic" loop preload="auto">
         <source src="Iron_key.mp3" type="audio/mpeg">
     </audio>
@@ -278,12 +278,70 @@
     <div id="controls-info">
         <strong>YEREL / ONLINE:</strong> Kontroller Ayarlar menüsünden özelleştirilebilir (Offline / Online sekmeleri).<br>
         <strong>ONLINE:</strong> Enter=Chat | Sağ Shift=Başlat (host) | ESC=Menü | TAB=Oyuncular<br>
-        <em>V2.2 — Lava Rain: lav yükselir, gökten ateş yağar, it & kaç. Online stabil.</em>
+        <em>Sex RPG — Büyük açık harita · lav · online</em>
     </div>
     <script>
         const canvas = document.getElementById("gameCanvas");
         const ctx = canvas.getContext("2d");
         ctx.imageSmoothingEnabled = false;
+
+        // ===== BÜYÜK RPG DÜNYASI + KAMERA =====
+        const WORLD_W = 3600;
+        const WORLD_H = 2400;
+        let camX = 0;
+        let camY = 0;
+        function updateCamera(fx, fy) {
+            let tx = fx - canvas.width / 2;
+            let ty = fy - canvas.height / 2;
+            tx = Math.max(0, Math.min(WORLD_W - canvas.width, tx));
+            ty = Math.max(0, Math.min(WORLD_H - canvas.height, ty));
+            camX += (tx - camX) * 0.14;
+            camY += (ty - camY) * 0.14;
+            camX = Math.max(0, Math.min(WORLD_W - canvas.width, camX));
+            camY = Math.max(0, Math.min(WORLD_H - canvas.height, camY));
+        }
+        function beginWorld() {
+            ctx.save();
+            ctx.translate(-Math.round(camX), -Math.round(camY));
+        }
+        function endWorld() {
+            ctx.restore();
+        }
+        function drawWorldBackdrop() {
+            ctx.fillStyle = "#0a0c12";
+            ctx.fillRect(camX, camY, canvas.width, canvas.height);
+            if (!mobilePerf && settings.quality !== "low") {
+                ctx.strokeStyle = "rgba(255, 51, 153, 0.05)";
+                ctx.lineWidth = 1;
+                const gs = 80;
+                const x0 = Math.floor(camX / gs) * gs;
+                const y0 = Math.floor(camY / gs) * gs;
+                for (let x = x0; x < camX + canvas.width + gs; x += gs) {
+                    ctx.beginPath(); ctx.moveTo(x, camY); ctx.lineTo(x, camY + canvas.height); ctx.stroke();
+                }
+                for (let y = y0; y < camY + canvas.height + gs; y += gs) {
+                    ctx.beginPath(); ctx.moveTo(camX, y); ctx.lineTo(camX + canvas.width, y); ctx.stroke();
+                }
+            }
+            const zones = [
+                { x: 200, y: 400, n: "BAŞLANGIÇ KÖYÜ" },
+                { x: 1400, y: 600, n: "ORTA VADİ" },
+                { x: 2600, y: 500, n: "DOĞU KULELERİ" },
+                { x: 800, y: 1400, n: "ALT MAGMA" },
+                { x: 2200, y: 1600, n: "KAYIP TAPINAK" },
+                { x: 400, y: 2000, n: "LAV KIYISI" },
+                { x: 2800, y: 2000, n: "SON UÇURUM" }
+            ];
+            ctx.font = "bold 22px 'Impact'";
+            ctx.textAlign = "left";
+            zones.forEach(z => {
+                if (z.x > camX - 100 && z.x < camX + canvas.width + 200 &&
+                    z.y > camY - 40 && z.y < camY + canvas.height + 40) {
+                    ctx.fillStyle = "rgba(255, 100, 180, 0.35)";
+                    ctx.fillText(z.n, z.x, z.y);
+                }
+            });
+        }
 
         // ===== MENÜ MÜZİĞİ =====
         const menuMusic = document.getElementById("menuMusic");
@@ -413,8 +471,8 @@
         let fpsFrames = 0, fpsLast = Date.now(), fpsValue = 0;
         function t(key) {
             const tr = {
-                title: "Lava Rain",
-                normal: "LAVA RAIN",
+                title: "Sex RPG",
+                normal: "BAŞLA",
                 duel: "SON İKİ",
                 store: "KARAKTER MAĞAZASI",
                 servers: "SUNUCULAR",
@@ -461,8 +519,8 @@
                 gameMode: "Oyun Modu"
             };
             const en = {
-                title: "Lava Rain",
-                normal: "LAVA RAIN",
+                title: "Sex RPG",
+                normal: "BAŞLA",
                 duel: "DUEL MODE",
                 store: "CHARACTER SHOP",
                 servers: "SERVERS",
@@ -509,8 +567,8 @@
                 gameMode: "Game Mode"
             };
             const de = {
-                title: "Lava Rain",
-                normal: "LAVAREGEN",
+                title: "Sex RPG",
+                normal: "START",
                 duel: "DUELLMODUS",
                 store: "CHARAKTERSHOP",
                 servers: "SERVER",
@@ -557,8 +615,8 @@
                 gameMode: "Spielmodus"
             };
             const ru = {
-                title: "Lava Rain",
-                normal: "ЛАВАДОЖДЬ",
+                title: "Sex RPG",
+                normal: "СТАРТ",
                 duel: "ДУЭЛЬ",
                 store: "МАГАЗИН ПЕРСОНАЖЕЙ",
                 servers: "СЕРВЕРЫ",
@@ -800,11 +858,11 @@
 
         // ===== SUNUCU SİSTEMİ =====
         const MAPS = [
-            { id: "classic", name: "KLASİK", desc: "Çok katlı platformlar — lav yavaş yükselir." },
-            { id: "arena", name: "ADA", desc: "Orta boy ada; kaçacak yer sınırlı." },
-            { id: "high", name: "YÜKSEK", desc: "Yüksek platformlar, lav daha geç ulaşır." },
-            { id: "narrow", name: "SÜTUN", desc: "Dar dikey sütun — sıkışık hayatta kalma." },
-            { id: "chaos", name: "KAOS", desc: "Dağınık platformlar, hızlı lav." }
+            { id: "classic", name: "BÜYÜK DÜNYA", desc: "3600x2400 RPG haritası — köy, vadi, tapınak." },
+            { id: "arena", name: "MERKEZ ARENA", desc: "Ortada savaş alanı, çevrede keşif." },
+            { id: "high", name: "GÖK ADALARI", desc: "Üst katman adaları bol." },
+            { id: "narrow", name: "SEYREK", desc: "Daha az platform, zorlu parkour." },
+            { id: "chaos", name: "KAOS DÜNYASI", desc: "Rastgele platform yağmuru." }
         ];
         const GAME_MODES = [
             { id: "classic", nameKey: "modeClassic", desc: "Lav yükselir, meteor yağar — en uzun süre yaşa." },
@@ -2405,7 +2463,7 @@
             players = ids.map((id, idx) => {
                 const p = Object.assign({}, base, {
                     id: id,
-                    x: 80 + idx * Math.floor(640 / Math.max(1, ids.length)),
+                    x: 120 + idx * 80,
                     color: PLAYER_COLORS[(id - 1) % PLAYER_COLORS.length],
                     leftKey: null, rightKey: null, jumpKey: null,
                     remote: id !== myPlayerId || !isHost ? true : false
@@ -2932,11 +2990,12 @@
             lockShrinkage = (activeGameMode !== "shrink");
             climbModeActive = false;
             climbPlatforms = [];
-            lavaLevel = 520; // ekranın altında başlar, yükselir
+            lavaLevel = WORLD_H - 40;
             lavaPhase = "RISING";
             lavaWaveTime = 0;
             survivalTimer = 0;
             platformAngle = 0;
+            camX = 0; camY = 0;
             initModeObjects();
         }
 
@@ -3860,62 +3919,60 @@
         let modeScores = {};
 
         function buildArenaPlatforms(mapId) {
-            // Çok katlı hayatta kalma platformları
-            const base = [
-                { x: 40, y: 460, w: 720, h: 20 },   // zemin
-                { x: 80, y: 360, w: 180, h: 16 },
-                { x: 320, y: 340, w: 160, h: 16 },
-                { x: 540, y: 360, w: 180, h: 16 },
-                { x: 160, y: 250, w: 140, h: 16 },
-                { x: 500, y: 250, w: 140, h: 16 },
-                { x: 300, y: 160, w: 200, h: 16 },
-                { x: 60, y: 120, w: 120, h: 16 },
-                { x: 620, y: 120, w: 120, h: 16 }
-            ];
-            if (mapId === "arena") {
-                return [
-                    { x: 100, y: 460, w: 600, h: 20 },
-                    { x: 120, y: 340, w: 160, h: 16 },
-                    { x: 520, y: 340, w: 160, h: 16 },
-                    { x: 300, y: 240, w: 200, h: 16 },
-                    { x: 200, y: 140, w: 400, h: 16 }
-                ];
+            const plats = [];
+            for (let x = 0; x < WORLD_W; x += 280) {
+                const w = 200 + (x % 3) * 40;
+                plats.push({ x: x + 20, y: WORLD_H - 80, w: w, h: 22, main: true });
             }
+            for (let x = 60; x < WORLD_W - 80; x += 220) {
+                const y = 900 + Math.sin(x * 0.01) * 120 + (x % 140);
+                plats.push({ x: x, y: y, w: 140 + (x % 5) * 20, h: 16 });
+            }
+            for (let x = 100; x < WORLD_W - 100; x += 260) {
+                const y = 420 + Math.cos(x * 0.008) * 90 + (x % 100);
+                plats.push({ x: x, y: y, w: 120 + (x % 4) * 25, h: 16 });
+            }
+            for (let x = 180; x < WORLD_W - 120; x += 340) {
+                plats.push({ x: x, y: 160 + (x % 70), w: 100 + (x % 3) * 30, h: 14 });
+            }
+            for (let x = 40; x < WORLD_W - 40; x += 180) {
+                const y = WORLD_H - 280 - (x % 90);
+                plats.push({ x: x, y: y, w: 110 + (x % 4) * 15, h: 16 });
+            }
+            for (let i = 0; i < 8; i++) {
+                plats.push({ x: 2700 + (i % 2) * 120, y: 300 + i * 180, w: 100, h: 16 });
+            }
+            plats.push({ x: 80, y: 500, w: 320, h: 18 });
+            plats.push({ x: 120, y: 380, w: 180, h: 16 });
+            plats.push({ x: 340, y: 320, w: 140, h: 16 });
+            plats.push({ x: 2100, y: 1500, w: 400, h: 20 });
+            plats.push({ x: 2200, y: 1380, w: 120, h: 16 });
+            plats.push({ x: 2450, y: 1380, w: 120, h: 16 });
+            plats.push({ x: 2300, y: 1260, w: 160, h: 16 });
             if (mapId === "high") {
-                return [
-                    { x: 40, y: 460, w: 720, h: 20 },
-                    { x: 60, y: 320, w: 150, h: 16 },
-                    { x: 590, y: 320, w: 150, h: 16 },
-                    { x: 250, y: 220, w: 300, h: 16 },
-                    { x: 100, y: 120, w: 160, h: 16 },
-                    { x: 540, y: 120, w: 160, h: 16 },
-                    { x: 320, y: 50, w: 160, h: 16 }
-                ];
+                for (let x = 200; x < WORLD_W; x += 400) {
+                    plats.push({ x: x, y: 80 + (x % 50), w: 150, h: 14 });
+                }
             }
             if (mapId === "narrow") {
-                return [
-                    { x: 250, y: 460, w: 300, h: 20 },
-                    { x: 280, y: 360, w: 240, h: 16 },
-                    { x: 300, y: 260, w: 200, h: 16 },
-                    { x: 320, y: 160, w: 160, h: 16 },
-                    { x: 340, y: 80, w: 120, h: 16 }
-                ];
+                return plats.filter((p, i) => i % 2 === 0 || p.main);
             }
             if (mapId === "chaos") {
-                return [
-                    { x: 20, y: 460, w: 760, h: 20 },
-                    { x: 40, y: 380, w: 100, h: 14 },
-                    { x: 200, y: 350, w: 100, h: 14 },
-                    { x: 360, y: 320, w: 100, h: 14 },
-                    { x: 520, y: 350, w: 100, h: 14 },
-                    { x: 660, y: 380, w: 100, h: 14 },
-                    { x: 100, y: 240, w: 120, h: 14 },
-                    { x: 350, y: 200, w: 120, h: 14 },
-                    { x: 580, y: 240, w: 120, h: 14 },
-                    { x: 250, y: 100, w: 300, h: 14 }
-                ];
+                for (let i = 0; i < 40; i++) {
+                    plats.push({
+                        x: 50 + Math.random() * (WORLD_W - 120),
+                        y: 80 + Math.random() * (WORLD_H - 200),
+                        w: 60 + Math.random() * 100,
+                        h: 12
+                    });
+                }
             }
-            return base;
+            if (mapId === "arena") {
+                plats.push({ x: WORLD_W / 2 - 300, y: WORLD_H / 2, w: 600, h: 20 });
+                plats.push({ x: WORLD_W / 2 - 200, y: WORLD_H / 2 - 150, w: 160, h: 16 });
+                plats.push({ x: WORLD_W / 2 + 40, y: WORLD_H / 2 - 150, w: 160, h: 16 });
+            }
+            return plats;
         }
 
         function initModeObjects() {
@@ -3995,15 +4052,16 @@
             weaponSpawnCounter = 0;
             lockShrinkage = (activeGameMode !== "shrink");
             climbModeActive = false;
-            lavaLevel = 520;
+            lavaLevel = WORLD_H - 40;
             climbPlatforms = [];
             lavaPhase = "RISING";
             lavaWaveTime = 0;
             survivalTimer = 0;
             platformAngle = 0;
+            camX = 0; camY = 0;
 
             players = JSON.parse(JSON.stringify(allPlayersData.slice(0, activePlayerCount)));
-            players.forEach(p => {
+            players.forEach((p, idx) => {
                 const oc = offlineControls["p" + p.id] || DEFAULT_OFFLINE_CONTROLS["p" + p.id];
                 if (oc) {
                     p.leftKey = oc.left;
@@ -4012,6 +4070,8 @@
                     p.shootKey = oc.shoot;
                 }
                 applySkinPowers(p);
+                p.x = 120 + idx * 70;
+                p.y = 420;
             });
 
             for (let i = 1; i <= 4; i++) {
@@ -4121,9 +4181,11 @@
 
         function spawnHazard(force = false) {
             const size = 14 + Math.floor(Math.random() * 16);
+            const rx = camX - 100 + Math.random() * (canvas.width + 200);
+            const ry = camY - 80 - Math.random() * 120;
             hazards.push({
-                x: 20 + Math.random() * (canvas.width - 40),
-                y: -30 - Math.random() * 40,
+                x: Math.max(0, Math.min(WORLD_W - 20, rx)),
+                y: Math.max(-40, ry),
                 size: size,
                 speed: (hazardSpeedBase * 0.7) + Math.random() * 3.5,
                 wobble: Math.random() * Math.PI * 2,
@@ -4132,7 +4194,14 @@
         }
 
         function spawnShield(force = false) {
-            let spawnX = 60 + Math.random() * 680;
+            let spawnX = camX + 40 + Math.random() * (canvas.width - 80);
+            if (players && players.length) {
+                const alive = players.filter(p => !p.isDead);
+                if (alive.length) {
+                    const t = alive[Math.floor(Math.random() * alive.length)];
+                    spawnX = t.x - 100 + Math.random() * 200;
+                }
+            }
             if (force) {
                 shields.push({ x: spawnX, y: -20, size: 18, speed: 2 });
                 return;
@@ -4530,12 +4599,12 @@
             ctx.shadowColor = "#ff0055";
             ctx.shadowBlur = pulse;
             ctx.fillStyle = "#ff0055";
-            ctx.fillText("LAVA RAIN", canvas.width / 2, 88);
+            ctx.fillText("SEX RPG", canvas.width / 2, 88);
             ctx.shadowBlur = 0;
             ctx.fillStyle = "#ffffff";
             ctx.font = "bold 72px 'Impact'";
             ctx.globalAlpha = 0.12;
-            ctx.fillText("LAVA RAIN", canvas.width / 2, 88);
+            ctx.fillText("SEX RPG", canvas.width / 2, 88);
             ctx.globalAlpha = 1;
             ctx.restore();
 
@@ -4543,10 +4612,10 @@
             ctx.fillStyle = "#00ccaa";
             ctx.font = "13px monospace";
             ctx.textAlign = "center";
-            ctx.fillText("ONLINE MULTIPLAYER  ·  LAVA SURVIVAL", canvas.width / 2, 112);
+            ctx.fillText("ONLINE  ·  BÜYÜK RPG HARİTASI  ·  LAV & KAÇIŞ", canvas.width / 2, 112);
             ctx.fillStyle = "rgba(255,255,255,0.28)";
             ctx.font = "11px monospace";
-            ctx.fillText("V2.2  ·  \" tuşu = konsol (demo)", canvas.width / 2, 132);
+            ctx.fillText("Sex RPG  ·  \" = konsol", canvas.width / 2, 132);
 
             // Menü paneli
             ctx.fillStyle = "rgba(12, 14, 22, 0.72)";
@@ -4566,7 +4635,7 @@
             ctx.fillStyle = "rgba(255,255,255,0.22)";
             ctx.font = "11px monospace";
             ctx.textAlign = "center";
-            ctx.fillText("Lav yükselir · meteor yağar · it & hayatta kal", canvas.width / 2, 470);
+            ctx.fillText("Dev harita · keşfet · lavdan kaç · rakipleri it", canvas.width / 2, 470);
         }
         function drawDevConsole() {
             if (!consoleOpen) return;
@@ -5308,8 +5377,8 @@
                     const rushMult = activeGameMode === "rush" ? 1.75 : 1;
                     const chaosMult = (activeMapId === "chaos") ? 1.35 : 1;
                     // Lav yavaşça yükselir (y ekseni azalır = ekranda yukarı çıkar)
-                    const riseSpeed = 0.045 * rushMult * chaosMult;
-                    if (lavaLevel > 80) {
+                    const riseSpeed = 0.22 * rushMult * chaosMult;
+                    if (lavaLevel > 120) {
                         lavaLevel -= riseSpeed;
                     }
                     // shrink modu: ana zemin daralsın
@@ -5326,40 +5395,45 @@
                     }
                 }
 
-                // Platformlar
+                // Kamera — yerel oyuncuyu takip
+                {
+                    let focus = players.find(p => p.id === myPlayerId && !p.isDead) || players.find(p => !p.isDead) || players[0];
+                    if (focus) updateCamera(focus.x + focus.width / 2, focus.y + focus.height / 2);
+                }
+                beginWorld();
+                drawWorldBackdrop();
                 if (!platforms.length) platforms = buildArenaPlatforms(activeMapId || "classic");
                 platforms.forEach(pl => {
+                    if (pl.x + pl.w < camX - 20 || pl.x > camX + canvas.width + 20) return;
+                    if (pl.y + pl.h < camY - 20 || pl.y > camY + canvas.height + 20) return;
                     ctx.fillStyle = "#1a1c28";
                     ctx.fillRect(pl.x, pl.y, pl.w, pl.h);
-                    ctx.fillStyle = "#ff3366";
+                    ctx.fillStyle = pl.main ? "#ff3399" : "#ff6688";
                     ctx.fillRect(pl.x, pl.y, pl.w, 4);
                     ctx.fillStyle = "#333";
                     ctx.fillRect(pl.x, pl.y + pl.h - 2, pl.w, 2);
                 });
-                // Yükselen lav
-                if (lavaLevel < canvas.height + 40) {
+                if (lavaLevel < WORLD_H + 40) {
                     const ly = lavaLevel;
-                    const grad = ctx.createLinearGradient(0, ly, 0, canvas.height);
+                    const grad = ctx.createLinearGradient(0, ly, 0, WORLD_H);
                     grad.addColorStop(0, "rgba(255, 80, 0, 0.92)");
                     grad.addColorStop(0.35, "rgba(220, 30, 0, 0.95)");
                     grad.addColorStop(1, "rgba(80, 0, 0, 1)");
                     ctx.fillStyle = grad;
-                    ctx.fillRect(0, ly, canvas.width, canvas.height - ly + 20);
-                    // yüzey dalgası
+                    ctx.fillRect(0, ly, WORLD_W, WORLD_H - ly + 40);
                     ctx.fillStyle = "rgba(255, 200, 40, 0.85)";
                     ctx.beginPath();
                     ctx.moveTo(0, ly);
-                    for (let wx = 0; wx <= canvas.width; wx += 12) {
-                        const wy = ly + Math.sin(wx * 0.05 + lavaWaveTime) * 4 + Math.sin(wx * 0.12 - lavaWaveTime * 1.3) * 2;
+                    for (let wx = 0; wx <= WORLD_W; wx += 16) {
+                        const wy = ly + Math.sin(wx * 0.04 + lavaWaveTime) * 5 + Math.sin(wx * 0.1 - lavaWaveTime * 1.3) * 2;
                         ctx.lineTo(wx, wy);
                     }
-                    ctx.lineTo(canvas.width, ly + 10);
-                    ctx.lineTo(0, ly + 10);
+                    ctx.lineTo(WORLD_W, ly + 12);
+                    ctx.lineTo(0, ly + 12);
                     ctx.closePath();
                     ctx.fill();
-                    // glow
-                    ctx.fillStyle = "rgba(255, 100, 0, 0.2)";
-                    ctx.fillRect(0, ly - 18, canvas.width, 18);
+                    ctx.fillStyle = "rgba(255, 100, 0, 0.18)";
+                    ctx.fillRect(0, ly - 22, WORLD_W, 22);
                 }
 
                 // Kalkanlar
@@ -5376,7 +5450,7 @@
                             shields.splice(i, 1);
                         }
                     });
-                    if (s.y > canvas.height) shields.splice(i, 1);
+                    if (s.y > WORLD_H + 40) shields.splice(i, 1);
                 }
 
                 // Silah sandıkları (Gun Mayhem)
@@ -5403,7 +5477,7 @@
                             weapons.splice(i, 1);
                         }
                     });
-                    if (w.y > canvas.height) weapons.splice(i, 1);
+                    if (w.y > WORLD_H + 40) weapons.splice(i, 1);
                 }
 
                 // Mermiler
@@ -5464,7 +5538,7 @@
                             hazards.splice(i, 1);
                         }
                     });
-                    if (h.y > canvas.height + 40 || h.y > lavaLevel) hazards.splice(i, 1);
+                    if (h.y > WORLD_H + 40 || h.y > lavaLevel) hazards.splice(i, 1);
                 }
 
                 // Oyuncu güncelleme
@@ -5539,7 +5613,8 @@
                     p.y += p.vy;
 
                     if (p.x < 0) p.x = 0;
-                    if (p.x + p.width > canvas.width) p.x = canvas.width - p.width;
+                    if (p.x + p.width > WORLD_W) p.x = WORLD_W - p.width;
+                    if (p.y < -200) { p.y = -200; p.vy = 0; }
 
                     let stoodOnPlatform = false;
                     const plats = platforms.length ? platforms : [platform];
@@ -5604,15 +5679,16 @@
                     } else {
                         p._lavaTick = 0;
                     }
-                    if (p.y > canvas.height) {
+                    if (p.y > WORLD_H + 40) {
                         if (!isTestMode) {
                             p.hp = 0;
                             p.isDead = true;
                             const card = document.getElementById(`p${p.id}-card`);
                             if (card) card.classList.add("dead");
                         } else {
-                            p.y = 100;
+                            p.y = 400;
                             p.vy = 0;
+                            p.x = 150;
                         }
                     }
                 });
@@ -5701,8 +5777,26 @@
                         drawPlayer(p);
                     }
                 });
+                endWorld();
 
-                
+                // minimap
+                {
+                    const mw = 120, mh = 80, mx = canvas.width - mw - 10, my = 48;
+                    ctx.fillStyle = "rgba(0,0,0,0.55)";
+                    ctx.fillRect(mx, my, mw, mh);
+                    ctx.strokeStyle = "#ff3399";
+                    ctx.strokeRect(mx, my, mw, mh);
+                    const sx = mw / WORLD_W, sy = mh / WORLD_H;
+                    ctx.fillStyle = "rgba(255,80,0,0.5)";
+                    ctx.fillRect(mx, my + lavaLevel * sy, mw, Math.max(2, mh - lavaLevel * sy));
+                    players.forEach(p => {
+                        if (p.isDead) return;
+                        ctx.fillStyle = p.color || "#fff";
+                        ctx.fillRect(mx + p.x * sx - 1, my + p.y * sy - 1, 3, 3);
+                    });
+                    ctx.strokeStyle = "rgba(255,255,255,0.4)";
+                    ctx.strokeRect(mx + camX * sx, my + camY * sy, canvas.width * sx, canvas.height * sy);
+                }
 
                 let gameOverCondition = (activePlayerCount === 1 && aliveCount === 0) || (activePlayerCount > 1 && aliveCount <= 1);
                 if (gameOverCondition && gameState === "PLAYING" && !isTestMode && (!isOnline || isHost)) {
@@ -5726,7 +5820,7 @@
                 const modeName = modeLabel ? t(modeLabel) : activeGameMode;
                 ctx.fillStyle = "#ff6633";
                 const liveSec = Math.floor(survivalTimer || 0);
-                ctx.fillText("LAVA RAIN | " + modeName + " | " + liveSec + "s | It, kaç, hayatta kal!", canvas.width / 2, 36);
+                ctx.fillText("SEX RPG | " + modeName + " | " + liveSec + "s | Harita büyük — keşfet & kaç!", canvas.width / 2, 36);
 
                 if (gameState === "GAMEOVER") {
                     ctx.fillStyle = "rgba(0, 0, 0, 0.85)";
