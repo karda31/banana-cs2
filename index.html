@@ -278,7 +278,7 @@
     <div id="controls-info">
         <strong>YEREL / ONLINE:</strong> Kontroller Ayarlar menüsünden özelleştirilebilir (Offline / Online sekmeleri).<br>
         <strong>ONLINE:</strong> Enter=Chat | Sağ Shift=Başlat (host) | ESC=Menü | TAB=Oyuncular<br>
-        <em>V2.0 — Gun Mayhem arena: silah topla, ateş et, it. Online: daha stabil oda listesi + heartbeat.</em>
+        <em>V2.2 — Lava Rain: lav yükselir, gökten ateş yağar, it & kaç. Online stabil.</em>
     </div>
     <script>
         const canvas = document.getElementById("gameCanvas");
@@ -414,8 +414,8 @@
         function t(key) {
             const tr = {
                 title: "Lava Rain",
-                normal: "NORMAL MODE",
-                duel: "DUEL MODE",
+                normal: "LAVA RAIN",
+                duel: "SON İKİ",
                 store: "KARAKTER MAĞAZASI",
                 servers: "SUNUCULAR",
                 settings: "AYARLAR",
@@ -454,15 +454,15 @@
                 shoot: "Ateş",
                 shootAlt: "Ateş 2",
                 saved: "Ayarlar kaydedildi",
-                modeClassic: "KLASİK",
-                modeCtf: "BAYRAK KAPMACA",
-                modeZone: "BÖLGE KORUMA",
-                modeDeathmatch: "ÖLÜM MAÇI",
+                modeClassic: "LAV YAĞMURU",
+                modeCtf: "LAV HÜCUMU",
+                modeZone: "DARALAN ADA",
+                modeDeathmatch: "SON AYAKTA",
                 gameMode: "Oyun Modu"
             };
             const en = {
                 title: "Lava Rain",
-                normal: "NORMAL MODE",
+                normal: "LAVA RAIN",
                 duel: "DUEL MODE",
                 store: "CHARACTER SHOP",
                 servers: "SERVERS",
@@ -502,15 +502,15 @@
                 shoot: "Shoot",
                 shootAlt: "Shoot 2",
                 saved: "Settings saved",
-                modeClassic: "CLASSIC",
-                modeCtf: "CAPTURE THE FLAG",
-                modeZone: "ZONE CONTROL",
-                modeDeathmatch: "DEATHMATCH",
+                modeClassic: "LAVA RAIN",
+                modeCtf: "LAVA RUSH",
+                modeZone: "SHRINKING ISLE",
+                modeDeathmatch: "LAST STAND",
                 gameMode: "Game Mode"
             };
             const de = {
                 title: "Lava Rain",
-                normal: "NORMALMODUS",
+                normal: "LAVAREGEN",
                 duel: "DUELLMODUS",
                 store: "CHARAKTERSHOP",
                 servers: "SERVER",
@@ -550,15 +550,15 @@
                 shoot: "Schießen",
                 shootAlt: "Schießen 2",
                 saved: "Gespeichert",
-                modeClassic: "KLASSISCH",
-                modeCtf: "FLAGGENJAGD",
-                modeZone: "ZONENKONTROLLE",
-                modeDeathmatch: "DEATHMATCH",
+                modeClassic: "LAVAREGEN",
+                modeCtf: "LAVA-STURM",
+                modeZone: "SCHRUMPFENDE INSEL",
+                modeDeathmatch: "LETZTER STEHENDER",
                 gameMode: "Spielmodus"
             };
             const ru = {
                 title: "Lava Rain",
-                normal: "ОБЫЧНЫЙ РЕЖИМ",
+                normal: "ЛАВАДОЖДЬ",
                 duel: "ДУЭЛЬ",
                 store: "МАГАЗИН ПЕРСОНАЖЕЙ",
                 servers: "СЕРВЕРЫ",
@@ -598,10 +598,10 @@
                 shoot: "Огонь",
                 shootAlt: "Огонь 2",
                 saved: "Сохранено",
-                modeClassic: "КЛАССИКА",
-                modeCtf: "ЗАХВАТ ФЛАГА",
-                modeZone: "КОНТРОЛЬ ЗОНЫ",
-                modeDeathmatch: "ДЕФМАТЧ",
+                modeClassic: "ЛАВАДОЖДЬ",
+                modeCtf: "ЛАВА-ШТУРМ",
+                modeZone: "СЖИМАЮЩИЙСЯ ОСТРОВ",
+                modeDeathmatch: "ПОСЛЕДНИЙ",
                 gameMode: "Режим игры"
             };
             const dicts = { tr, en, de, ru };
@@ -800,17 +800,17 @@
 
         // ===== SUNUCU SİSTEMİ =====
         const MAPS = [
-            { id: "classic", name: "KLASİK", desc: "Çok platformlu Gun Mayhem arenası." },
-            { id: "arena", name: "ARENA", desc: "Orta boy savaş arenası." },
-            { id: "high", name: "YÜKSEK ZEMİN", desc: "Daha yüksek platformlar." },
-            { id: "narrow", name: "DAR KORİDOR", desc: "Dar ve dikey odaklı harita." },
-            { id: "chaos", name: "KAOS", desc: "Çok platform, hızlı tempo." }
+            { id: "classic", name: "KLASİK", desc: "Çok katlı platformlar — lav yavaş yükselir." },
+            { id: "arena", name: "ADA", desc: "Orta boy ada; kaçacak yer sınırlı." },
+            { id: "high", name: "YÜKSEK", desc: "Yüksek platformlar, lav daha geç ulaşır." },
+            { id: "narrow", name: "SÜTUN", desc: "Dar dikey sütun — sıkışık hayatta kalma." },
+            { id: "chaos", name: "KAOS", desc: "Dağınık platformlar, hızlı lav." }
         ];
         const GAME_MODES = [
-            { id: "classic", nameKey: "modeClassic", desc: "Standart hayatta kal / skor." },
-            { id: "ctf", nameKey: "modeCtf", desc: "Bayrağı kap, üssüne götür." },
-            { id: "zone", nameKey: "modeZone", desc: "Bölgeyi tut, puan kazan." },
-            { id: "deathmatch", nameKey: "modeDeathmatch", desc: "Öldürme odaklı skor." }
+            { id: "classic", nameKey: "modeClassic", desc: "Lav yükselir, meteor yağar — en uzun süre yaşa." },
+            { id: "rush", nameKey: "modeCtf", desc: "Lav hızlı yükselir, meteor çok sık." },
+            { id: "shrink", nameKey: "modeZone", desc: "Platformlar daralır + lav." },
+            { id: "laststand", nameKey: "modeDeathmatch", desc: "Son ayakta kalan kazanır (itme odaklı)." }
         ];
         let activeGameMode = "classic";
 
@@ -2467,13 +2467,18 @@
             winnerText = "";
             shieldSpawnCounter = 0;
             weaponSpawnCounter = 0;
-            lockShrinkage = true;
+            lockShrinkage = (activeGameMode !== "shrink");
             climbModeActive = false;
-            lavaLevel = 9999;
+            lavaLevel = 520;
             climbPlatforms = [];
-            lavaPhase = "ARENA";
+            lavaPhase = "RISING";
+            lavaWaveTime = 0;
             survivalTimer = 0;
             platformAngle = 0;
+            hazards = [];
+            shields = [];
+            weapons = [];
+            bullets = [];
             hazards = [];
             shields = [];
             weapons = [];
@@ -2506,14 +2511,16 @@
                 }, 3000);
                 gameTimers.push(speedTimer);
                 let shieldTimer = setInterval(() => {
-                    if (gameState === "PLAYING" && !hostPaused) { spawnShield(); spawnWeapon(); }
+                    if (gameState === "PLAYING" && !hostPaused) { spawnShield(); }
                 }, 1000);
                 gameTimers.push(shieldTimer);
                 let spawnTimer = setInterval(() => {
-                    if (gameState === "PLAYING" && !hostPaused && !isDuelMode) {
-                        if (Math.random() < 0.35) spawnHazard();
+                    if (gameState === "PLAYING" && !hostPaused) {
+                        const rush = activeGameMode === "rush" ? 0.85 : 0.55;
+                        if (Math.random() < rush) spawnHazard();
+                        if (activeGameMode === "rush" && Math.random() < 0.4) spawnHazard();
                     }
-                }, 1200);
+                }, 700);
                 gameTimers.push(spawnTimer);
             }
             const myName = onlinePlayerNames[myPlayerId] || ("P" + myPlayerId);
@@ -2922,11 +2929,13 @@
                 platform.initialX = ground.x;
             }
             platformShrinkSpeed = 0;
-            lockShrinkage = true;
+            lockShrinkage = (activeGameMode !== "shrink");
             climbModeActive = false;
             climbPlatforms = [];
-            lavaLevel = 9999;
-            lavaPhase = "ARENA";
+            lavaLevel = 520; // ekranın altında başlar, yükselir
+            lavaPhase = "RISING";
+            lavaWaveTime = 0;
+            survivalTimer = 0;
             platformAngle = 0;
             initModeObjects();
         }
@@ -3832,16 +3841,16 @@
         }
 
         const gravity = 0.4;
-        // Gun Mayhem tarzı sabit platformlar (lav yok)
+        // Lava Rain platformları
         let platforms = [];
         let platform = { x: 50, y: 420, width: 700, height: 24, initialWidth: 700, initialX: 50 }; // ana zemin ref
         let platformShrinkSpeed = 0;
         let lockShrinkage = true;
         let climbModeActive = false;
         let climbPlatforms = [];
-        let lavaLevel = 9999;
+        let lavaLevel = 520;
         let lavaWaveTime = 0;
-        let lavaPhase = "ARENA";
+        let lavaPhase = "RISING";
         let survivalTimer = 0;
         let platformAngle = 0;
         let targetRotationTurns = 0;
@@ -3851,7 +3860,7 @@
         let modeScores = {};
 
         function buildArenaPlatforms(mapId) {
-            // Çok katlı Gun Mayhem platform düzeni
+            // Çok katlı hayatta kalma platformları
             const base = [
                 { x: 40, y: 460, w: 720, h: 20 },   // zemin
                 { x: 80, y: 360, w: 180, h: 16 },
@@ -3984,11 +3993,12 @@
             winnerText = "";
             shieldSpawnCounter = 0;
             weaponSpawnCounter = 0;
-            lockShrinkage = true;
+            lockShrinkage = (activeGameMode !== "shrink");
             climbModeActive = false;
-            lavaLevel = 9999;
+            lavaLevel = 520;
             climbPlatforms = [];
-            lavaPhase = "ARENA";
+            lavaPhase = "RISING";
+            lavaWaveTime = 0;
             survivalTimer = 0;
             platformAngle = 0;
 
@@ -4024,11 +4034,11 @@
 
             let scoreTimer = setInterval(() => {
                 if (gameState === "PLAYING" && !isTestMode) {
+                    survivalTimer++;
                     players.forEach(p => {
                         if (!p.isDead) {
-                            let add = Math.round(5 * (p.scoreMult || 1));
-                            // Fırtına: hareket ediyorsa ekstra skor
-                            if (p.isStorm && Math.abs(p.vx) > 1) add += 3;
+                            let add = Math.round(4 * (p.scoreMult || 1));
+                            if (p.isStorm && Math.abs(p.vx) > 1) add += 2;
                             p.score += add;
                             document.getElementById(`s${p.id}`).innerText = p.score;
                         }
@@ -4040,26 +4050,26 @@
             let speedTimer = setInterval(() => {
                 if (gameState === "PLAYING" && !isTestMode) {
                     if (hazardSpeedBase < maxHazardSpeed) {
-                        hazardSpeedBase = Math.min(maxHazardSpeed, hazardSpeedBase + 1);
+                        hazardSpeedBase = Math.min(maxHazardSpeed, hazardSpeedBase + 0.8);
                     }
                 }
-            }, 3000);
+            }, 4000);
             gameTimers.push(speedTimer);
 
             let shieldTimer = setInterval(() => {
                 if (gameState === "PLAYING" && !isTestMode) {
                     spawnShield();
-                    spawnWeapon();
                 }
-            }, 1000);
+            }, 1800);
             gameTimers.push(shieldTimer);
 
             let spawnTimer = setInterval(() => {
-                if (gameState === "PLAYING" && !isTestMode && !isDuelMode) {
-                    // Arena: ara sıra düşen tehlike (opsiyonel)
-                    if (Math.random() < 0.35) spawnHazard();
+                if (gameState === "PLAYING" && !isTestMode) {
+                    const rush = activeGameMode === "rush" ? 0.85 : 0.55;
+                    if (Math.random() < rush) spawnHazard();
+                    if (activeGameMode === "rush" && Math.random() < 0.4) spawnHazard();
                 }
-            }, 1200);
+            }, 700);
             gameTimers.push(spawnTimer);
         }
 
@@ -4078,7 +4088,8 @@
             bullets = [];
             climbPlatforms = [];
             lavaLevel = 520;
-            lavaPhase = "SHRINKING";
+            lavaPhase = "RISING";
+            lavaWaveTime = 0;
             survivalTimer = 0;
             platformAngle = 0;
             platform.width = platform.initialWidth;
@@ -4109,12 +4120,14 @@
         }
 
         function spawnHazard(force = false) {
-            if (isDuelMode) return;
+            const size = 14 + Math.floor(Math.random() * 16);
             hazards.push({
-                x: platform.x + Math.random() * (platform.width - 20),
-                y: -20,
-                size: 20,
-                speed: hazardSpeedBase + Math.random() * 2
+                x: 20 + Math.random() * (canvas.width - 40),
+                y: -30 - Math.random() * 40,
+                size: size,
+                speed: (hazardSpeedBase * 0.7) + Math.random() * 3.5,
+                wobble: Math.random() * Math.PI * 2,
+                trail: true
             });
         }
 
@@ -4171,45 +4184,8 @@
         }
 
         function tryShoot(p) {
-            if (!p || p.isDead || p.fireCooldown > 0) return;
-            const wid = p.weaponId || "pistol";
-            const w = WEAPON_TYPES[wid] || WEAPON_TYPES.pistol;
-            if (w.ammo !== Infinity && (p.ammo == null || p.ammo <= 0)) {
-                p.weaponId = "pistol";
-                p.ammo = Infinity;
-                return tryShoot(p);
-            }
-            const dir = p.facing >= 0 ? 1 : -1;
-            const pellets = w.pellets || 1;
-            const spread = w.pelletSpread || 0;
-            for (let i = 0; i < pellets; i++) {
-                const ang = (i - (pellets - 1) / 2) * spread;
-                const spd = w.speed * (p.isHunter ? 1.15 : 1);
-                const vx = Math.cos(ang) * spd * dir;
-                const vy = Math.sin(ang) * spd * 0.35;
-                bullets.push({
-                    x: dir > 0 ? p.x + p.width : p.x - (w.bulletW || 12),
-                    y: p.y + p.height * 0.35,
-                    width: w.bulletW || 12,
-                    height: w.bulletH || 5,
-                    vx, vy: vy || 0,
-                    ownerId: p.id,
-                    damage: w.damage || 1,
-                    knock: (w.knock || 6) * (p.isHunter ? 1.25 : 1),
-                    color: w.color || "#ff00ff",
-                    explosive: !!w.explosive
-                });
-            }
-            p.fireCooldown = w.cooldown || 15;
-            if (w.ammo !== Infinity) {
-                p.ammo = (p.ammo || 0) - 1;
-                if (p.ammo <= 0) {
-                    p.weaponId = "pistol";
-                    p.ammo = Infinity;
-                }
-            }
-            // geri tepme (hafif)
-            p.vx -= dir * 0.8;
+            // V2.2 Lava Rain: silah yok — oynanış itme + lav hayatta kalma
+            return;
         }
 
         function shootWeapon(ownerId, startX, startY) {
@@ -4567,7 +4543,7 @@
             ctx.fillStyle = "#00ccaa";
             ctx.font = "13px monospace";
             ctx.textAlign = "center";
-            ctx.fillText("ONLINE MULTIPLAYER  ·  GUN MAYHEM ARENA", canvas.width / 2, 112);
+            ctx.fillText("ONLINE MULTIPLAYER  ·  LAVA SURVIVAL", canvas.width / 2, 112);
             ctx.fillStyle = "rgba(255,255,255,0.28)";
             ctx.font = "11px monospace";
             ctx.fillText("V2.2  ·  \" tuşu = konsol (demo)", canvas.width / 2, 132);
@@ -4590,7 +4566,7 @@
             ctx.fillStyle = "rgba(255,255,255,0.22)";
             ctx.font = "11px monospace";
             ctx.textAlign = "center";
-            ctx.fillText("Platform arena · silah topla · ateş et · it", canvas.width / 2, 470);
+            ctx.fillText("Lav yükselir · meteor yağar · it & hayatta kal", canvas.width / 2, 470);
         }
         function drawDevConsole() {
             if (!consoleOpen) return;
@@ -5325,66 +5301,66 @@
             else if (gameState === "PLAYING" || gameState === "GAMEOVER") {
 
                 if (gameState === "PLAYING" && (!isOnline || isHost) && !pauseMenuOpen && !hostPaused) {
-                    // Gun Mayhem arena — lav yok, sabit platformlar
-                    lavaPhase = isDuelMode ? "DUEL_ARENA" : "ARENA";
-                    lockShrinkage = true;
+                    // Lava Rain: lav yükselir, platformlar daralabilir
+                    lavaPhase = "RISING";
                     climbModeActive = false;
-                    lavaLevel = 9999;
-                    // Zone capture tick
-                    if (activeGameMode === "zone" && zones.length) {
-                        zones.forEach(z => {
-                            let occupants = [];
-                            players.forEach(p => {
-                                if (p.isDead) return;
-                                if (p.x + p.width > z.x && p.x < z.x + z.w && p.y + p.height > z.y && p.y < z.y + z.h) {
-                                    occupants.push(p.id);
-                                }
-                            });
-                            if (occupants.length === 1) {
-                                const id = occupants[0];
-                                if (z.owner === id) z.progress = Math.min(100, z.progress + 0.4);
-                                else {
-                                    z.progress = Math.max(0, z.progress - 0.6);
-                                    if (z.progress <= 0) { z.owner = id; z.progress = 1; }
-                                }
-                                if (z.owner === id && z.progress >= 100) {
-                                    const p = players.find(x => x.id === id);
-                                    if (p && !p.isDead) p.score += 1;
-                                }
+                    lavaWaveTime += 0.08;
+                    const rushMult = activeGameMode === "rush" ? 1.75 : 1;
+                    const chaosMult = (activeMapId === "chaos") ? 1.35 : 1;
+                    // Lav yavaşça yükselir (y ekseni azalır = ekranda yukarı çıkar)
+                    const riseSpeed = 0.045 * rushMult * chaosMult;
+                    if (lavaLevel > 80) {
+                        lavaLevel -= riseSpeed;
+                    }
+                    // shrink modu: ana zemin daralsın
+                    if (activeGameMode === "shrink" && platforms.length) {
+                        platforms.forEach((pl, idx) => {
+                            if (idx === 0 && pl.w > 180) {
+                                pl.w -= 0.08 * rushMult;
+                                pl.x += 0.04 * rushMult;
+                            } else if (idx > 0 && pl.w > 60 && Math.random() < 0.01) {
+                                pl.w -= 0.5;
+                                pl.x += 0.25;
                             }
                         });
                     }
                 }
 
-                // Platformlar (Gun Mayhem)
+                // Platformlar
                 if (!platforms.length) platforms = buildArenaPlatforms(activeMapId || "classic");
                 platforms.forEach(pl => {
                     ctx.fillStyle = "#1a1c28";
                     ctx.fillRect(pl.x, pl.y, pl.w, pl.h);
-                    ctx.fillStyle = "#ff0055";
+                    ctx.fillStyle = "#ff3366";
                     ctx.fillRect(pl.x, pl.y, pl.w, 4);
                     ctx.fillStyle = "#333";
                     ctx.fillRect(pl.x, pl.y + pl.h - 2, pl.w, 2);
                 });
-                // Zone
-                zones.forEach(z => {
-                    ctx.fillStyle = z.owner ? (PLAYER_COLORS[(z.owner - 1) % PLAYER_COLORS.length] + "44") : "rgba(0,200,170,0.15)";
-                    ctx.fillRect(z.x, z.y, z.w, z.h);
-                    ctx.strokeStyle = "#00ccaa";
-                    ctx.lineWidth = 2;
-                    ctx.strokeRect(z.x, z.y, z.w, z.h);
-                    ctx.fillStyle = "#fff";
-                    ctx.font = "11px monospace";
-                    ctx.textAlign = "center";
-                    ctx.fillText("ZONE " + Math.floor(z.progress) + "%", z.x + z.w / 2, z.y + z.h / 2);
-                });
-                // Flags
-                flags.forEach(f => {
-                    if (f.carriedBy) return;
-                    ctx.fillStyle = f.team === 1 ? "#ff3366" : "#33ccff";
-                    ctx.fillRect(f.x, f.y - 24, 10, 28);
-                    ctx.fillRect(f.x + 10, f.y - 24, 16, 12);
-                });
+                // Yükselen lav
+                if (lavaLevel < canvas.height + 40) {
+                    const ly = lavaLevel;
+                    const grad = ctx.createLinearGradient(0, ly, 0, canvas.height);
+                    grad.addColorStop(0, "rgba(255, 80, 0, 0.92)");
+                    grad.addColorStop(0.35, "rgba(220, 30, 0, 0.95)");
+                    grad.addColorStop(1, "rgba(80, 0, 0, 1)");
+                    ctx.fillStyle = grad;
+                    ctx.fillRect(0, ly, canvas.width, canvas.height - ly + 20);
+                    // yüzey dalgası
+                    ctx.fillStyle = "rgba(255, 200, 40, 0.85)";
+                    ctx.beginPath();
+                    ctx.moveTo(0, ly);
+                    for (let wx = 0; wx <= canvas.width; wx += 12) {
+                        const wy = ly + Math.sin(wx * 0.05 + lavaWaveTime) * 4 + Math.sin(wx * 0.12 - lavaWaveTime * 1.3) * 2;
+                        ctx.lineTo(wx, wy);
+                    }
+                    ctx.lineTo(canvas.width, ly + 10);
+                    ctx.lineTo(0, ly + 10);
+                    ctx.closePath();
+                    ctx.fill();
+                    // glow
+                    ctx.fillStyle = "rgba(255, 100, 0, 0.2)";
+                    ctx.fillRect(0, ly - 18, canvas.width, 18);
+                }
 
                 // Kalkanlar
                 for (let i = shields.length - 1; i >= 0; i--) {
@@ -5467,22 +5443,28 @@
                     if (!hit && (b.x < -40 || b.x > canvas.width + 40 || b.y < -40 || b.y > canvas.height + 40)) bullets.splice(i, 1);
                 }
 
-                // Hazardlar
+                // Meteor / lav damlaları
                 for (let i = hazards.length - 1; i >= 0; i--) {
                     let h = hazards[i];
-                    if ((!isOnline || isHost) && !hostPaused) h.y += h.speed;
-                    ctx.fillStyle = "#ff3300";
+                    if ((!isOnline || isHost) && !hostPaused) {
+                        h.y += h.speed;
+                        h.wobble = (h.wobble || 0) + 0.15;
+                        h.x += Math.sin(h.wobble) * 0.6;
+                    }
+                    // kuyruk
+                    ctx.fillStyle = "rgba(255, 120, 0, 0.35)";
+                    ctx.fillRect(h.x + 2, h.y - h.size * 0.8, h.size - 4, h.size * 0.9);
+                    ctx.fillStyle = "#ff4400";
                     ctx.fillRect(h.x, h.y, h.size, h.size);
-                    ctx.strokeStyle = "#ffffff";
-                    ctx.lineWidth = 2;
-                    ctx.strokeRect(h.x, h.y, h.size, h.size);
+                    ctx.fillStyle = "#ffcc33";
+                    ctx.fillRect(h.x + 3, h.y + 3, Math.max(3, h.size - 6), Math.max(3, h.size - 6));
                     players.forEach(p => {
                         if (!hostPaused && !p.isDead && checkCollision(p, { x: h.x, y: h.y, width: h.size, height: h.size })) {
                             pDamage(p);
                             hazards.splice(i, 1);
                         }
                     });
-                    if (h.y > canvas.height) hazards.splice(i, 1);
+                    if (h.y > canvas.height + 40 || h.y > lavaLevel) hazards.splice(i, 1);
                 }
 
                 // Oyuncu güncelleme
@@ -5606,6 +5588,22 @@
                         });
                     }
 
+                    // Lav teması
+                    if (p.y + p.height > lavaLevel) {
+                        if (p.shieldTime <= 0) {
+                            // sürekli lav hasarı
+                            if (!p._lavaTick) p._lavaTick = 0;
+                            p._lavaTick++;
+                            if (p._lavaTick % 12 === 0) pDamage(p);
+                        }
+                        // lav yukarı itmesin, hasar versin
+                        if (p.y + p.height > lavaLevel + 8) {
+                            p.y = lavaLevel - p.height + 6;
+                            p.vy = Math.min(p.vy, -2);
+                        }
+                    } else {
+                        p._lavaTick = 0;
+                    }
                     if (p.y > canvas.height) {
                         if (!isTestMode) {
                             p.hp = 0;
@@ -5701,19 +5699,6 @@
                 players.forEach(p => {
                     if (!p.isDead) {
                         drawPlayer(p);
-                        const lowQ = mobilePerf || settings.quality === "low";
-                        if (!lowQ || p.id === myPlayerId || !isOnline) {
-                            const wdef = WEAPON_TYPES[p.weaponId] || WEAPON_TYPES.pistol;
-                            ctx.fillStyle = wdef.color || "#aaa";
-                            ctx.font = "bold 10px monospace";
-                            ctx.textAlign = "center";
-                            const ammoTxt = (wdef.ammo === Infinity || p.ammo == null) ? "∞" : String(p.ammo);
-                            ctx.fillText(wdef.name + " " + ammoTxt, p.x + p.width / 2, p.y - 16);
-                        }
-                        const wdef2 = WEAPON_TYPES[p.weaponId] || WEAPON_TYPES.pistol;
-                        const gx = p.facing >= 0 ? p.x + p.width - 2 : p.x - 14;
-                        ctx.fillStyle = wdef2.color || "#ccc";
-                        ctx.fillRect(gx, p.y + 16, 14, 5);
                     }
                 });
 
@@ -5739,13 +5724,9 @@
                 ctx.textAlign = "center";
                 const modeLabel = (GAME_MODES.find(m => m.id === activeGameMode) || {}).nameKey;
                 const modeName = modeLabel ? t(modeLabel) : activeGameMode;
-                if (isDuelMode) {
-                    ctx.fillStyle = "#ffcc00";
-                    ctx.fillText("DÜELLO — SİLAH TOPLA, ATEŞ ET!", canvas.width / 2, 36);
-                } else {
-                    ctx.fillStyle = "#00ccaa";
-                    ctx.fillText("ARENA | " + modeName + " | Silah topla, it, hayatta kal", canvas.width / 2, 36);
-                }
+                ctx.fillStyle = "#ff6633";
+                const liveSec = Math.floor(survivalTimer || 0);
+                ctx.fillText("LAVA RAIN | " + modeName + " | " + liveSec + "s | It, kaç, hayatta kal!", canvas.width / 2, 36);
 
                 if (gameState === "GAMEOVER") {
                     ctx.fillStyle = "rgba(0, 0, 0, 0.85)";
